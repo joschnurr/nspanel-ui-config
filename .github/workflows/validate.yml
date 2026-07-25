@@ -20,6 +20,12 @@ jobs:
       - run: pip install pyyaml pytest
       - run: pytest -q
 
+      # Die Panel-Hilfsfunktionen (Widget-Wahl, Key-Löschregel) laufen ohne DOM im Node-Runner.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node --test tests/panel.test.mjs
+
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest

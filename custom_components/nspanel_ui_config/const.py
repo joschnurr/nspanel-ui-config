@@ -31,7 +31,14 @@ PANEL_TITLE: Final = "NSPanel UI"
 PANEL_ICON: Final = "mdi:cellphone-cog"
 STATIC_URL_BASE: Final = "/nspanel_ui_config_static"
 
+# Custom-Panel: HA lädt dieses Modul und instanziiert darin das gleichnamige Custom-Element.
+# Anders als ein iFrame-Panel bekommt es das `hass`-Objekt gesetzt — inklusive Auth-Token für die
+# API und `hass.states` für den Entity-Picker.
+PANEL_ELEMENT_NAME: Final = "nspanel-ui-config-panel"
+PANEL_MODULE_URL: Final = f"{STATIC_URL_BASE}/panel/{PANEL_ELEMENT_NAME}.js"
+
 # HTTP-API-Pfade (authentifiziert, nur für Admins)
 API_CONFIG: Final = "/api/nspanel_ui_config/config"
 API_GENERATE: Final = "/api/nspanel_ui_config/generate"
 API_IMPORT: Final = "/api/nspanel_ui_config/import"
+API_SCHEMA: Final = "/api/nspanel_ui_config/schema"

@@ -118,6 +118,11 @@ CARD_TYPE_FIELDS["screensaver2"] = CARD_TYPE_FIELDS["screensaver"]
 # Die Entity-Liste steht im generierten YAML immer am Ende (längster Block).
 CARD_ENTITIES_FIELD: Final[str] = "entities"
 
+# Karten mit *einer* Entity, die flach auf der Karte liegt (das Backend baut dort ``Entity(card)``).
+SINGLE_ENTITY_CARD_TYPES: Final[tuple[str, ...]] = ("cardThermo", "cardMedia", "cardAlarm")
+# Der Screensaver trägt zusätzlich zur flachen Entity noch eine ``entities``-Liste.
+FLAT_ENTITY_CARD_TYPES: Final[tuple[str, ...]] = SINGLE_ENTITY_CARD_TYPES + SCREENSAVER_TYPES
+
 
 # --- Globale Settings ------------------------------------------------------------------------
 
@@ -151,6 +156,133 @@ GLOBAL_FIELD_ORDER: Final[tuple[str, ...]] = tuple(GLOBAL_DEFAULTS)
 
 # Blöcke, die nicht zu den globalen Settings zählen.
 STRUCTURED_KEYS: Final[frozenset[str]] = frozenset({"screensaver", "cards", "hiddenCards"})
+
+
+# --- Widget-Hinweise für den Editor -----------------------------------------------------------
+
+# Bevorzugtes Eingabe-Widget je Feldname. **Nur ein Vorschlag für skalare Werte:** trägt ein Feld
+# tatsächlich ein Dict oder eine Liste (``icon: {on, off}``, ``sleepBrightness`` als Zeitplan,
+# ``color`` als [r,g,b]), schaltet der Editor unabhängig vom Hinweis auf den JSON-Modus. So kann
+# kein Wert dadurch verlorengehen, dass die Tabelle hier eine Vereinfachung annimmt.
+#
+# Typen: string | number | boolean | entity | icon | json | entity_object | select
+FIELD_HINTS: Final[dict[str, str]] = {
+    # Entity-Zeile
+    "entity": "entity",
+    "name": "string",
+    "icon": "icon",
+    "color": "json",
+    "value": "string",
+    "state": "string",
+    "state_not": "string",
+    "state_template": "string",
+    "assumed_state": "boolean",
+    "status": "entity",
+    "font": "number",
+    "data": "json",
+    "effectList": "json",
+    "speed": "number",
+    # Karte
+    "type": "select",
+    "key": "string",
+    "title": "string",
+    "navItem1": "entity_object",
+    "navItem2": "entity_object",
+    "statusIcon1": "entity_object",
+    "statusIcon2": "entity_object",
+    "sleepTimeout": "number",
+    "cooldown": "number",
+    "temperatureUnit": "string",
+    "supportedModes": "json",
+    "mediaControl": "json",
+    "alarmControl": "entity",
+    "qrCode": "string",
+    "pin": "string",
+    "destination": "string",
+    "theme": "json",
+    "weatherUnit": "string",
+    "forecastSkip": "number",
+    "weatherOverrideForecast1": "json",
+    "weatherOverrideForecast2": "json",
+    "weatherOverrideForecast3": "json",
+    "weatherOverrideForecast4": "json",
+    "doubleTapToUnlock": "boolean",
+    "alternativeLayout": "boolean",
+    "defaultCard": "string",
+    # Globale Settings
+    "panelRecvTopic": "string",
+    "panelSendTopic": "string",
+    "updateMode": "select",
+    "model": "select",
+    "sleepBrightness": "number",
+    "screenBrightness": "number",
+    "defaultBackgroundColor": "string",
+    "featureExperimentalSliders": "boolean",
+    "sleepTracking": "entity",
+    "sleepTrackingZones": "json",
+    "sleepOverride": "entity",
+    "locale": "string",
+    "quiet": "boolean",
+    "timeFormat": "string",
+    "dateFormatBabel": "string",
+    "dateAdditionalTemplate": "string",
+    "timeAdditionalTemplate": "string",
+    "dateFormat": "string",
+}
+
+# Auswahllisten für Felder mit Hinweis ``select``. Der Editor lässt trotzdem freie Eingabe zu —
+# das Backend kennt womöglich mehr Werte als wir.
+FIELD_OPTIONS: Final[dict[str, tuple[str, ...]]] = {
+    "model": MODELS,
+    "updateMode": ("auto-notify", "auto", "manual"),
+    "type": CARD_TYPES,
+}
+
+# Kurzbeschreibungen, die der Editor als Hilfetext neben dem Feld zeigt. Bewusst knapp und nur
+# dort, wo der Feldname allein nicht trägt.
+FIELD_DESCRIPTIONS: Final[dict[str, str]] = {
+    "entity": "entity_id oder Spezial-Präfix (iText., navigate., delete, …)",
+    "key": "Optionaler eindeutiger Schlüssel für die Navigation zu dieser Karte",
+    "value": "Angezeigter Wert; Jinja-Template erlaubt",
+    "state_template": "Bedingung als Template — Zeile nur zeigen, wenn wahr",
+    "font": "Font-Index des Nextion-Displays",
+    "sleepTimeout": "Sekunden bis zum Screensaver (0 = nie)",
+    "navItem1": "Linkes Navigationssymbol der Karte",
+    "navItem2": "Rechtes Navigationssymbol der Karte",
+    "defaultCard": "Karte, zu der der Screensaver beim Aufwachen springt (key)",
+    "panelRecvTopic": "MQTT-Topic, auf dem Tasmota die Panel-Ereignisse meldet",
+    "panelSendTopic": "MQTT-Topic, über das Befehle ans Panel gehen",
+    "sleepTracking": "Personen-/Geräte-Entity; Panel bleibt wach, solange jemand da ist",
+    "dateFormatBabel": "Babel-Datumsformat (full, long, medium, short)",
+}
+
+
+def schema_payload() -> dict[str, Any]:
+    """Maschinenlesbare Schema-Beschreibung für den Editor im Frontend.
+
+    Damit bleibt ``schema.py`` die einzige Quelle der Wahrheit: das Panel baut seine Formulare aus
+    dieser Antwort, statt die Feldlisten in JavaScript zu duplizieren (und dort veralten zu lassen).
+    """
+    return {
+        "cardTypes": list(CARD_TYPES),
+        "screensaverTypes": list(SCREENSAVER_TYPES),
+        "models": list(MODELS),
+        "cardCommonFields": list(CARD_COMMON_FIELDS),
+        "cardTypeFields": {key: list(value) for key, value in CARD_TYPE_FIELDS.items()},
+        "entityFields": list(ENTITY_KNOWN_FIELDS),
+        "entityLikeCardFields": list(ENTITY_LIKE_CARD_FIELDS),
+        "entitiesField": CARD_ENTITIES_FIELD,
+        "globalFieldOrder": list(GLOBAL_FIELD_ORDER),
+        "globalDefaults": GLOBAL_DEFAULTS,
+        "fieldHints": FIELD_HINTS,
+        "fieldOptions": {key: list(value) for key, value in FIELD_OPTIONS.items()},
+        "fieldDescriptions": FIELD_DESCRIPTIONS,
+        # Karten, die ihre eine Entity flach auf der Karte tragen (siehe card_known_fields).
+        "flatEntityCardTypes": list(FLAT_ENTITY_CARD_TYPES),
+        # Davon die, die *nur* diese eine Entity haben — für sie blendet der Editor die
+        # Entity-Liste aus. Der Screensaver hat beides: flache Entity *und* entities-Liste.
+        "singleEntityCardTypes": list(SINGLE_ENTITY_CARD_TYPES),
+    }
 
 
 def card_known_fields(card_type: Any, has_flat_entity: bool = False) -> tuple[str, ...]:

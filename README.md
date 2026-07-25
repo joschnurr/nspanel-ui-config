@@ -1,6 +1,6 @@
 # NSPanel UI Config
 
-> **Frühe Entwicklungsphase (v0.1.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
+> **Frühe Entwicklungsphase (v0.3.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
 > öffentliche Veröffentlichung, sobald ein brauchbarer Funktionsumfang steht.
 
 Eine **Home-Assistant-Integration (HACS)**, mit der sich die

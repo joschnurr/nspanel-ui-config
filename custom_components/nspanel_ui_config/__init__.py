@@ -3,9 +3,9 @@
 Diese Integration erzeugt aus einem in HA gepflegten Modell die nspanel-YAML und stellt sie dem
 bestehenden AppDaemon-Backend bereit. Das Rendering-Backend selbst wird NICHT ersetzt.
 
-Stand v0.2: Panel-Registrierung, HA-Store-Persistenz, HTTP-API sowie ein verlustfreier Import/
-Generator-Round-Trip (``importer.py``/``generator.py``, abgesichert in ``tests/test_roundtrip.py``).
-Der visuelle Editor im Panel ist noch ein Platzhalter.
+Stand v0.3: verlustfreier Import/Generator-Round-Trip (``importer.py``/``generator.py``, abgesichert
+in ``tests/test_roundtrip.py``), HA-Store-Persistenz, HTTP-API und ein visueller Editor als
+Custom-Panel (``www/panel/``), das seine Formulare aus ``schema.py`` aufbaut.
 """
 
 from __future__ import annotations
@@ -18,10 +18,13 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
+from homeassistant.loader import async_get_integration
 
 from .const import (
     DOMAIN,
+    PANEL_ELEMENT_NAME,
     PANEL_ICON,
+    PANEL_MODULE_URL,
     PANEL_TITLE,
     PANEL_URL_PATH,
     STATIC_URL_BASE,
@@ -48,14 +51,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         [StaticPathConfig(STATIC_URL_BASE, str(www_dir), cache_headers=False)]
     )
 
-    # Sidebar-Panel registrieren (MVP: iFrame auf statische Assets).
+    # Sidebar-Panel als Custom-Element registrieren. Anders als ein iFrame-Panel bekommt es das
+    # `hass`-Objekt gesetzt — nur damit sind die authentifizierte API und `hass.states` (für den
+    # Entity-Picker) aus dem Panel heraus erreichbar.
+    integration = await async_get_integration(hass, DOMAIN)
+    module_url = f"{PANEL_MODULE_URL}?v={integration.version or 'dev'}"
     frontend.async_register_built_in_panel(
         hass,
-        component_name="iframe",
+        component_name="custom",
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
         frontend_url_path=PANEL_URL_PATH,
-        config={"url": f"{STATIC_URL_BASE}/panel/index.html"},
+        config={
+            "_panel_custom": {
+                "name": PANEL_ELEMENT_NAME,
+                "module_url": module_url,
+                "embed_iframe": False,
+                "trust_external": False,
+            }
+        },
         require_admin=True,
     )
 

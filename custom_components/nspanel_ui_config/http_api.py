@@ -1,6 +1,7 @@
 """Authentifizierte HTTP-API für das Panel.
 
 Endpunkte (alle nur für Admins):
+  GET  /api/nspanel_ui_config/schema    → Feld-/Kartentyp-Schema für die Editor-Formulare
   GET  /api/nspanel_ui_config/config    → aktuelles Config-Modell (JSON)
   POST /api/nspanel_ui_config/config    → Modell speichern (JSON)
   POST /api/nspanel_ui_config/import    → bestehende apps.yaml einlesen (Pfad oder Text)
@@ -22,19 +23,21 @@ from .const import (
     API_CONFIG,
     API_GENERATE,
     API_IMPORT,
+    API_SCHEMA,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
     DOMAIN,
 )
 from .generator import write_config_yaml
 from .importer import find_apps, parse_apps_yaml
-from .schema import validate_model
+from .schema import empty_model, schema_payload, validate_model
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def async_register_http_api(hass: HomeAssistant) -> None:
     """Registriere die API-Views (idempotent genug für einen einzelnen Entry)."""
+    hass.http.register_view(NsPanelSchemaView(hass))
     hass.http.register_view(NsPanelConfigView(hass))
     hass.http.register_view(NsPanelImportView(hass))
     hass.http.register_view(NsPanelGenerateView(hass))
@@ -59,14 +62,37 @@ class _NsPanelView(HomeAssistantView):
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
 
-    def _entry_data(self, request: web.Request) -> tuple[dict[str, Any] | None, web.Response | None]:
+    def _require_admin(self, request: web.Request) -> web.Response | None:
         user = request.get("hass_user")
         if user is None or not user.is_admin:
-            return None, self.json_message("Nur für Administratoren", HTTPStatus.FORBIDDEN)
+            return self.json_message("Nur für Administratoren", HTTPStatus.FORBIDDEN)
+        return None
+
+    def _entry_data(self, request: web.Request) -> tuple[dict[str, Any] | None, web.Response | None]:
+        error = self._require_admin(request)
+        if error is not None:
+            return None, error
         data = _first_entry_data(self.hass)
         if data is None:
             return None, self.json_message("Integration nicht eingerichtet", HTTPStatus.BAD_REQUEST)
         return data, None
+
+
+class NsPanelSchemaView(_NsPanelView):
+    """Liefert die Schema-Beschreibung, aus der das Panel seine Formulare baut.
+
+    Bewusst *ohne* Config-Entry-Zwang: der Editor soll das Schema auch dann laden können, wenn die
+    Integration gerade neu eingerichtet wird — sonst zeigt er statt Formularen nur einen Fehler.
+    """
+
+    url = API_SCHEMA
+    name = "api:nspanel_ui_config:schema"
+
+    async def get(self, request: web.Request) -> web.Response:
+        error = self._require_admin(request)
+        if error is not None:
+            return error
+        return self.json(schema_payload())
 
 
 class NsPanelConfigView(_NsPanelView):
@@ -79,8 +105,15 @@ class NsPanelConfigView(_NsPanelView):
         data, error = self._entry_data(request)
         if error is not None:
             return error
-        model = data.get("model", {})
-        return self.json({"model": model, "findings": validate_model(model) if model else []})
+        model = data.get("model") or {}
+        # Ohne gespeichertes Modell ein leeres Gerüst liefern, damit der Editor sofort eine gültige
+        # Struktur hat. ``stored`` sagt ihm, dass noch nichts persistiert ist (Hinweis auf Import).
+        stored = bool(model)
+        if not stored:
+            model = empty_model()
+        return self.json(
+            {"model": model, "stored": stored, "findings": validate_model(model)}
+        )
 
     async def post(self, request: web.Request) -> web.Response:
         data, error = self._entry_data(request)
