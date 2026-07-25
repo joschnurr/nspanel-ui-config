@@ -165,13 +165,13 @@ STRUCTURED_KEYS: Final[frozenset[str]] = frozenset({"screensaver", "cards", "hid
 # ``color`` als [r,g,b]), schaltet der Editor unabhängig vom Hinweis auf den JSON-Modus. So kann
 # kein Wert dadurch verlorengehen, dass die Tabelle hier eine Vereinfachung annimmt.
 #
-# Typen: string | number | boolean | entity | icon | json | entity_object | select
+# Typen: string | number | boolean | entity | icon | color | json | entity_object | select
 FIELD_HINTS: Final[dict[str, str]] = {
     # Entity-Zeile
     "entity": "entity",
     "name": "string",
     "icon": "icon",
-    "color": "json",
+    "color": "color",
     "value": "string",
     "state": "string",
     "state_not": "string",
@@ -244,6 +244,7 @@ FIELD_DESCRIPTIONS: Final[dict[str, str]] = {
     "entity": "entity_id oder Spezial-Präfix (iText., navigate., delete, …)",
     "key": "Optionaler eindeutiger Schlüssel für die Navigation zu dieser Karte",
     "value": "Angezeigter Wert; Jinja-Template erlaubt",
+    "color": "[r, g, b], je Zustand {on, off} – oder ein Jinja-Template, das eine RGB-Liste liefert",
     "state_template": "Bedingung als Template — Zeile nur zeigen, wenn wahr",
     "font": "Font-Index des Nextion-Displays",
     "sleepTimeout": "Sekunden bis zum Screensaver (0 = nie)",

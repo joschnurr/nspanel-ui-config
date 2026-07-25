@@ -3,7 +3,7 @@
 Diese Integration erzeugt aus einem in HA gepflegten Modell die nspanel-YAML und stellt sie dem
 bestehenden AppDaemon-Backend bereit. Das Rendering-Backend selbst wird NICHT ersetzt.
 
-Stand v0.4: verlustfreier Import/Generator-Round-Trip (``importer.py``/``generator.py``, abgesichert
+Stand v0.5: verlustfreier Import/Generator-Round-Trip (``importer.py``/``generator.py``, abgesichert
 in ``tests/test_roundtrip.py``), HA-Store-Persistenz, HTTP-API, ein visueller Editor als
 Custom-Panel (``www/panel/``), das seine Formulare aus ``schema.py`` aufbaut, und der Reload des
 Backends nach dem Generieren (``reload.py`` — AppDaemon merkt eine geänderte Include-Datei nicht

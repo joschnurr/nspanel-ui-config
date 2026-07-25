@@ -56,7 +56,7 @@ def test_jedes_gerenderte_feld_hat_einen_widget_hinweis() -> None:
 
 
 def test_widget_hinweise_sind_dem_editor_bekannt() -> None:
-    erlaubt = {"string", "number", "boolean", "entity", "icon", "json", "entity_object", "select"}
+    erlaubt = {"string", "number", "boolean", "entity", "icon", "color", "json", "entity_object", "select"}
     unbekannt = {name: hint for name, hint in PAYLOAD["fieldHints"].items() if hint not in erlaubt}
     assert not unbekannt, f"Unbekannte Widget-Typen: {unbekannt}"
 

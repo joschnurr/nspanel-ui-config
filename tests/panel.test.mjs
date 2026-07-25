@@ -10,7 +10,22 @@ import { test } from "node:test";
 const module = await import(
   "../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js"
 );
-const { widgetFor, setField, cardLabel, esc, isPlain, generateStatus } = module;
+const {
+  widgetFor,
+  setField,
+  cardLabel,
+  esc,
+  isPlain,
+  generateStatus,
+  iconKind,
+  iconIsKnown,
+  filterIconNames,
+  colorShape,
+  isRgb,
+  rgbToHex,
+  hexToRgb,
+  parseRgbText,
+} = module;
 
 test("Modul lässt sich ohne Browser importieren", () => {
   assert.equal(typeof module.NsPanelUiConfigPanel, "function");
@@ -107,6 +122,101 @@ test("generateStatus bleibt knapp, wenn kein Reload konfiguriert ist", () => {
     assert.equal(tone, "ok");
     assert.equal(text, "YAML geschrieben nach /x.yaml");
   }
+});
+
+// --- Icon-Picker ------------------------------------------------------------------------------
+
+test("iconKind erkennt die Sonderformen des Backends", () => {
+  assert.equal(iconKind("mdi:lightbulb"), "name");
+  assert.equal(iconKind("lightbulb"), "name");
+  // Diese vier dürfen nicht als Icon-Name bewertet werden.
+  assert.equal(iconKind("text:23°"), "special");
+  assert.equal(iconKind('ha:{{ states("sensor.x") }}'), "special");
+  assert.equal(iconKind("<I>mdi:fireplace</I> ha:{{ states('sensor.y') }} °C"), "special");
+  assert.equal(iconKind("{{ 'mdi:x' }}"), "special");
+  assert.equal(iconKind(""), "empty");
+  assert.equal(iconKind(undefined), "empty");
+});
+
+test("iconIsKnown prüft gegen die Mapping-Liste des Backends, mit und ohne mdi:", () => {
+  assert.equal(iconIsKnown("mdi:lightbulb"), true);
+  assert.equal(iconIsKnown("lightbulb"), true);
+  assert.equal(iconIsKnown("mdi:thermometer-water"), true);
+  // Ein echtes MDI-Icon, das das Backend-Mapping nicht enthält, muss auffallen.
+  assert.equal(iconIsKnown("mdi:gibt-es-nicht-xyz"), false);
+  assert.equal(iconIsKnown(""), false);
+  assert.equal(iconIsKnown(42), false);
+});
+
+test("filterIconNames stellt Präfix-Treffer vor Teiltreffer", () => {
+  const treffer = filterIconNames("lightbulb", 10);
+  assert.ok(treffer.length > 0);
+  assert.equal(treffer[0], "lightbulb");
+  assert.ok(treffer.every((name) => name.includes("lightbulb")));
+
+  // "mdi:" darf man mittippen.
+  assert.deepEqual(filterIconNames("mdi:lightbulb", 3), filterIconNames("lightbulb", 3));
+  // Groß/klein ist egal, und das Limit gilt.
+  assert.equal(filterIconNames("LIGHT", 5).length, 5);
+  assert.equal(filterIconNames("", 7).length, 7);
+  assert.deepEqual(filterIconNames("gibtesnichtxyz"), []);
+});
+
+// --- Farbwähler -------------------------------------------------------------------------------
+
+test("colorShape unterscheidet die drei vom Backend akzeptierten Formen", () => {
+  assert.equal(colorShape([255, 165, 0]), "rgb");
+  assert.equal(colorShape({ on: [255, 255, 0], off: [0, 0, 0] }), "onoff");
+  assert.equal(colorShape({ on: [1, 2, 3] }), "onoff");
+  assert.equal(colorShape("{{ iif(is_state('x','on'), '[0,255,0]', '[255,0,0]') }}"), "template");
+  assert.equal(colorShape(undefined), "unset");
+  assert.equal(colorShape(""), "unset");
+  // Alles Unbekannte bleibt im JSON-Editor, statt verbogen zu werden.
+  assert.equal(colorShape([255, 165]), "other");
+  assert.equal(colorShape([300, 0, 0]), "other");
+  assert.equal(colorShape({ on: "rot" }), "other");
+  assert.equal(colorShape({ tag: [1, 2, 3] }), "other");
+});
+
+test("widgetFor schickt Farben in den Farbwähler, nicht in den JSON-Editor", () => {
+  assert.equal(widgetFor("color", [255, 165, 0]), "color");
+  assert.equal(widgetFor("color", { on: [1, 2, 3], off: [0, 0, 0] }), "color");
+  assert.equal(widgetFor("color", undefined), "color");
+  // Templates gehören ins Textfeld, Unverstandenes ins JSON.
+  assert.equal(widgetFor("color", "{{ x }}"), "string");
+  assert.equal(widgetFor("color", [1, 2]), "json");
+});
+
+test("Hex und RGB rechnen verlustfrei hin und zurück", () => {
+  assert.equal(rgbToHex([255, 165, 0]), "#ffa500");
+  assert.equal(rgbToHex([0, 0, 0]), "#000000");
+  assert.deepEqual(hexToRgb("#ffa500"), [255, 165, 0]);
+  assert.deepEqual(hexToRgb("ffa500"), [255, 165, 0]);
+  for (const rgb of [[0, 0, 0], [255, 255, 255], [12, 34, 56], [140, 140, 140]]) {
+    assert.deepEqual(hexToRgb(rgbToHex(rgb)), rgb);
+  }
+  // Ohne Wert nimmt der Wähler den Grauwert, den auch das Backend als Fallback nutzt.
+  assert.equal(rgbToHex(undefined), "#8c8c8c");
+  assert.equal(hexToRgb("#xyz"), null);
+});
+
+test("parseRgbText nimmt die üblichen Schreibweisen und lehnt Unsinn ab", () => {
+  assert.deepEqual(parseRgbText("255, 165, 0"), [255, 165, 0]);
+  assert.deepEqual(parseRgbText("255,165,0"), [255, 165, 0]);
+  assert.deepEqual(parseRgbText("[255, 165, 0]"), [255, 165, 0]);
+  // Abgelehnt heißt: der alte Wert bleibt stehen.
+  assert.equal(parseRgbText("255, 165"), null);
+  assert.equal(parseRgbText("255, 165, 300"), null);
+  assert.equal(parseRgbText("rot"), null);
+  assert.equal(parseRgbText(""), null);
+});
+
+test("isRgb akzeptiert nur echte 0–255-Tripel", () => {
+  assert.equal(isRgb([0, 0, 0]), true);
+  assert.equal(isRgb([255, 255, 255]), true);
+  assert.equal(isRgb(["255", 0, 0]), false);
+  assert.equal(isRgb([0, 0, 0, 0]), false);
+  assert.equal(isRgb([-1, 0, 0]), false);
 });
 
 test("isPlain trennt Objekte/Listen von Skalaren", () => {

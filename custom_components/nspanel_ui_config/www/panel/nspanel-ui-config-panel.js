@@ -14,6 +14,10 @@
 //   - Ein geleertes Feld *löscht* den Key, statt "" zu speichern. So bleibt in der erzeugten YAML
 //     nur stehen, was auch wirklich gesetzt wurde.
 
+// Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py). Sie steckt in
+// einem eigenen Modul, damit dieses hier lesbar bleibt – 6896 Namen sind ~110 kB.
+import { ICON_NAMES } from "./icon-names.js";
+
 const ELEMENT_NAME = "nspanel-ui-config-panel";
 
 const STYLES = `
@@ -113,6 +117,19 @@ const STYLES = `
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: -1px; }
   input.invalid, textarea.invalid { border-color: var(--error-color, #db4437); }
   textarea { font-family: var(--code-font-family, monospace); font-size: 13px; resize: vertical; min-height: 62px; }
+  /* Farbwähler: der Hex-Wähler bleibt klein, das Zahlenfeld daneben trägt die Wahrheit. */
+  .colorbox { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .colorrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .colorrow input[type="color"] {
+    inline-size: 42px; block-size: 30px; padding: 0; flex: none;
+    border: 1px solid var(--divider-color, #e0e0e0); border-radius: 4px; background: none; cursor: pointer;
+  }
+  .colorrow .rgbtext { max-width: 140px; }
+  .colorrow .colorlabel {
+    font-family: var(--code-font-family, monospace); font-size: 12px; min-width: 24px;
+    color: var(--secondary-text-color, #727272);
+  }
+  .colorrow .err { flex-basis: 100%; }
 
   details.entity { border: 1px solid var(--ns-border); border-radius: 6px; margin-bottom: 8px; }
   details.entity > summary {
@@ -174,6 +191,14 @@ function setField(target, key, value) {
  * so kann die Vereinfachung im Schema nie einen echten Wert zerstören.
  */
 function widgetFor(hint, value) {
+  // Farben sind der Sonderfall: [r,g,b] und {on,off} sind Objekte, gehören aber gerade *nicht* in
+  // den JSON-Editor – für genau diese zwei Formen gibt es den Farbwähler.
+  if (hint === "color") {
+    const shape = colorShape(value);
+    if (shape === "rgb" || shape === "onoff" || shape === "unset") return "color";
+    if (shape === "template") return "string";
+    return "json";
+  }
   if (isPlain(value)) return hint === "entity_object" ? "entity_object" : "json";
   if (value === undefined || value === null || value === "") return hint || "string";
   if (hint === "number" && typeof value !== "number" && isNaN(Number(value))) return "string";
@@ -186,6 +211,105 @@ function widgetFor(hint, value) {
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
   return card.title || card.key || card.type || "(ohne Titel)";
+}
+
+// --- Icons ------------------------------------------------------------------------------------
+
+const ICON_NAME_SET = new Set(ICON_NAMES);
+
+/**
+ * Was für ein Icon-Wert ist das?
+ *
+ * `special` sind die Sonderformen des Backends, die *kein* Icon-Name sind und deshalb nicht gegen
+ * die Mapping-Liste geprüft werden dürfen: `text:` (roher Text), `ha:` (Template), `<I>…</I>`
+ * (Icon innerhalb eines Templates) und Jinja allgemein.
+ */
+function iconKind(value) {
+  if (typeof value !== "string" || value.trim() === "") return "empty";
+  const text = value.trim();
+  if (text.includes("text:") || text.includes("ha:") || text.includes("<I>") || text.includes("{{")) {
+    return "special";
+  }
+  return "name";
+}
+
+/** Kennt das Backend diesen Namen? Das `mdi:`-Präfix strippt es selbst. */
+function iconIsKnown(value) {
+  if (typeof value !== "string") return false;
+  return ICON_NAME_SET.has(value.trim().replace(/^mdi:/, ""));
+}
+
+/** Vorschläge zur Eingabe: erst Namen, die so anfangen, dann alle, die den Text enthalten. */
+function filterIconNames(query, limit = 40) {
+  const text = String(query || "").trim().toLowerCase().replace(/^mdi:/, "");
+  if (!text) return ICON_NAMES.slice(0, limit);
+  const beginnt = [];
+  const enthaelt = [];
+  for (const name of ICON_NAMES) {
+    if (name.startsWith(text)) beginnt.push(name);
+    else if (name.includes(text)) enthaelt.push(name);
+    if (beginnt.length >= limit) break;
+  }
+  return beginnt.concat(enthaelt).slice(0, limit);
+}
+
+// --- Farben -----------------------------------------------------------------------------------
+
+const RGB_FALLBACK = [140, 140, 140]; // derselbe Grauwert, den rgb_dec565 im Backend nimmt
+
+/** Ist das eine [r,g,b]-Liste, wie das Backend sie erwartet? */
+function isRgb(value) {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((part) => typeof part === "number" && part >= 0 && part <= 255)
+  );
+}
+
+/**
+ * Welche der drei Formen, die das Backend akzeptiert, liegt hier vor?
+ *
+ * `rgb` = [r,g,b], `onoff` = {on, off} je als RGB, `template` = Jinja-String (rgb_dec565 rendert
+ * Strings erst), `unset` = nichts gesetzt. Alles andere ist `other` und bleibt im JSON-Editor —
+ * lieber roh anzeigen als einen Wert verbiegen, den wir nicht verstehen.
+ */
+function colorShape(value) {
+  if (value === undefined || value === null || value === "") return "unset";
+  if (isRgb(value)) return "rgb";
+  if (typeof value === "string") return "template";
+  if (isPlain(value) && !Array.isArray(value)) {
+    const keys = Object.keys(value);
+    if (keys.length > 0 && keys.every((key) => key === "on" || key === "off")) {
+      if (keys.every((key) => isRgb(value[key]))) return "onoff";
+    }
+  }
+  return "other";
+}
+
+const clamp255 = (part) => Math.max(0, Math.min(255, Math.round(Number(part) || 0)));
+
+function rgbToHex(rgb) {
+  const [r, g, b] = isRgb(rgb) ? rgb : RGB_FALLBACK;
+  return `#${[r, g, b].map((part) => clamp255(part).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function hexToRgb(hex) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!match) return null;
+  const int = parseInt(match[1], 16);
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+/** "255, 165, 0" → [255,165,0]; alles Unbrauchbare wird zu null (Wert bleibt dann stehen). */
+function parseRgbText(text) {
+  const parts = String(text || "")
+    .replace(/[[\]]/g, "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+  if (parts.length !== 3 || parts.some((part) => !/^\d+$/.test(part))) return null;
+  const rgb = parts.map(Number);
+  return rgb.every((part) => part <= 255) ? rgb : null;
 }
 
 /**
@@ -742,6 +866,11 @@ class NsPanelUiConfigPanel extends PanelBase {
       return wrapper;
     }
 
+    if (widget === "color") {
+      row.appendChild(this._colorEditor(value, commit));
+      return wrapper;
+    }
+
     if (widget === "boolean") {
       const select = document.createElement("select");
       select.innerHTML = `
@@ -792,14 +921,140 @@ class NsPanelUiConfigPanel extends PanelBase {
     if (widget === "icon") {
       // `ha-icon` ist im HA-Frontend global registriert und funktioniert auch im Shadow DOM.
       const preview = document.createElement("ha-icon");
-      preview.icon = typeof value === "string" ? value : "";
       preview.style.flex = "none";
-      input.addEventListener("change", () => {
-        preview.icon = input.value.trim();
-      });
+      input.placeholder = "z. B. mdi:lightbulb";
+
+      // Vorschlagsliste je Feld, damit parallel offene Icon-Felder sich nicht gegenseitig
+      // überschreiben. Gefüllt wird sie erst beim Tippen – 6896 <option>-Elemente wären sonst
+      // sinnlos im DOM.
+      const listId = `icons-${Math.random().toString(36).slice(2)}`;
+      const list = document.createElement("datalist");
+      list.id = listId;
+      this.shadowRoot.appendChild(list);
+      input.setAttribute("list", listId);
+
+      const fillSuggestions = () => {
+        list.innerHTML = filterIconNames(input.value)
+          .map((name) => `<option value="mdi:${esc(name)}"></option>`)
+          .join("");
+      };
+      const refresh = () => {
+        const text = input.value.trim();
+        const kind = iconKind(text);
+        preview.icon = kind === "name" ? text : "";
+        // Sonderformen (text:, ha:, <I>…</I>, Jinja) sind keine Icon-Namen – nicht bewerten.
+        if (kind === "name" && !iconIsKnown(text)) {
+          errorEl.hidden = false;
+          errorEl.textContent =
+            `Das Backend kennt "${text}" nicht – es rendert dann alert-circle-outline. ` +
+            `Der Wert bleibt trotzdem gespeichert.`;
+        } else {
+          errorEl.hidden = true;
+          if (kind === "special") {
+            preview.removeAttribute("icon");
+          }
+        }
+      };
+
+      input.addEventListener("input", fillSuggestions);
+      input.addEventListener("change", refresh);
+      refresh();
       row.appendChild(preview);
     }
     return wrapper;
+  }
+
+  /**
+   * Farbwähler für die zwei Formen, die das Backend versteht: eine Farbe ([r,g,b]) oder eine je
+   * Zustand ({on, off}). Der Hex-Wähler ist die Bequemlichkeit, das Zahlenfeld daneben bleibt die
+   * Wahrheit – NSPanel-Konfigurationen werden oft aus Beispielen als "255, 165, 0" kopiert.
+   */
+  _colorEditor(value, commit) {
+    const host = document.createElement("div");
+    host.className = "colorbox";
+    const shape = colorShape(value);
+    let current = shape === "onoff" ? { ...value } : value;
+
+    const zeile = (rgb, label, onChange) => {
+      const wrap = document.createElement("div");
+      wrap.className = "colorrow";
+      const gesetzt = isRgb(rgb);
+
+      const picker = document.createElement("input");
+      picker.type = "color";
+      picker.value = rgbToHex(rgb);
+      picker.title = label ? `Farbe für "${label}"` : "Farbe wählen";
+
+      const text = document.createElement("input");
+      text.type = "text";
+      text.className = "rgbtext";
+      text.placeholder = "r, g, b";
+      text.value = gesetzt ? rgb.join(", ") : "";
+
+      const fehler = document.createElement("div");
+      fehler.className = "err";
+      fehler.hidden = true;
+
+      const uebernehmen = (rgbNeu, quelle) => {
+        picker.value = rgbToHex(rgbNeu);
+        if (quelle !== "text") text.value = rgbNeu.join(", ");
+        fehler.hidden = true;
+        text.classList.remove("invalid");
+        onChange(rgbNeu);
+      };
+
+      picker.addEventListener("change", () => uebernehmen(hexToRgb(picker.value), "picker"));
+      text.addEventListener("change", () => {
+        const roh = text.value.trim();
+        if (!roh) {
+          // Leeres Zahlenfeld heißt "keine Farbe" – konsistent zur Regel im restlichen Editor.
+          fehler.hidden = true;
+          text.classList.remove("invalid");
+          onChange(undefined);
+          return;
+        }
+        const parsed = parseRgbText(roh);
+        if (!parsed) {
+          // Nicht übernehmen, sonst wäre der alte Wert weg.
+          text.classList.add("invalid");
+          fehler.hidden = false;
+          fehler.textContent = "Erwartet drei Zahlen 0–255, z. B. 255, 165, 0 (Wert unverändert)";
+          return;
+        }
+        uebernehmen(parsed, "text");
+      });
+
+      if (label) {
+        const tag = document.createElement("span");
+        tag.className = "colorlabel";
+        tag.textContent = label;
+        wrap.appendChild(tag);
+      }
+      wrap.appendChild(picker);
+      wrap.appendChild(text);
+      wrap.appendChild(fehler);
+      return wrap;
+    };
+
+    if (shape === "onoff") {
+      ["on", "off"].forEach((state) => {
+        host.appendChild(
+          zeile(current[state], state, (rgbNeu) => {
+            if (rgbNeu === undefined) delete current[state];
+            else current[state] = rgbNeu;
+            commit(Object.keys(current).length ? current : undefined);
+          })
+        );
+      });
+      const hinweis = document.createElement("div");
+      hinweis.className = "desc";
+      hinweis.textContent = "Je Zustand eine Farbe (on/off) – wie im Backend.";
+      host.appendChild(hinweis);
+      return host;
+    }
+
+    host.appendChild(zeile(isRgb(current) ? current : undefined, "", (rgbNeu) => commit(rgbNeu)));
+    return host;
   }
 
   /** Aktualisiert nur die Kopfzeilen der Entity-Blöcke – ohne die offenen Formulare neu zu bauen. */
@@ -965,4 +1220,20 @@ if (typeof customElements !== "undefined" && !customElements.get(ELEMENT_NAME)) 
   customElements.define(ELEMENT_NAME, NsPanelUiConfigPanel);
 }
 
-export { NsPanelUiConfigPanel, widgetFor, setField, cardLabel, esc, isPlain, generateStatus };
+export {
+  NsPanelUiConfigPanel,
+  widgetFor,
+  setField,
+  cardLabel,
+  esc,
+  isPlain,
+  generateStatus,
+  iconKind,
+  iconIsKnown,
+  filterIconNames,
+  colorShape,
+  isRgb,
+  rgbToHex,
+  hexToRgb,
+  parseRgbText,
+};

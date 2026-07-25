@@ -2,7 +2,7 @@
 
 # NSPanel UI Config
 
-> **Frühe Entwicklungsphase (v0.4.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
+> **Frühe Entwicklungsphase (v0.5.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
 > öffentliche Veröffentlichung, sobald ein brauchbarer Funktionsumfang steht.
 
 Eine **Home-Assistant-Integration (HACS)**, mit der sich die
@@ -73,7 +73,7 @@ liefert früh Nutzen und bleibt kompatibel mit Updates des Upstream-Backends.
 | Visueller Editor als Custom-Panel (Karten-/Entity-Listen, Formulare aus dem Schema) | ✅ v0.3 |
 | AppDaemon-Reload-Automatik (`touch_module` / `restart_container`) | ✅ v0.4 |
 | Icon/Brand-Assets (HACS + HA-Integrationskarte) | ✅ v0.4 |
-| Icon-/Farb-Picker mit Vorschau | ⬜ geplant |
+| Icon-Picker (geprüft gegen das Backend-Mapping) und Farbwähler | ✅ v0.5 |
 | Template-Editor (Jinja für color/value) | ⬜ geplant |
 
 Details und Designentscheidungen: **[docs/architecture.md](docs/architecture.md)**.
@@ -131,6 +131,33 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
 aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
 Administrator gesetzt.
+
+## Icon-Picker und Farbwähler
+
+**Ein falscher Icon-Name fällt sonst erst am Panel auf** – und dort nur als Warndreieck: das Backend
+kennt ausschließlich die Namen aus seinem eigenen Mapping und fällt bei allem anderen still auf
+`alert-circle-outline` zurück (`get_icon_id` in `icon_mapping.py`). Der Editor prüft Icon-Namen
+deshalb gegen genau diese Liste, zeigt eine Vorschau (`<ha-icon>`) und warnt bei unbekannten Namen –
+**ohne den Wert zu verwerfen**, denn das Backend kann in einer neueren Version mehr kennen.
+
+Die Namensliste liegt als `www/panel/icon-names.js` bei (6896 Namen, ~110 kB) und wird erzeugt aus
+dem Mapping des Backends:
+
+```bash
+python3 tools/extract_icon_names.py /pfad/zu/appdaemon/apps/luibackend/icon_mapping.py
+```
+
+Mitgeliefert statt zur Laufzeit gelesen, weil HA und AppDaemon in getrennten Containern laufen. Nach
+einem Upstream-Update das Skript erneut laufen lassen – der Diff zeigt die neuen Icons.
+
+Nicht als Icon-Name bewertet werden die Sonderformen des Backends: `text:` (roher Text), `ha:`
+(Template), `<I>…</I>` (Icon in einem Template) und Jinja allgemein.
+
+**Farben** akzeptiert das Backend in drei Formen, und der Editor bedient alle drei: `[r, g, b]`
+(Farbwähler plus Zahlenfeld), je Zustand `{on, off}` (zwei Wähler) und Jinja-Templates (Textfeld).
+Alles, was in keine dieser Formen passt, bleibt im JSON-Editor stehen, statt auf ein zu einfaches
+Widget abgeschnitten zu werden. Eine unvollständige Eingabe im Zahlenfeld wird **nicht** übernommen –
+sonst wäre der alte Wert weg.
 
 ## Icon / Brand-Assets
 
