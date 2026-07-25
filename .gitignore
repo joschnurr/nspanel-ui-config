@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Home Assistant / test artifacts
+.storage/
+*.log
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Node (falls später ein Frontend-Build dazukommt)
+node_modules/
+frontend/dist/
+
+# Lokale, nicht zu versionierende Config-Artefakte
+nspanel_config.local.yaml
+secrets.yaml
+*.env
+.env

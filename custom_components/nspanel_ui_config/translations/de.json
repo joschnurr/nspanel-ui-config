@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "NSPanel UI Config",
+        "description": "Konfigurations-Schicht für das AppDaemon-Backend (nspanel-lovelace-ui).",
+        "data": {
+          "output_path": "Ausgabepfad der generierten YAML (im geteilten Bind-Mount)",
+          "reload_mode": "AppDaemon-Reload nach dem Generieren",
+          "import_yaml_path": "Optional: Pfad einer bestehenden apps.yaml zum Import"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "NSPanel UI Config ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NSPanel UI Config – Optionen",
+        "data": {
+          "output_path": "Ausgabepfad der generierten YAML",
+          "reload_mode": "AppDaemon-Reload nach dem Generieren"
+        }
+      }
+    }
+  }
+}
