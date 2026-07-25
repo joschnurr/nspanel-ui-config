@@ -1,3 +1,5 @@
+<img src="custom_components/nspanel_ui_config/brand/icon.png" alt="" width="120" align="right">
+
 # NSPanel UI Config
 
 > **Frühe Entwicklungsphase (v0.3.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
@@ -99,6 +101,7 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 
 | Methode | Pfad | Zweck |
 | --- | --- | --- |
+| `GET` | `/api/nspanel_ui_config/schema` | Feld-/Kartentyp-Schema, aus dem das Panel seine Formulare baut |
 | `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde |
 | `POST` | `/api/nspanel_ui_config/config` | Modell speichern |
 | `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name`, `save`) |
@@ -107,6 +110,19 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
 aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
 Administrator gesetzt.
+
+## Icon / Brand-Assets
+
+`custom_components/nspanel_ui_config/brand/` enthält die Bilder, die HACS und Home Assistant für die
+Integration anzeigen — `icon.png` (256×256), `icon@2x.png` (512×512) und `logo.png` (512×432). Die
+Icons sind oben/unten transparent aufgefüllt statt seitlich beschnitten, damit Panel-Rahmen und
+Beschriftung vollständig bleiben. Quelldatei: `docs/brand-source.jpg` (945×797).
+
+Sobald das Repo öffentlich ist, gehören dieselben Assets zusätzlich ins
+[home-assistant/brands](https://github.com/home-assistant/brands)-Repo — erst dann ist die
+HACS-Prüfung *brands* vollständig erfüllt. Das GitHub-**Social-Preview**-Bild lässt sich nicht per
+API setzen; das geht nur über *Settings → General → Social preview* im Web-UI (dafür eignet sich
+`docs/brand-source.jpg`).
 
 ## Referenzen
 
