@@ -23,7 +23,9 @@ jobs:
       # Die Panel-Hilfsfunktionen (Widget-Wahl, Key-Löschregel) laufen ohne DOM im Node-Runner.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22 statt 20: gleiche Major-Version wie lokal getestet, und 20 ist auf den Runnern
+          # inzwischen abgekündigt.
+          node-version: "22"
       - run: node --test tests/panel.test.mjs
 
   hassfest:
@@ -41,3 +43,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Diese zwei Pruefungen holen hacs.json bzw. manifest.json ueber die GitHub-API — ohne
+          # Token. Solange das Repo PRIVAT ist, bekommt die Action 404 und damit `None`, und beide
+          # schlagen unabhaengig vom Inhalt fehl ("expected a dictionary. Got None"). Ersatz ohne
+          # Netz: tests/test_manifests.py prueft beide Dateien gegen dieselben HACS-Schemata.
+          # >>> Beim Oeffentlich-Schalten des Repos diese ignore-Zeile entfernen. <<<
+          ignore: hacsjson integration_manifest
