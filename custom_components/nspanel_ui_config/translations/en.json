@@ -21,7 +21,8 @@
         "title": "NSPanel UI Config – Options",
         "data": {
           "output_path": "Output path of the generated YAML",
-          "reload_mode": "AppDaemon reload after generating"
+          "reload_mode": "AppDaemon reload after generating",
+          "import_yaml_path": "Optional: path of an existing apps.yaml to import"
         }
       }
     }

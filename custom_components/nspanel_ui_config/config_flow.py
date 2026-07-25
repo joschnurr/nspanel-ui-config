@@ -64,15 +64,19 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class NsPanelUiConfigOptionsFlow(OptionsFlow):
-    """Nachträgliche Änderung von Ausgabepfad und Reload-Weg."""
+    """Nachträgliche Änderung von Ausgabepfad, Reload-Weg und Importpfad."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
         current = self.config_entry.options
+
+        if user_input is not None:
+            # Bestehende Optionen zusammenführen statt ersetzen: async_create_entry schreibt das
+            # übergebene Dict vollständig zurück. Wird das Formular je um einen Key erweitert oder
+            # verkleinert, verschwänden sonst genau die Optionen, die es gerade nicht anzeigt.
+            return self.async_create_entry(title="", data={**current, **user_input})
+
         schema = vol.Schema(
             {
                 vol.Required(
@@ -83,6 +87,10 @@ class NsPanelUiConfigOptionsFlow(OptionsFlow):
                     CONF_RELOAD_MODE,
                     default=current.get(CONF_RELOAD_MODE, DEFAULT_RELOAD_MODE),
                 ): vol.In(RELOAD_MODES),
+                vol.Optional(
+                    CONF_IMPORT_YAML_PATH,
+                    default=current.get(CONF_IMPORT_YAML_PATH, ""),
+                ): str,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
