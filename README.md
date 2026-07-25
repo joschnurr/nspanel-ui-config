@@ -2,7 +2,7 @@
 
 # NSPanel UI Config
 
-> **Frühe Entwicklungsphase (v0.5.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
+> **Frühe Entwicklungsphase (v0.6.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
 > öffentliche Veröffentlichung, sobald ein brauchbarer Funktionsumfang steht.
 
 Eine **Home-Assistant-Integration (HACS)**, mit der sich die
@@ -74,7 +74,7 @@ liefert früh Nutzen und bleibt kompatibel mit Updates des Upstream-Backends.
 | AppDaemon-Reload-Automatik (`touch_module` / `restart_container`) | ✅ v0.4 |
 | Icon/Brand-Assets (HACS + HA-Integrationskarte) | ✅ v0.4 |
 | Icon-Picker (geprüft gegen das Backend-Mapping) und Farbwähler | ✅ v0.5 |
-| Template-Editor (Jinja für color/value) | ⬜ geplant |
+| Template-Editor (Jinja) mit Live-Vorschau über HAs Template-API | ✅ v0.6 |
 
 Details und Designentscheidungen: **[docs/architecture.md](docs/architecture.md)**.
 
@@ -131,6 +131,27 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
 aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
 Administrator gesetzt.
+
+## Template-Editor
+
+Felder, die das Backend als Jinja rendert, haben im Formular einen Umschalter **„als Template
+bearbeiten"** – und darin eine **Live-Vorschau über HAs eigene Template-API**
+(`POST /api/template`). Das ist dieselbe Engine, die später auch das Backend benutzt
+(`ha_api.render_template`), man sieht hier also echte Werte und echte Jinja-Fehlermeldungen statt
+einer Nachbildung. Bei Farb-Feldern zeigt die Vorschau zusätzlich einen Farbfleck, sobald das
+Ergebnis als RGB lesbar ist.
+
+Template-fähig sind (nachgesehen an den `render_template`-Aufrufen des Backends, nicht geraten):
+`name`, `value`, `color`, `icon`, `state_template`, `defaultCard`, `qrCode`, `speed`,
+`dateAdditionalTemplate`, `timeAdditionalTemplate`.
+
+**Eine Eigenheit, die man kennen muss:** bei `value` und `icon` rendert das Backend nur bis zum
+**letzten** `}` und hängt den Rest wörtlich an – genau so entstehen Einheiten wie `{{ … }} °C`. Die
+Vorschau bildet das nach, sonst würde sie etwas anderes zeigen als später das Panel.
+
+Der gewählte Modus ist reine Ansichtssache und wird nie mitgespeichert. Der Umschalter ändert für
+sich genommen auch keinen Wert: erst wenn du im Textfeld etwas änderst, geht der neue Wert ins
+Modell.
 
 ## Icon-Picker und Farbwähler
 

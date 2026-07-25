@@ -78,6 +78,20 @@ Details, die leicht schiefgehen:
 - *Verworfen:* AppDaemons REST-API. Sie führt nur von Apps registrierte Endpunkte
   (`register_endpoint`), einen eingebauten „App neu laden"-Aufruf gibt es nicht.
 
+## Template-Vorschau
+
+Die Vorschau im Template-Editor ruft **HAs eigene Template-API** (`POST /api/template`) auf — nicht
+eine eigene Jinja-Implementierung. Grund: das Backend rendert später mit derselben Engine
+(`ha_api.render_template`, das über HA geht), also stimmt die Vorschau mit dem Ergebnis überein und
+Fehlermeldungen sind die echten (`TemplateSyntaxError: …`, HTTP 400).
+
+Nachgebildet werden muss dabei eine Eigenheit: bei `value` und `icon` rendert das Backend nur bis zum
+**letzten** `}` und hängt den Rest wörtlich an (`rpartition('}')` in `pages.py`) — so entstehen
+Einheiten wie `{{ … }} °C`. Ohne diese Nachbildung zeigte die Vorschau etwas anderes als das Panel.
+
+Welche Felder überhaupt Templates sind, steht in `schema.py` (`TEMPLATE_FIELDS`) und ist an den
+`render_template`-Aufrufen des Backends abgelesen, nicht geraten.
+
 ## Datenmodell (aus dem Upstream-Schema abgeleitet)
 
 Basierend auf `luibackend/config.py` und docs.nspanel.pky.eu:

@@ -28,6 +28,8 @@ KEYS_USED_BY_PANEL = (
     "fieldDescriptions",
     "flatEntityCardTypes",
     "singleEntityCardTypes",
+    "templateFields",
+    "templateSuffixFields",
 )
 
 
@@ -94,3 +96,20 @@ def test_beschreibungen_verweisen_nur_auf_existierende_felder() -> None:
 
 def test_globale_defaults_decken_die_feldreihenfolge_ab() -> None:
     assert set(PAYLOAD["globalFieldOrder"]) == set(PAYLOAD["globalDefaults"])
+
+
+def test_template_felder_sind_dem_editor_bekannt() -> None:
+    """Ein Tippfehler hier würde den Template-Umschalter still an keinem Feld erscheinen lassen."""
+    bekannt = set(PAYLOAD["fieldHints"])
+    unbekannt = sorted(set(PAYLOAD["templateFields"]) - bekannt)
+    assert not unbekannt, f"templateFields nennt Felder ohne Widget-Hinweis: {unbekannt}"
+    # Die beiden Felder, um die es dem Nutzer am häufigsten geht.
+    for feld in ("color", "value"):
+        assert feld in PAYLOAD["templateFields"], f"{feld} muss template-fähig sein"
+
+
+def test_suffix_felder_sind_eine_teilmenge_der_template_felder() -> None:
+    """Nur ``value``/``icon`` rendert das Backend bis zum letzten ``}`` – und beide sind Templates."""
+    suffix = set(PAYLOAD["templateSuffixFields"])
+    assert suffix <= set(PAYLOAD["templateFields"])
+    assert suffix == {"value", "icon"}

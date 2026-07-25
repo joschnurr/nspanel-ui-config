@@ -130,6 +130,23 @@ const STYLES = `
     color: var(--secondary-text-color, #727272);
   }
   .colorrow .err { flex-basis: 100%; }
+  /* Template-Editor: der Umschalter sitzt rechts im Label, die Vorschau direkt unter dem Feld. */
+  .body button.linkbtn {
+    float: right; background: none; border: none; padding: 0; font-size: 12px;
+    color: var(--primary-color, #03a9f4); text-decoration: underline; cursor: pointer;
+  }
+  .body button.linkbtn:hover { background: none; }
+  .tplbox { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+  textarea.tpl { min-height: 74px; }
+  .tplpreview {
+    display: flex; align-items: center; gap: 6px; min-height: 18px; font-size: 12px;
+    font-family: var(--code-font-family, monospace); color: var(--secondary-text-color, #727272);
+    word-break: break-word;
+  }
+  .tplswatch {
+    inline-size: 14px; block-size: 14px; flex: none; border-radius: 3px;
+    border: 1px solid var(--divider-color, #e0e0e0);
+  }
 
   details.entity { border: 1px solid var(--ns-border); border-radius: 6px; margin-bottom: 8px; }
   details.entity > summary {
@@ -312,6 +329,40 @@ function parseRgbText(text) {
   return rgb.every((part) => part <= 255) ? rgb : null;
 }
 
+// --- Templates --------------------------------------------------------------------------------
+
+/** Steckt Jinja drin? Reicht als Erkennung: das Backend selbst prüft nicht genauer. */
+function isTemplate(value) {
+  return typeof value === "string" && (value.includes("{{") || value.includes("{%"));
+}
+
+/**
+ * Zerlegt einen Wert so, wie das Backend es bei ``value``/``icon`` tut: gerendert wird nur bis zum
+ * **letzten** ``}``, der Rest wird wörtlich angehängt (``rpartition('}')`` in pages.py). Genau so
+ * entstehen Suffixe wie ``…°C`` — die Vorschau muss das nachbilden, sonst zeigt sie etwas anderes
+ * als später das Panel.
+ */
+function splitTemplateSuffix(text) {
+  const source = String(text ?? "");
+  const cut = source.lastIndexOf("}");
+  if (cut === -1) return [source, ""];
+  return [source.slice(0, cut + 1), source.slice(cut + 1)];
+}
+
+/** Ergibt das Rendering eine RGB-Liste? Templates für Farben liefern Strings wie "[0, 120, 255]". */
+function parseTemplateColor(text) {
+  return parseRgbText(text);
+}
+
+/**
+ * Startmodus eines template-fähigen Feldes: Template, sobald der Wert nach Jinja aussieht.
+ * `override` ist die bewusste Wahl des Nutzers und schlägt die Erkennung.
+ */
+function templateFieldMode(value, override) {
+  if (override === "template" || override === "value") return override;
+  return isTemplate(value) ? "template" : "value";
+}
+
 /**
  * Statuszeile nach dem Generieren: `[Text, Ton]`.
  *
@@ -350,6 +401,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._dirty = false;
     this._status = { text: "", tone: "" };
     this._booted = false;
+    // Pro Feld die bewusste Wahl "Template" oder "fester Wert". WeakMap, damit gelöschte Karten und
+    // Entities nichts festhalten; der Modus ist reine Ansichtssache und wird nie mitgespeichert.
+    this._templateModes = new WeakMap();
   }
 
   // HA setzt `hass` bei *jedem* State-Update. Hier darf deshalb nichts neu gerendert werden –
@@ -866,6 +920,29 @@ class NsPanelUiConfigPanel extends PanelBase {
       return wrapper;
     }
 
+    // Template-fähige Felder bekommen einen Umschalter. Der `extra`-Bereich und erzwungene Widgets
+    // bleiben außen vor – dort steht rohes JSON, kein einzelner Wert.
+    const templateCapable =
+      !options.forceWidget && (this._schema.templateFields || []).includes(name);
+    if (templateCapable) {
+      const mode = templateFieldMode(value, this._templateOverride(target, name));
+      const umschalter = document.createElement("button");
+      umschalter.type = "button";
+      umschalter.className = "linkbtn";
+      umschalter.textContent = mode === "template" ? "als festen Wert bearbeiten" : "als Template bearbeiten";
+      umschalter.addEventListener("click", () => {
+        this._setTemplateOverride(target, name, mode === "template" ? "value" : "template");
+        // Nur dieses Feld neu bauen: ein kompletter Neuaufbau würde offene Entity-Blöcke zuklappen.
+        wrapper.replaceWith(this._field(target, name, options));
+      });
+      wrapper.querySelector("label").appendChild(umschalter);
+
+      if (mode === "template") {
+        row.appendChild(this._templateEditor(name, value, commit, errorEl));
+        return wrapper;
+      }
+    }
+
     if (widget === "color") {
       row.appendChild(this._colorEditor(value, commit));
       return wrapper;
@@ -962,6 +1039,115 @@ class NsPanelUiConfigPanel extends PanelBase {
       row.appendChild(preview);
     }
     return wrapper;
+  }
+
+  /** Vom Nutzer gewählter Modus eines template-fähigen Feldes (überschreibt die Erkennung). */
+  _templateOverride(target, name) {
+    return this._templateModes.get(target)?.get(name);
+  }
+
+  _setTemplateOverride(target, name, mode) {
+    if (!this._templateModes.has(target)) this._templateModes.set(target, new Map());
+    this._templateModes.get(target).set(name, mode);
+  }
+
+  /**
+   * Template-Editor mit Live-Vorschau.
+   *
+   * Die Vorschau geht über HAs eigene Template-API (`POST /api/template`) — dieselbe Engine, die
+   * später auch das Backend benutzt (`ha_api.render_template`). Damit sieht man hier echte Werte und
+   * echte Jinja-Fehlermeldungen, statt eine Nachbildung.
+   */
+  _templateEditor(name, value, commit, errorEl) {
+    const host = document.createElement("div");
+    host.className = "tplbox";
+
+    const suffixField = (this._schema.templateSuffixFields || []).includes(name);
+    const area = document.createElement("textarea");
+    area.className = "tpl";
+    area.rows = 4;
+    area.placeholder = "{{ states('sensor.puffer_oben') }} °C";
+    // Nicht-Strings (etwa eine RGB-Liste) als Text anbieten, aber nichts davon speichern, solange
+    // der Nutzer nichts ändert – der bestehende Wert bleibt bis dahin unangetastet.
+    area.value = value === undefined || value === null ? "" : typeof value === "string" ? value : JSON.stringify(value);
+
+    const preview = document.createElement("div");
+    preview.className = "tplpreview";
+    const swatch = document.createElement("span");
+    swatch.className = "tplswatch";
+    swatch.hidden = true;
+    const previewText = document.createElement("span");
+    previewText.className = "tplresult";
+    preview.appendChild(swatch);
+    preview.appendChild(previewText);
+
+    if (suffixField) {
+      const hinweis = document.createElement("div");
+      hinweis.className = "desc";
+      hinweis.textContent =
+        "Das Backend rendert nur bis zum letzten } und hängt den Rest wörtlich an – so entstehen " +
+        "Einheiten wie „ °C“. Die Vorschau macht es genauso.";
+      host.appendChild(hinweis);
+    }
+
+    let timer = null;
+    const render = async () => {
+      const text = area.value;
+      if (!text.trim()) {
+        previewText.textContent = "";
+        swatch.hidden = true;
+        errorEl.hidden = true;
+        return;
+      }
+      const [template, suffix] = suffixField ? splitTemplateSuffix(text) : [text, ""];
+      if (!isTemplate(template)) {
+        // Kein Jinja drin: dann ist das Ergebnis der Text selbst, kein API-Aufruf nötig.
+        this._showTemplateResult(previewText, swatch, errorEl, name, `${template}${suffix}`);
+        return;
+      }
+      previewText.textContent = "…";
+      try {
+        const rendered = await this._hass.callApi("POST", "template", { template });
+        this._showTemplateResult(previewText, swatch, errorEl, name, `${rendered}${suffix}`);
+      } catch (err) {
+        swatch.hidden = true;
+        previewText.textContent = "";
+        errorEl.hidden = false;
+        errorEl.textContent = `Template-Fehler: ${this._errText(err)}`;
+      }
+    };
+
+    area.addEventListener("input", () => {
+      // Entprellt: bei jedem Tastendruck zu rendern wäre ein API-Aufruf pro Zeichen.
+      clearTimeout(timer);
+      timer = setTimeout(render, 700);
+    });
+    area.addEventListener("change", () => {
+      clearTimeout(timer);
+      const text = area.value;
+      commit(text.trim() ? text : undefined);
+      render();
+    });
+
+    host.appendChild(area);
+    host.appendChild(preview);
+    render();
+    return host;
+  }
+
+  /** Zeigt ein Rendering an – bei Farbfeldern zusätzlich als Farbfleck, wenn es RGB ergibt. */
+  _showTemplateResult(previewText, swatch, errorEl, name, result) {
+    errorEl.hidden = true;
+    const text = String(result ?? "");
+    previewText.textContent = `→ ${text.length > 300 ? `${text.slice(0, 300)}…` : text}`;
+    const rgb = this._schema.fieldHints[name] === "color" ? parseTemplateColor(text) : null;
+    if (rgb) {
+      swatch.hidden = false;
+      swatch.style.background = rgbToHex(rgb);
+      swatch.title = rgb.join(", ");
+    } else {
+      swatch.hidden = true;
+    }
   }
 
   /**
@@ -1236,4 +1422,8 @@ export {
   rgbToHex,
   hexToRgb,
   parseRgbText,
+  isTemplate,
+  splitTemplateSuffix,
+  parseTemplateColor,
+  templateFieldMode,
 };

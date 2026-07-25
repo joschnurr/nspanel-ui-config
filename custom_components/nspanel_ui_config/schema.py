@@ -230,6 +230,35 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "dateFormat": "string",
 }
 
+# Felder, die das Backend als Jinja-Template rendert — nachgesehen an den ``render_template``-Aufrufen
+# des Backends, nicht geraten:
+#   name                   pages.py (nameOverride)
+#   value                  pages.py — rendert nur bis zum *letzten* ``}`` und hängt den Rest wörtlich
+#                          an; genau so entstehen Suffixe wie "…°C"
+#   color                  helper.py (rgb_dec565 rendert Strings, bevor es sie als RGB liest)
+#   icon                   icon_mapping.py (Sonderformen ``ha:`` und ``<I>…</I>``)
+#   state_template         pages.py (condTemplate — als Bedingung ausgewertet)
+#   defaultCard            config.py / controller.py
+#   qrCode, speed          pages.py
+#   date/timeAdditionalTemplate  pages.py (Zusatztext in Screensaver-Datum/-Zeit)
+TEMPLATE_FIELDS: Final[tuple[str, ...]] = (
+    "name",
+    "value",
+    "color",
+    "icon",
+    "state_template",
+    "defaultCard",
+    "qrCode",
+    "speed",
+    "dateAdditionalTemplate",
+    "timeAdditionalTemplate",
+)
+
+# Diese zwei rendert das Backend nur bis zum letzten ``}`` und hängt den Rest unverändert an. Der
+# Editor muss das in der Vorschau nachbilden, sonst zeigt sie etwas anderes als das Panel.
+TEMPLATE_SUFFIX_FIELDS: Final[tuple[str, ...]] = ("value", "icon")
+
+
 # Auswahllisten für Felder mit Hinweis ``select``. Der Editor lässt trotzdem freie Eingabe zu —
 # das Backend kennt womöglich mehr Werte als wir.
 FIELD_OPTIONS: Final[dict[str, tuple[str, ...]]] = {
@@ -278,6 +307,9 @@ def schema_payload() -> dict[str, Any]:
         "fieldHints": FIELD_HINTS,
         "fieldOptions": {key: list(value) for key, value in FIELD_OPTIONS.items()},
         "fieldDescriptions": FIELD_DESCRIPTIONS,
+        # Felder, für die der Editor den Template-Modus anbietet (siehe TEMPLATE_FIELDS).
+        "templateFields": list(TEMPLATE_FIELDS),
+        "templateSuffixFields": list(TEMPLATE_SUFFIX_FIELDS),
         # Karten, die ihre eine Entity flach auf der Karte tragen (siehe card_known_fields).
         "flatEntityCardTypes": list(FLAT_ENTITY_CARD_TYPES),
         # Davon die, die *nur* diese eine Entity haben — für sie blendet der Editor die

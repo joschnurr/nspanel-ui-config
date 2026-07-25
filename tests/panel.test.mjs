@@ -25,6 +25,10 @@ const {
   rgbToHex,
   hexToRgb,
   parseRgbText,
+  isTemplate,
+  splitTemplateSuffix,
+  parseTemplateColor,
+  templateFieldMode,
 } = module;
 
 test("Modul lässt sich ohne Browser importieren", () => {
@@ -217,6 +221,49 @@ test("isRgb akzeptiert nur echte 0–255-Tripel", () => {
   assert.equal(isRgb(["255", 0, 0]), false);
   assert.equal(isRgb([0, 0, 0, 0]), false);
   assert.equal(isRgb([-1, 0, 0]), false);
+});
+
+// --- Template-Editor --------------------------------------------------------------------------
+
+test("isTemplate erkennt Jinja in beiden Klammerformen", () => {
+  assert.equal(isTemplate("{{ states('sensor.x') }}"), true);
+  assert.equal(isTemplate("{% if true %}a{% endif %}"), true);
+  assert.equal(isTemplate("mdi:lightbulb"), false);
+  assert.equal(isTemplate(""), false);
+  assert.equal(isTemplate([255, 0, 0]), false);
+  assert.equal(isTemplate(undefined), false);
+});
+
+test("splitTemplateSuffix schneidet am letzten } – wie das Backend", () => {
+  // Der reale Fall: Template plus Einheit.
+  assert.deepEqual(splitTemplateSuffix('{{ states("sensor.puffer_oben") }} °C'), [
+    '{{ states("sensor.puffer_oben") }}',
+    " °C",
+  ]);
+  // Mehrere Klammern: geschnitten wird am *letzten*, nicht am ersten.
+  assert.deepEqual(splitTemplateSuffix("{{ a }}{{ b }} kWh"), ["{{ a }}{{ b }}", " kWh"]);
+  // Ohne } gibt es keinen Suffix.
+  assert.deepEqual(splitTemplateSuffix("nur Text"), ["nur Text", ""]);
+  assert.deepEqual(splitTemplateSuffix(""), ["", ""]);
+});
+
+test("parseTemplateColor liest RGB aus einem Rendering-Ergebnis", () => {
+  // So liefern die Templates in echten Konfigurationen ihre Farben.
+  assert.deepEqual(parseTemplateColor("[0, 120, 255]"), [0, 120, 255]);
+  assert.deepEqual(parseTemplateColor("255,165,0"), [255, 165, 0]);
+  assert.equal(parseTemplateColor("ha-dark"), null);
+  assert.equal(parseTemplateColor(""), null);
+});
+
+test("templateFieldMode startet im Template-Modus, wenn der Wert Jinja enthält", () => {
+  assert.equal(templateFieldMode("{{ x }}"), "template");
+  assert.equal(templateFieldMode("mdi:lightbulb"), "value");
+  assert.equal(templateFieldMode([255, 0, 0]), "value");
+  assert.equal(templateFieldMode(undefined), "value");
+  // Die Wahl des Nutzers schlägt die Erkennung – in beide Richtungen.
+  assert.equal(templateFieldMode("mdi:lightbulb", "template"), "template");
+  assert.equal(templateFieldMode("{{ x }}", "value"), "value");
+  assert.equal(templateFieldMode("{{ x }}", undefined), "template");
 });
 
 test("isPlain trennt Objekte/Listen von Skalaren", () => {
