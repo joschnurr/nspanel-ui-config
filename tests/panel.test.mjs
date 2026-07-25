@@ -10,7 +10,7 @@ import { test } from "node:test";
 const module = await import(
   "../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js"
 );
-const { widgetFor, setField, cardLabel, esc, isPlain } = module;
+const { widgetFor, setField, cardLabel, esc, isPlain, generateStatus } = module;
 
 test("Modul lässt sich ohne Browser importieren", () => {
   assert.equal(typeof module.NsPanelUiConfigPanel, "function");
@@ -79,6 +79,34 @@ test("cardLabel bevorzugt Titel, dann key, dann Typ", () => {
 test("esc entschärft HTML in Nutzerwerten", () => {
   assert.equal(esc(`<img src=x onerror="alert(1)">`), "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
   assert.equal(esc("A & B"), "A &amp; B");
+});
+
+test("generateStatus meldet einen fehlgeschlagenen Reload als Fehler, nicht als Erfolg", () => {
+  const [text, tone] = generateStatus({
+    path: "/nspanel-shared/nspanel_config.yaml",
+    reload: { mode: "restart_container", ok: false, detail: "Container 'appdaemon' nicht gefunden" },
+  });
+  assert.equal(tone, "error");
+  assert.match(text, /nicht neu geladen/);
+  // Der Pfad muss trotzdem dastehen – die Datei ist geschrieben.
+  assert.match(text, /nspanel_config\.yaml/);
+});
+
+test("generateStatus nennt bei aktivem Reload, was passiert ist", () => {
+  const [text, tone] = generateStatus({
+    path: "/x.yaml",
+    reload: { mode: "touch_module", ok: true, detail: "/apps/nspanel.py angetickt" },
+  });
+  assert.equal(tone, "ok");
+  assert.match(text, /angetickt/);
+});
+
+test("generateStatus bleibt knapp, wenn kein Reload konfiguriert ist", () => {
+  for (const reload of [{ mode: "none", ok: true, detail: "Kein Reload konfiguriert" }, {}, undefined]) {
+    const [text, tone] = generateStatus({ path: "/x.yaml", reload });
+    assert.equal(tone, "ok");
+    assert.equal(text, "YAML geschrieben nach /x.yaml");
+  }
 });
 
 test("isPlain trennt Objekte/Listen von Skalaren", () => {

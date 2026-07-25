@@ -16,17 +16,25 @@ from homeassistant.core import callback
 from .const import (
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
+    CONF_RELOAD_CONTAINER,
     CONF_RELOAD_MODE,
+    CONF_RELOAD_TOUCH_PATH,
     DEFAULT_OUTPUT_PATH,
+    DEFAULT_RELOAD_CONTAINER,
     DEFAULT_RELOAD_MODE,
     DOMAIN,
     RELOAD_MODES,
 )
 
+# Die beiden Reload-Felder gehören jeweils nur zu einem Modus; sie stehen bewusst trotzdem immer im
+# Formular, weil HAs Options-Flow keine abhängigen Felder ohne zweiten Schritt kann — und ein
+# zweiter Schritt wäre für zwei Textfelder mehr Umweg als Gewinn.
 _STEP_USER_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_OUTPUT_PATH, default=DEFAULT_OUTPUT_PATH): str,
         vol.Required(CONF_RELOAD_MODE, default=DEFAULT_RELOAD_MODE): vol.In(RELOAD_MODES),
+        vol.Optional(CONF_RELOAD_TOUCH_PATH, default=""): str,
+        vol.Optional(CONF_RELOAD_CONTAINER, default=DEFAULT_RELOAD_CONTAINER): str,
         vol.Optional(CONF_IMPORT_YAML_PATH, default=""): str,
     }
 )
@@ -51,6 +59,10 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
                 options={
                     CONF_OUTPUT_PATH: user_input[CONF_OUTPUT_PATH],
                     CONF_RELOAD_MODE: user_input[CONF_RELOAD_MODE],
+                    CONF_RELOAD_TOUCH_PATH: user_input.get(CONF_RELOAD_TOUCH_PATH, ""),
+                    CONF_RELOAD_CONTAINER: user_input.get(
+                        CONF_RELOAD_CONTAINER, DEFAULT_RELOAD_CONTAINER
+                    ),
                     CONF_IMPORT_YAML_PATH: user_input.get(CONF_IMPORT_YAML_PATH, ""),
                 },
             )
@@ -87,6 +99,14 @@ class NsPanelUiConfigOptionsFlow(OptionsFlow):
                     CONF_RELOAD_MODE,
                     default=current.get(CONF_RELOAD_MODE, DEFAULT_RELOAD_MODE),
                 ): vol.In(RELOAD_MODES),
+                vol.Optional(
+                    CONF_RELOAD_TOUCH_PATH,
+                    default=current.get(CONF_RELOAD_TOUCH_PATH, ""),
+                ): str,
+                vol.Optional(
+                    CONF_RELOAD_CONTAINER,
+                    default=current.get(CONF_RELOAD_CONTAINER, DEFAULT_RELOAD_CONTAINER),
+                ): str,
                 vol.Optional(
                     CONF_IMPORT_YAML_PATH,
                     default=current.get(CONF_IMPORT_YAML_PATH, ""),

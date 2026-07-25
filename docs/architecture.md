@@ -51,13 +51,32 @@ also nicht direkt schreiben.
 
 ## Reload-Trigger
 
-AppDaemon lädt bei geändertem *Include* nicht automatisch neu (nur das Top-Level-App-Modul wird
-hot-reloaded). Nach dem Schreiben muss die App neu geladen werden. Optionen (konfigurierbar):
+**Nachgemessen (AppDaemon 4.7.3):** Eine neu geschriebene Include-Datei löst **keinen** Reload aus —
+nach dem Generieren erscheint keine einzige Zeile im AppDaemon-Log. Der Grund steht im Loader:
+`_include_yaml` in `appdaemon/utils.py` liest die Datei beim Einlesen der `apps.yaml` nur inline mit
+und nimmt ihren Pfad nicht in die Datei-Überwachung auf. Überwacht werden ausschließlich die
+App-Config- und Python-Dateien im `apps/`-Verzeichnis.
 
-- AppDaemon-Admin/REST-API zum App-Reload aufrufen (bevorzugt, feingranular).
-- `nspanel.py` „anticken" (mtime), damit AppDaemon die App neu lädt.
-- AppDaemon-Container neu starten – HA hat `docker.sock` gemountet, also technisch möglich, aber
-  grob (volles Neuladen). Als Fallback.
+Ohne Reload steht die neue YAML also auf der Platte, während das NSPanel weiter die alte
+Konfiguration zeigt — ein Zustand, den der Editor nicht als Erfolg melden darf. Umgesetzt in
+[`reload.py`](../custom_components/nspanel_ui_config/reload.py), Modus über die Integrations-Optionen:
+
+| Modus | Wirkung | Voraussetzung |
+| --- | --- | --- |
+| `none` (Standard) | nichts; man lädt AppDaemon selbst neu | – |
+| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`) → AppDaemon lädt genau diese App neu | HA muss die Datei sehen: AppDaemons `apps/` zusätzlich in den HA-Container mounten |
+| `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; grob, alle Apps starten neu |
+
+Details, die leicht schiefgehen:
+
+- Angetickt wird nur die **mtime** (`os.utime`), der Inhalt bleibt unberührt. Nicht existierende
+  Dateien werden **nicht** angelegt — eine leere `nspanel.py` in `apps/` würde AppDaemon als kaputte
+  App lesen.
+- Ein fehlgeschlagener Reload macht das Generieren nicht rückgängig: die Datei ist schon geschrieben.
+  Die API antwortet deshalb mit `200` und `reload: {ok: false, detail: …}`, und das Panel zeigt das
+  als Fehler an — sichtbar, aber ohne den Eindruck, die Ausgabe sei misslungen.
+- *Verworfen:* AppDaemons REST-API. Sie führt nur von Apps registrierte Endpunkte
+  (`register_endpoint`), einen eingebauten „App neu laden"-Aufruf gibt es nicht.
 
 ## Datenmodell (aus dem Upstream-Schema abgeleitet)
 

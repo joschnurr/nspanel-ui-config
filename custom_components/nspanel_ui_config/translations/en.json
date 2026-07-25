@@ -7,7 +7,14 @@
         "data": {
           "output_path": "Output path of the generated YAML (inside the shared bind mount)",
           "reload_mode": "AppDaemon reload after generating",
+          "reload_touch_path": "Only for \"touch_module\": path of the file to touch",
+          "reload_container": "Only for \"restart_container\": name of the AppDaemon container",
           "import_yaml_path": "Optional: path of an existing apps.yaml to import"
+        },
+        "data_description": {
+          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually, \"touch_module\" = update the mtime of a file AppDaemon watches, \"restart_container\" = restart the AppDaemon container through the Docker API.",
+          "reload_touch_path": "A file AppDaemon watches – its app module (apps/nspanel.py) or the apps.yaml. It must be visible inside the HA container, i.e. mounted in as well.",
+          "reload_container": "Requires /var/run/docker.sock to be mounted into the HA container."
         }
       }
     },
@@ -22,7 +29,14 @@
         "data": {
           "output_path": "Output path of the generated YAML",
           "reload_mode": "AppDaemon reload after generating",
+          "reload_touch_path": "Only for \"touch_module\": path of the file to touch",
+          "reload_container": "Only for \"restart_container\": name of the AppDaemon container",
           "import_yaml_path": "Optional: path of an existing apps.yaml to import"
+        },
+        "data_description": {
+          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually, \"touch_module\" = update the mtime of a file AppDaemon watches, \"restart_container\" = restart the AppDaemon container through the Docker API.",
+          "reload_touch_path": "A file AppDaemon watches – its app module (apps/nspanel.py) or the apps.yaml. It must be visible inside the HA container, i.e. mounted in as well.",
+          "reload_container": "Requires /var/run/docker.sock to be mounted into the HA container."
         }
       }
     }

@@ -5,7 +5,7 @@ Endpunkte (alle nur für Admins):
   GET  /api/nspanel_ui_config/config    → aktuelles Config-Modell (JSON)
   POST /api/nspanel_ui_config/config    → Modell speichern (JSON)
   POST /api/nspanel_ui_config/import    → bestehende apps.yaml einlesen (Pfad oder Text)
-  POST /api/nspanel_ui_config/generate  → YAML erzeugen und in den Ausgabepfad schreiben
+  POST /api/nspanel_ui_config/generate  → YAML erzeugen, schreiben und AppDaemon neu laden
 """
 
 from __future__ import annotations
@@ -26,10 +26,12 @@ from .const import (
     API_SCHEMA,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
+    CONF_RELOAD_MODE,
     DOMAIN,
 )
 from .generator import write_config_yaml
 from .importer import find_apps, parse_apps_yaml
+from .reload import ReloadError, async_trigger_reload
 from .schema import empty_model, schema_payload, validate_model
 
 _LOGGER = logging.getLogger(__name__)
@@ -198,7 +200,11 @@ class NsPanelImportView(_NsPanelView):
 
 
 class NsPanelGenerateView(_NsPanelView):
-    """Erzeugt die nspanel-YAML aus dem Modell und schreibt sie in den Ausgabepfad."""
+    """Erzeugt die nspanel-YAML aus dem Modell, schreibt sie und lädt das Backend neu.
+
+    Body optional: ``{"reload": false}`` überspringt den konfigurierten Reload (zum Schreiben
+    ohne Nebenwirkung, etwa beim Vergleichen der Ausgabe).
+    """
 
     url = API_GENERATE
     name = "api:nspanel_ui_config:generate"
@@ -207,6 +213,13 @@ class NsPanelGenerateView(_NsPanelView):
         data, error = self._entry_data(request)
         if error is not None:
             return error
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = {}  # leerer Body ist der Normalfall
+        if not isinstance(payload, dict):
+            payload = {}
+
         # Der Ausgabepfad stammt aus den Entry-Optionen (Admin-gesetzt), nicht aus dem Request.
         output_path = data["options"].get(CONF_OUTPUT_PATH)
         model = data.get("model", {})
@@ -215,4 +228,27 @@ class NsPanelGenerateView(_NsPanelView):
         except OSError as err:
             _LOGGER.error("Schreiben der nspanel-YAML fehlgeschlagen: %s", err)
             return self.json_message(f"Schreiben fehlgeschlagen: {err}", HTTPStatus.INTERNAL_SERVER_ERROR)
-        return self.json({"ok": True, "path": written, "findings": validate_model(model)})
+
+        # Die Datei steht schon auf der Platte — ein gescheiterter Reload ist deshalb eine Warnung
+        # in der Antwort und kein Fehlschlag des Generierens.
+        if payload.get("reload") is False:
+            reload_result: dict[str, Any] = {"mode": "skipped", "ok": True, "detail": "Reload übersprungen"}
+        else:
+            try:
+                reload_result = await async_trigger_reload(self.hass, dict(data["options"]))
+            except ReloadError as err:
+                _LOGGER.warning("YAML geschrieben, aber AppDaemon-Reload fehlgeschlagen: %s", err)
+                reload_result = {
+                    "mode": data["options"].get(CONF_RELOAD_MODE),
+                    "ok": False,
+                    "detail": str(err),
+                }
+
+        return self.json(
+            {
+                "ok": True,
+                "path": written,
+                "findings": validate_model(model),
+                "reload": reload_result,
+            }
+        )

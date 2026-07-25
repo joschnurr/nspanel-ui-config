@@ -7,7 +7,14 @@
         "data": {
           "output_path": "Ausgabepfad der generierten YAML (im geteilten Bind-Mount)",
           "reload_mode": "AppDaemon-Reload nach dem Generieren",
+          "reload_touch_path": "Nur bei „touch_module“: Pfad der anzutickenden Datei",
+          "reload_container": "Nur bei „restart_container“: Name des AppDaemon-Containers",
           "import_yaml_path": "Optional: Pfad einer bestehenden apps.yaml zum Import"
+        },
+        "data_description": {
+          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden, „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen, „restart_container“ = AppDaemon-Container über die Docker-API neu starten.",
+          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Sie muss im HA-Container sichtbar sein, also zusätzlich hineingemountet werden.",
+          "reload_container": "Setzt voraus, dass /var/run/docker.sock im HA-Container gemountet ist."
         }
       }
     },
@@ -22,7 +29,14 @@
         "data": {
           "output_path": "Ausgabepfad der generierten YAML",
           "reload_mode": "AppDaemon-Reload nach dem Generieren",
+          "reload_touch_path": "Nur bei „touch_module“: Pfad der anzutickenden Datei",
+          "reload_container": "Nur bei „restart_container“: Name des AppDaemon-Containers",
           "import_yaml_path": "Optional: Pfad einer bestehenden apps.yaml zum Import"
+        },
+        "data_description": {
+          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden, „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen, „restart_container“ = AppDaemon-Container über die Docker-API neu starten.",
+          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Sie muss im HA-Container sichtbar sein, also zusätzlich hineingemountet werden.",
+          "reload_container": "Setzt voraus, dass /var/run/docker.sock im HA-Container gemountet ist."
         }
       }
     }

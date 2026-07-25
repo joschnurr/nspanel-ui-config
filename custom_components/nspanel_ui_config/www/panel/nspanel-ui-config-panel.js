@@ -188,6 +188,27 @@ function cardLabel(card) {
   return card.title || card.key || card.type || "(ohne Titel)";
 }
 
+/**
+ * Statuszeile nach dem Generieren: `[Text, Ton]`.
+ *
+ * Ein fehlgeschlagener Reload ist keine gescheiterte Ausgabe – die YAML steht schon auf der Platte.
+ * Der Unterschied muss aber sichtbar sein, sonst hält man das Panel für übernommen, während das
+ * NSPanel noch die alte Konfiguration zeigt.
+ */
+function generateStatus(result) {
+  const path = result?.path;
+  const reload = result?.reload || {};
+  if (reload.ok === false) {
+    return [
+      `YAML geschrieben nach ${path}, aber AppDaemon nicht neu geladen: ${reload.detail}`,
+      "error",
+    ];
+  }
+  const stillerModus = !reload.mode || reload.mode === "none" || reload.mode === "skipped";
+  if (stillerModus) return [`YAML geschrieben nach ${path}`, "ok"];
+  return [`YAML geschrieben nach ${path} – ${reload.detail}`, "ok"];
+}
+
 // --- Panel -----------------------------------------------------------------------------------
 
 // Im Browser ist das schlicht HTMLElement. Der Fallback existiert nur, damit sich das Modul auch
@@ -849,7 +870,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     try {
       const result = await this._hass.callApi("POST", "nspanel_ui_config/generate", {});
       this._findings = result.findings || [];
-      this._setStatus(`YAML geschrieben nach ${result.path}`, "ok");
+      this._setStatus(...generateStatus(result));
     } catch (err) {
       this._setStatus(`Erzeugen fehlgeschlagen: ${this._errText(err)}`, "error");
     }
@@ -944,4 +965,4 @@ if (typeof customElements !== "undefined" && !customElements.get(ELEMENT_NAME)) 
   customElements.define(ELEMENT_NAME, NsPanelUiConfigPanel);
 }
 
-export { NsPanelUiConfigPanel, widgetFor, setField, cardLabel, esc, isPlain };
+export { NsPanelUiConfigPanel, widgetFor, setField, cardLabel, esc, isPlain, generateStatus };
