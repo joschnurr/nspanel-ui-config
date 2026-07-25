@@ -72,10 +72,50 @@ Basierend auf `luibackend/config.py` und docs.nspanel.pky.eu:
   `status`, `font`, `data{}`. `icon`/`color` können pro `on`/`off` gesetzt sein; `color`/`value` dürfen
   Jinja-Templates sein.
 
-Kartentypen (Upstream): `cardEntities`, `cardGrid`, `cardThermo`, `cardMedia`, `cardAlarm`,
-`cardQR`, `cardPower`, `cardUnlock`, u. a. – MVP zuerst `cardEntities` + `cardGrid`.
+Kartentypen (Upstream): `cardEntities`, `cardGrid`, `cardGrid2`, `cardThermo`, `cardMedia`,
+`cardAlarm`, `cardQR`, `cardPower`, `cardUnlock`, `cardChart`. Import und Generator behandeln
+inzwischen **alle** davon; der visuelle Editor beginnt bei `cardEntities` + `cardGrid`.
+
+Die maßgebliche, maschinenlesbare Fassung dieses Schemas steht in `schema.py` (Feldlisten je
+Kartentyp, Backend-Defaults, Validierung) und ist direkt aus `luibackend/config.py` und den
+Renderer-Zugriffen in `pages.py`/`controller.py` abgeleitet.
+
+## Verlustfreier Round-Trip <a id="roundtrip"></a>
+
+**Anforderung:** Ein Konfigurator, der beim ersten Speichern stillschweigend Einstellungen
+wegwirft, ist unbrauchbar – besonders, weil das Backend mehr Keys kennt als diese Integration und
+mit jeder Upstream-Version neue dazukommen.
+
+**Lösung:** Jede Ebene des Modells (global / Karte / Entity) trennt in *benannte Felder* und ein
+`extra`-Dict. Beim Import landet alles Unbekannte unverändert in `extra`, beim Generieren wird es
+wieder eingemischt. `generator.build_config_dict` ist damit die exakte Umkehrung von
+`importer.config_block_to_model`.
+
+Konsequenzen, die dazugehören:
+
+- **Backend-Defaults werden beim Import *nicht* eingemischt.** Sonst stünden nach dem ersten
+  Speichern Dutzende Keys in der Datei, die nie jemand gesetzt hat. `GLOBAL_DEFAULTS` dient nur der
+  Anzeige im Editor.
+- **Kommentare und Formatierung der Quelldatei gehen verloren** – der Round-Trip ist auf
+  Datenebene definiert, nicht auf Textebene. Die Zieldatei wird ohnehin maschinell erzeugt und
+  trägt einen Warnhinweis im Kopf.
+- **Einzige bewusste Abweichung:** ein config-Block ohne `cards` bekommt beim Generieren
+  `cards: []`, weil das Backend sonst auf seine Demo-Karte zurückfällt.
+- Die erzeugte YAML wird bewusst so formatiert, wie man sie von Hand schriebe (eingerückte Listen,
+  einzeilige RGB-Werte, Jinja-Templates in doppelten Quotes statt mit verdoppelten Apostrophen) –
+  sie landet in der Konfiguration des Nutzers und wird dort beim Debuggen gelesen.
+
+Abgesichert durch `tests/test_roundtrip.py` gegen eine Fixture mit allen Kartentypen und den
+typischen YAML-Fallen (`"on"`/`"off"` als Mapping-Keys, Jinja, RGB-Listen, `sleepBrightness` als
+Zeitplan). Optional zusätzlich gegen die echte eigene Datei via `NSPANEL_REAL_APPS_YAML=<pfad>`.
+Die Tests hängen nur an PyYAML, nicht an einer HA-Testumgebung – `conftest.py` registriert das
+Integrationsverzeichnis als Paket, ohne `__init__.py` (und damit Home Assistant) zu laden.
 
 ## Sicherheits-/Betriebshinweise
 
-- Keine Secrets ins Repo. Panel-HTTP-Views erfordern HA-Authentifizierung.
-- Generierte YAML wird nur in den konfigurierten (gemounteten) Pfad geschrieben; Pfad validieren.
+- Keine Secrets ins Repo. Die HTTP-Views erfordern HA-Authentifizierung **und** Admin-Rechte – sie
+  lesen und schreiben Konfigurationsdateien.
+- Der *Import*pfad kommt aus dem Request und wird deshalb gegen HAs `allowlist_external_dirs`
+  geprüft. Der *Ausgabe*pfad stammt aus den Entry-Optionen, ist also bereits Admin-gesetzt.
+- Generierte YAML wird atomar geschrieben (Temp-Datei + `os.replace`), damit AppDaemon nie eine
+  halb geschriebene Datei einliest.

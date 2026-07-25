@@ -1,0 +1,167 @@
+# Test-Fixture: eine AppDaemon-apps.yaml, die möglichst viel von dem abdeckt, was das
+# nspanel-lovelace-ui-Backend versteht — inklusive der Stellen, an denen ein naiver
+# YAML-Round-Trip typischerweise scheitert:
+#   * "on"/"off" als Mapping-Keys (in YAML 1.1 sonst Booleans)
+#   * Jinja-Templates mit {{ }} am Stringanfang
+#   * RGB-Listen
+#   * sleepBrightness als Zeitplan-Liste statt als Zahl
+#   * Keys, die diese Integration (noch) nicht kennt (futureCardOption, unit, foo)
+# Absichtlich eine zweite App, damit die App-Auswahl beim Import mitgetestet wird.
+
+other-app:
+  module: something_else
+  class: SomethingElse
+
+nspanel-1:
+  module: nspanel-lovelace-ui
+  class: NsPanelLovelaceUIManager
+  config:
+    panelRecvTopic: "NSPanel_1/tele/RESULT"
+    panelSendTopic: "NSPanel_1/cmnd/CustomSend"
+    model: eu
+    updateMode: "auto-notify"
+    sleepTimeout: 20
+    sleepBrightness:
+      - time: "sunrise"
+        value: 80
+      - time: "sunset"
+        value: 15
+    screenBrightness: 100
+    locale: "de_DE"
+    timeFormat: "%H:%M"
+    dateFormat: "%A, %d. %B %Y"
+    sleepTrackingZones: ["not_home", "off"]
+    featureExperimentalSliders: true
+
+    screensaver:
+      type: screensaver2
+      doubleTapToUnlock: false
+      alternativeLayout: true
+      weatherUnit: celsius
+      forecastSkip: 0
+      entity: weather.forecast_home
+      entities:
+        - entity: weather.forecast_home
+        - entity: sensor.pv_yield_day
+          name: "PV Heute"
+          unit: "kWh"
+          icon: mdi:solar-power
+        - entity: binary_sensor.garage_closed
+          icon:
+            "on": mdi:garage-variant-lock
+            "off": mdi:garage-open-variant
+          color:
+            "on": [0, 255, 0]
+            "off": [255, 0, 0]
+        - entity: sensor.humidity
+          name: "Luftfeuchte"
+          value: "{{ state_attr('weather.forecast_home', 'humidity') | default('N/A') }}%"
+          color: "{{ iif(states('sensor.humidity') | float(0) < 40, '[0, 255, 0]', '[255, 0, 0]') }}"
+      statusIcon1:
+        entity: sensor.buffer_top
+        icon: <I>mdi:thermometer-water</I> ha:{{ states("sensor.buffer_top","translated")}} °C
+        altFont: true
+        color: "{{ iif(states('sensor.buffer_top') | float(0) < 35, '[0, 120, 255]', '[255, 0, 0]') }}"
+      statusIcon2:
+        entity: sensor.stove
+        icon: mdi:fireplace
+
+    cards:
+      - type: cardEntities
+        title: Wohnzimmer
+        key: wohnzimmer
+        entities:
+          - entity: light.floor_lamp
+          - entity: switch.pool_pump
+            name: Pumpe
+            state: "on"
+            assumed_state: true
+          - entity: iText.
+            name: Nur Text
+            icon: mdi:information
+            color: [255, 255, 0]
+          - entity: navigate.heizung
+            name: Zur Heizung
+            icon: mdi:arrow-right-bold
+
+      - type: cardGrid
+        title: Heizung
+        temperatureUnit: celsius
+        navItem1:
+          entity: navigate.wohnzimmer
+          icon: mdi:sofa
+        entities:
+          - entity: sensor.buffer_top
+            name: oben
+            color: "{{ iif(states('sensor.buffer_top') | float(0) < 35, '[0, 120, 255]', '[255, 0, 0]') }}"
+          - entity: sensor.buffer_bottom
+            name: unten
+            font: 2
+            data:
+              custom: wert
+
+      - type: cardThermo
+        title: Thermostat
+        entity: climate.living_room
+        name: Wohnzimmer
+        icon: mdi:thermostat
+        temperatureUnit: celsius
+        supportedModes: ["heat", "off"]  # bewusst gequotet: unquoted wäre off in YAML 1.1 False
+        sleepTimeout: 60
+
+      - type: cardMedia
+        title: Musik
+        entity: media_player.kitchen
+        mediaControl: "play|pause|next"
+        entities:
+          - entity: media_player.kitchen
+            type: shuffle
+
+      - type: cardAlarm
+        title: Alarm
+        entity: alarm_control_panel.home
+        alarmControl: "arm_home|disarm"
+        supportedModes: [arm_home, arm_away]
+
+      - type: cardQR
+        title: WLAN
+        qrCode: "WIFI:T:WPA;S:MeinNetz;P:geheim;;"
+        entities:
+          - entity: iText.MeinNetz
+            name: SSID
+            icon: mdi:wifi
+
+      - type: cardPower
+        title: Energie
+        entities:
+          - entity: sensor.grid_power
+            name: Netz
+          - entity: sensor.pv_power
+            name: PV
+            color: [255, 200, 0]
+
+      - type: cardUnlock
+        title: Gesperrt
+        pin: 1234
+        destination: cardEntities_wohnzimmer
+
+      - type: cardEntities
+        title: Zukunft
+        futureCardOption: wird-noch-nicht-verstanden
+        entities:
+          - entity: light.rgb_strip
+            effectList: [Rainbow, Solid]
+            foo: bar
+          - entity: fan.ceiling
+            speed: 3
+            state_template: "{{ is_state('fan.ceiling','on') }}"
+            state_not: unavailable
+            status: sensor.ceiling_fan_status
+
+    hiddenCards:
+      - type: cardEntities
+        title: Versteckt
+        key: versteckt
+        entities:
+          - entity: script.secret_thing
+            name: Geheim

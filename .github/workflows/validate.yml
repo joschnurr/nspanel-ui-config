@@ -8,6 +8,18 @@ on:
     - cron: "23 6 * * 1"
 
 jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # schema/importer/generator hängen bewusst nur an PyYAML – keine HA-Testumgebung nötig.
+      - run: pip install pyyaml pytest
+      - run: pytest -q
+
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest

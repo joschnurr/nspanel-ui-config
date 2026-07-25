@@ -31,6 +31,7 @@ PANEL_TITLE: Final = "NSPanel UI"
 PANEL_ICON: Final = "mdi:cellphone-cog"
 STATIC_URL_BASE: Final = "/nspanel_ui_config_static"
 
-# HTTP-API-Pfade (authentifiziert)
+# HTTP-API-Pfade (authentifiziert, nur für Admins)
 API_CONFIG: Final = "/api/nspanel_ui_config/config"
 API_GENERATE: Final = "/api/nspanel_ui_config/generate"
+API_IMPORT: Final = "/api/nspanel_ui_config/import"

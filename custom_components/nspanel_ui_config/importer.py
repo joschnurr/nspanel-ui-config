@@ -3,8 +3,12 @@
 Liest den ``config:``-Block aus einer AppDaemon-``apps.yaml`` (oder einer bereits ausgelagerten
 Include-Datei) und überführt ihn in das interne Modell (global/screensaver/cards/hiddenCards).
 
-Stand v0.1: Grundgerüst. Der eigentliche Feld-für-Feld-Abgleich wird zusammen mit dem Generator
-ausgebaut, damit Import → Editieren → Generieren verlustfrei rundläuft (Round-Trip-Ziel).
+Der Import ist bewusst **verlustfrei**: bekannte Keys bekommen ein benanntes Feld, alle übrigen
+landen unverändert im ``extra``-Dict der jeweiligen Ebene. ``generator.build_config_dict`` dreht das
+wieder zurück, sodass Import → Editieren → Generieren rundläuft (siehe ``tests/test_roundtrip.py``).
+
+Was der Import *nicht* leisten kann: YAML-Kommentare und Formatierung gehen verloren — die Zieldatei
+wird ohnehin maschinell erzeugt und trägt einen entsprechenden Warnhinweis im Kopf.
 """
 
 from __future__ import annotations
@@ -13,10 +17,29 @@ from typing import Any
 
 import yaml
 
-from .schema import empty_model
+from .schema import (
+    CARD_ENTITIES_FIELD,
+    ENTITY_KNOWN_FIELDS,
+    ENTITY_LIKE_CARD_FIELDS,
+    STRUCTURED_KEYS,
+    card_known_fields,
+    empty_model,
+)
 
-# Keys, die als globale Settings gelten (alles außer den strukturierten Blöcken).
-_STRUCTURED_KEYS = {"screensaver", "cards", "hiddenCards"}
+
+def find_apps(text: str) -> list[str]:
+    """Namen aller Apps in einer apps.yaml, die einen ``config``-Block haben.
+
+    Für die Auswahl im Editor, wenn eine apps.yaml mehrere NSPanels bedient.
+    """
+    parsed = yaml.safe_load(text) or {}
+    if not isinstance(parsed, dict):
+        return []
+    return [
+        name
+        for name, value in parsed.items()
+        if isinstance(value, dict) and isinstance(value.get("config"), dict)
+    ]
 
 
 def parse_apps_yaml(text: str, app_name: str | None = None) -> dict[str, Any]:
@@ -30,38 +53,76 @@ def parse_apps_yaml(text: str, app_name: str | None = None) -> dict[str, Any]:
     return config_block_to_model(config_block)
 
 
-def _find_config_block(parsed: dict[str, Any], app_name: str | None) -> dict[str, Any]:
+def _find_config_block(parsed: Any, app_name: str | None) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         return {}
     # Fall A: bereits die reine Include-Datei (config-Inhalt auf Top-Level).
-    if any(key in parsed for key in _STRUCTURED_KEYS) and "config" not in parsed:
+    if any(key in parsed for key in STRUCTURED_KEYS) and "config" not in parsed:
         return parsed
     # Fall B: vollständige apps.yaml – App(s) mit config-Block.
-    if app_name and app_name in parsed:
-        return parsed[app_name].get("config", {})
+    if app_name is not None:
+        app = parsed.get(app_name)
+        return app.get("config", {}) if isinstance(app, dict) else {}
     for value in parsed.values():
         if isinstance(value, dict) and isinstance(value.get("config"), dict):
             return value["config"]
     return {}
 
 
-def config_block_to_model(config: dict[str, Any]) -> dict[str, Any]:
-    """Überführe einen config-Block in das interne Modell."""
-    model = empty_model()
+def config_block_to_model(config: Any) -> dict[str, Any]:
+    """Überführe einen config-Block in das interne Modell.
+
+    Die globalen Settings werden übernommen wie vorgefunden — Backend-Defaults werden bewusst
+    *nicht* eingemischt, sonst stünden beim Generieren plötzlich Keys in der Datei, die der Nutzer
+    nie gesetzt hat.
+    """
     if not isinstance(config, dict):
-        return model
+        return empty_model()
 
-    global_settings: dict[str, Any] = {}
-    for key, value in config.items():
-        if key in _STRUCTURED_KEYS:
-            continue
-        global_settings[key] = value
+    model: dict[str, Any] = {
+        "global": {key: value for key, value in config.items() if key not in STRUCTURED_KEYS},
+        "screensaver": None,
+        "cards": [],
+        "hiddenCards": [],
+    }
 
-    model["global"] = {**model["global"], **global_settings}
-    if isinstance(config.get("screensaver"), dict):
-        model["screensaver"] = config["screensaver"]
+    screensaver = config.get("screensaver")
+    if screensaver is not None:
+        model["screensaver"] = normalize_card(screensaver, default_type="screensaver")
     if isinstance(config.get("cards"), list):
-        model["cards"] = config["cards"]
+        model["cards"] = [normalize_card(card) for card in config["cards"]]
     if isinstance(config.get("hiddenCards"), list):
-        model["hiddenCards"] = config["hiddenCards"]
+        model["hiddenCards"] = [normalize_card(card) for card in config["hiddenCards"]]
     return model
+
+
+def normalize_entity(raw: Any) -> Any:
+    """Zerlege eine Entity-Zeile in bekannte Felder + ``extra``.
+
+    Nicht-Dicts (fehlerhafte Konfiguration) werden unverändert durchgereicht, damit der Import an
+    kaputtem YAML nicht scheitert und der Editor den Fehler anzeigen kann.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    entity: dict[str, Any] = {key: raw[key] for key in ENTITY_KNOWN_FIELDS if key in raw}
+    entity["extra"] = {key: value for key, value in raw.items() if key not in ENTITY_KNOWN_FIELDS}
+    return entity
+
+
+def normalize_card(raw: Any, default_type: str | None = None) -> Any:
+    """Zerlege eine Karte in bekannte Felder + ``extra``; verschachtelte Entities inklusive."""
+    if not isinstance(raw, dict):
+        return raw
+
+    card_type = raw.get("type", default_type)
+    known = card_known_fields(card_type, has_flat_entity="entity" in raw)
+
+    card: dict[str, Any] = {key: raw[key] for key in known if key in raw}
+    card["extra"] = {key: value for key, value in raw.items() if key not in known}
+
+    if isinstance(raw.get(CARD_ENTITIES_FIELD), list):
+        card[CARD_ENTITIES_FIELD] = [normalize_entity(entity) for entity in raw[CARD_ENTITIES_FIELD]]
+    for field in ENTITY_LIKE_CARD_FIELDS:
+        if isinstance(card.get(field), dict):
+            card[field] = normalize_entity(card[field])
+    return card

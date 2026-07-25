@@ -65,14 +65,48 @@ liefert früh Nutzen und bleibt kompatibel mit Updates des Upstream-Backends.
 | Bereich | Status |
 | --- | --- |
 | Repo-/HACS-Skelett, Panel-Registrierung, Config-Flow-Gerüst | 🟡 in Arbeit (v0.1) |
-| Import bestehender `apps.yaml` → internes Modell | ⬜ geplant |
-| YAML-Generator (Screensaver, cardEntities, cardGrid) | ⬜ geplant |
+| Import bestehender `apps.yaml` → internes Modell | ✅ v0.2 |
+| YAML-Generator inkl. aller Kartentypen des Backends | ✅ v0.2 |
+| Verlustfreier Round-Trip (Import → Modell → YAML) | ✅ v0.2, testabgedeckt |
 | Visueller Editor (Karten-/Entity-Listen, Icon-/Farb-Picker) | ⬜ geplant |
-| Weitere Kartentypen (Thermo, Media, Alarm, QR, Power …) | ⬜ geplant |
 | Template-Editor (Jinja für color/value) | ⬜ geplant |
 | AppDaemon-Reload-Automatik | ⬜ geplant |
 
 Details und Designentscheidungen: **[docs/architecture.md](docs/architecture.md)**.
+
+## Verlustfreier Round-Trip
+
+Der Import zerlegt die Konfiguration in benannte Felder; alles, was die Integration (noch) nicht
+kennt, bleibt unverändert in einem `extra`-Bereich liegen und wird beim Generieren wieder
+herausgeschrieben. **Keine Einstellung geht verloren, nur weil dieser Konfigurator sie nicht
+versteht** – auch nicht bei Keys aus einer neueren Backend-Version.
+
+Belegt durch [`tests/test_roundtrip.py`](tests/test_roundtrip.py) gegen eine Fixture, die alle
+Kartentypen und die üblichen YAML-Fallen abdeckt (`"on"`/`"off"` als Mapping-Keys, Jinja-Templates,
+RGB-Listen, `sleepBrightness` als Zeitplan). Gegen die eigene Konfiguration testen:
+
+```bash
+pip install pyyaml pytest
+NSPANEL_REAL_APPS_YAML=/pfad/zu/appdaemon/apps/apps.yaml pytest
+```
+
+Einzige bewusste Abweichung: ein config-Block ganz ohne `cards` bekommt beim Generieren ein leeres
+`cards: []`, weil das Backend sonst auf seine eingebaute Demo-Karte zurückfällt.
+
+## HTTP-API
+
+Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
+
+| Methode | Pfad | Zweck |
+| --- | --- | --- |
+| `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde |
+| `POST` | `/api/nspanel_ui_config/config` | Modell speichern |
+| `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name`, `save`) |
+| `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen und in den Ausgabepfad schreiben |
+
+Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
+aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
+Administrator gesetzt.
 
 ## Referenzen
 
