@@ -137,13 +137,31 @@ wird von einem Administrator gesetzt. Beim Zurückspielen werden Pfadanteile im 
 
 ## Brand-Assets
 
-`custom_components/nspanel_ui_config/brand/` enthält die Bilder, die HACS und Home Assistant für die
+`custom_components/nspanel_ui_config/brand/` enthält die Bilder, die Home Assistant und HACS für die
 Integration anzeigen — `icon.png` (256×256), `icon@2x.png` (512×512) und `logo.png` (512×432). Die
 Icons sind oben/unten transparent aufgefüllt statt seitlich beschnitten, damit Panel-Rahmen und
 Beschriftung vollständig bleiben. Quelldatei: `docs/brand-source.jpg`.
 
-**Ab Home Assistant 2026.3 liest HA diese Bilder direkt aus der Integration** und serviert sie unter
-`/api/brands/integration/nspanel_ui_config/<bild>` — mit Vorrang vor dem Brands-CDN. Fehlt eine
-Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück; ein Eintrag im
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repo ist damit nur noch für ältere
-HA-Versionen nötig (dort inzwischen als *legacy folder* geführt).
+**Zwei Wege, die man nicht verwechseln darf** — beide nachgemessen:
+
+| Wo | Woher das Bild kommt | Braucht einen brands-Eintrag? |
+| --- | --- | --- |
+| Home Assistant (*Geräte & Dienste*) | liest `brand/` direkt aus der Integration und serviert es unter `/api/brands/integration/<domain>/<bild>` – mit Vorrang vor dem CDN (ab HA 2026.3) | **nein** |
+| HACS-Übersicht | Brands-CDN | **ja** |
+
+Ohne Eintrag im [home-assistant/brands](https://github.com/home-assistant/brands)-Repo zeigt HACS
+also den generischen Platzhalter, während Home Assistant selbst das richtige Icon anzeigt. Fehlt
+eine Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück – Dark-Assets sind nicht nötig.
+
+**Dateigröße zählt.** Das brands-Repo achtet ausdrücklich darauf, und die Bilder landen in jeder
+Installation. Direkt aus einem Foto exportiert waren unsere mit 83 kB (256×256) und 285 kB (512×512)
+rund fünfzehnmal so groß wie üblich. `tools/optimize-brand-png.mjs` quantisiert sie auf eine Palette
+und schreibt ein indiziertes PNG:
+
+```bash
+npm install pngjs
+node tools/optimize-brand-png.mjs quelle.png ziel.png 128
+```
+
+Das drückt sie um ~83 % (14,1 / 47,5 / 38,8 kB) **ohne sichtbaren Unterschied**. Bei 64 Farben
+zeigt der dunkle Rahmen des Icons Banding – 128 ist die Grenze.
