@@ -1,8 +1,9 @@
 # Vorschau bzw. Simulation des Panels — Machbarkeit
 
-*Untersuchung von 2026-07-26. **Stufe 1 ist seither umgesetzt** (`www/panel/preview-layouts.js` +
-Zeichenschicht im Panel, siehe [funktionen.md](funktionen.md#vorschau)); Stufe 2 und Option C sind
-weiterhin offen. Der Text steht als Begründung der Richtung.*
+*Untersuchung von 2026-07-26. **Stufe 1 und Stufe 2 sind seither umgesetzt** – die Zeichenschicht
+steht im Panel, die Geometrie kommt für die Karten mit Entity-Liste aus `www/panel/layouts.js`
+(erzeugt von `tools/extract_layouts.py`). Offen bleibt Option C. Der Text steht als Begründung der
+Richtung.*
 
 Die Frage: Kann der Editor zeigen, **wie die konfigurierte Karte auf dem Panel aussehen wird** —
 und lässt sich das Ganze vielleicht sogar in einem NSPanel-Emulator live simulieren?
@@ -105,17 +106,22 @@ Broker für die Testinstanz ist deshalb eine Sicherheitsgrenze, keine Bequemlich
 Option B, Stufe 1. Sie liefert früh sichtbaren Nutzen, kommt ohne zusätzliche Infrastruktur aus und
 ist die Grundlage für alles Weitere. Option C bleibt als Ausbaustufe offen, Option A scheidet aus.
 
-## Was die Umsetzung von Stufe 1 gezeigt hat
+## Was die Umsetzung gezeigt hat
 
 - **Die Dumps braucht man nicht als Repo-Kopie.** Einzelne Seiten lassen sich direkt über
   `raw.githubusercontent.com/joBr99/nspanel-lovelace-ui/main/HMI/…` ziehen; für den Screensaver war
   das der schnellste Weg zu belastbaren Koordinaten. Er ist deshalb bereits layout-treu, die übrigen
   Karten sind nachempfunden.
-- **Der Aufwand steckt nicht im Zeichnen, sondern in der Zuordnung.** Welche Nextion-Komponente
-  welchen Listeneintrag zeigt, steht nicht im Dump-Kopf, sondern in den `spstr`-Aufrufen des
-  Seitencodes (`spstr strCommand.txt,tForecast1.txt,"~",11` – Feldindex 11 des `weatherUpdate~`-
-  Strings). Ein `tools/extract_layouts.py` für Stufe 2 muss also beides lesen: die Attribute *und*
-  den Code. Dafür wäre die Zuordnung dann hergeleitet statt abgeschrieben.
+- **Der Aufwand steckt nicht im Zeichnen, sondern in der Zuordnung.** Bei den Karten reicht dafür
+  die Namenskonvention der Komponenten (`tEntity1…`, `bEntity1…`, `t0Icon…`) – `extract_layouts.py`
+  hält sie je Seite explizit fest und leitet daraus Symbol-, Namens- und Wertfläche jedes Platzes
+  ab. Dass die Muster stimmen, zeigt der Abgleich: **alle 18 Kombinationen aus Karte und Modell
+  ergeben genau die Platzzahl, die schon in `CARD_CAPACITY` stand** – zwei unabhängig hergeleitete
+  Wege mit demselben Ergebnis.
+- **Beim Screensaver reicht das nicht.** Dort heißen die Komponenten nicht durchnummeriert nach
+  Listenposition; welche welchen Eintrag zeigt, steht in den `spstr`-Aufrufen des Seitencodes
+  (`spstr strCommand.txt,tForecast1.txt,"~",11` – Feldindex 11 des `weatherUpdate~`-Strings). Seine
+  Werte sind deshalb von Hand eingetragen, mit Verweis auf die Fundstelle.
 - **Dabei ist ein echter Befund abgefallen:** im alternativen Screensaver-Layout blendet das HMI
   quer die erste Vorhersagespalte aus und rückt die übrigen nach rechts – die 5. Entity verliert
   ihren Platz. Hochkant passiert das nicht (`if(p0.w!=320)`). Das steht in keiner Dokumentation und

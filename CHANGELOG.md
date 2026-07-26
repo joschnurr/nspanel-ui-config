@@ -14,6 +14,12 @@ aussieht. Über jedem Kartenformular steht jetzt eine Nachbildung des Displays i
 - **Plätze, Reihenfolge, Symbole, Farben und Werte kommen aus dem bearbeiteten Modell**, Templates
   werden über Home Assistants `/api/template` gerendert – alle einer Karte in einem einzigen Aufruf,
   mit Einzelaufrufen als Rückfallebene.
+- **Die Geometrie ist abgemessen, nicht geschätzt.** `tools/extract_layouts.py` liest die
+  Slot-Positionen aus den HMI-Dumps der Display-Firmware und erzeugt `www/panel/layouts.js` – für
+  `cardEntities`, `cardGrid`, `cardGrid2`, `cardQR`, `cardMedia` und `cardPower` in allen drei
+  Panel-Modellen, mit Symbol-, Namens- und Wertfläche jedes Platzes einzeln. Das Werkzeug schreibt
+  nur, wenn die Platzzahl zu `CARD_CAPACITY` passt; `tests/test_layouts.py` prüft dasselbe ohne Netz.
+  Nebenbei bestätigt: alle 18 Kombinationen ergeben genau die Zahlen, die schon im Schema standen.
 - **Die Zahl der Plätze bleibt allein Sache des Schemas** (`CARD_CAPACITY`); die Vorschau bekommt sie
   übergeben und kann ihr deshalb nicht widersprechen.
 - Freie Plätze (`entity: delete`, leer) sind als solche zu sehen, `iText.`/`navigate.`/`service.`

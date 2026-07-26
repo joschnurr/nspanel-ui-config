@@ -35,12 +35,28 @@ Templates einer Karte **in einem einzigen Aufruf** von `/api/template`, getrennt
 Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten Template
 scheitert, wird einzeln gerendert.
 
+**Die Geometrie ist abgemessen, nicht geschätzt.** Für `cardEntities`, `cardGrid`, `cardGrid2`,
+`cardQR`, `cardMedia` und `cardPower` steht in `www/panel/layouts.js` die Position jeder
+Slot-Komponente – Symbol, Name und Bedienfläche einzeln, für alle drei Panel-Modelle. Erzeugt wird
+die Datei von `tools/extract_layouts.py` aus den HMI-Dumps der Display-Firmware:
+
+```bash
+python3 tools/extract_layouts.py /pfad/zu/nspanel-lovelace-ui
+```
+
+Das Werkzeug prüft dabei gegen `CARD_CAPACITY` und schreibt nichts, wenn die Platzzahl abweicht –
+eine Vorschau, die dem Editor widerspricht, wäre schlimmer als gar keine. `tests/test_layouts.py`
+prüft dieselbe Übereinstimmung ohne Netz, damit eine vergessene Neuerzeugung auffällt. Der
+Screensaver ist ebenfalls abgemessen, aber von Hand: dort steckt die Zuordnung nicht in den
+Komponentennamen, sondern in den `spstr`-Aufrufen des Seitencodes.
+
 **Was Näherung bleibt:**
 
-- **Größen und Schriftart.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort an
-  derselben Stelle umbricht, ist eine Aussage mit Restunschärfe. Die Geometrie ist bis auf den
-  Screensaver nachempfunden, nicht aus den HMI-Dumps übernommen (siehe
-  [vorschau-machbarkeit.md](vorschau-machbarkeit.md), Stufe 2).
+- **Schriftart und Umbruch.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort
+  an derselben Stelle umbricht, ist eine Aussage mit Restunschärfe. Die Schriftgröße leitet die
+  Vorschau aus der abgemessenen Höhe des Textfeldes ab.
+- **Karten mit nur einer Entity** (`cardThermo`, `cardAlarm`, `cardChart`, `cardUnlock`) zeigen nur
+  ihre Fläche – deren Innenleben gestaltet das Backend.
 - **Symbole ohne eigene Angabe.** Die leitet das Backend aus Domain und Zustand ab
   (`icon_mapping.py`); nachgebaut wird das nicht. Ersatzweise steht das Symbol da, das Home
   Assistant selbst für die Entity führt – blasser dargestellt und im Tooltip als solches benannt.
@@ -51,10 +67,9 @@ Sonderformen sind berücksichtigt: `delete` und leere Einträge erscheinen als *
 `iText.` als fester Text, `navigate.`/`service.` ohne Zustandssuche. Eine `entity_id`, die es in
 Home Assistant nicht gibt, wird mit ⚠ markiert – das ist fast immer ein Tippfehler.
 
-**Der Screensaver ist layout-treu**, weil seine Aufteilung am wenigsten zu erraten ist: die
-Prozentwerte stammen aus den HMI-Dumps. Dort zeigt die Vorschau auch, was sonst niemand sieht – im
-alternativen Layout (ab der 6. Entity, quer) hat die 5. Entity keinen Platz mehr und wird gar nicht
-erst gezeichnet. Siehe [kapazitaet.md](kapazitaet.md).
+Beim Screensaver zeigt die Vorschau zusätzlich, was sonst niemand sieht: im alternativen Layout (ab
+der 6. Entity, quer) hat die 5. Entity keinen Platz mehr und wird gar nicht erst gezeichnet. Siehe
+[kapazitaet.md](kapazitaet.md).
 
 ## Template-Editor
 

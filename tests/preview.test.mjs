@@ -122,10 +122,40 @@ test("hochkant bleiben alle sechs sichtbar – dort entfällt die Verschiebung",
   assert.deepEqual(slots.map((slot) => slot.index).sort((a, b) => a - b), [0, 1, 2, 3, 4, 5]);
 });
 
-test("Screensaver werden ohne Titel- und Navileiste gezeichnet, Karten mit", () => {
+test("Screensaver haben keinen Rahmen, Karten schon", () => {
+  // Screensaver füllen das Display ganz aus – kein Titel, keine Blättertasten.
   assert.equal(previewSlots({ cardType: "screensaver", capacity: 6 }).chrome, false);
   assert.equal(previewSlots({ cardType: "screensaver2", capacity: 15 }).chrome, false);
-  assert.equal(previewSlots({ cardType: "cardEntities", capacity: 4 }).chrome, true);
+  // Bei abgemessenen Karten steht der Rahmen als eigene Plätze in der Liste (aus dem Dump),
+  // bei nachempfundenen zeichnet ihn die Vorschau selbst.
+  const gemessen = previewSlots({ cardType: "cardEntities", capacity: 4 });
+  assert.equal(gemessen.gemessen, true);
+  assert.equal(gemessen.slots.some((slot) => slot.kind === "title"), true);
+  assert.equal(gemessen.slots.filter((slot) => slot.kind === "navbtn").length, 2);
+  assert.equal(previewSlots({ cardType: "cardThermo", capacity: 0 }).chrome, true);
+});
+
+test("abgemessene Plätze tragen ihre Bestandteile mit sich", () => {
+  const slots = entitySlots(previewSlots({ cardType: "cardEntities", capacity: 4, model: "eu" }));
+  for (const slot of slots) {
+    assert.ok(slot.parts, "jeder Platz braucht seine Bestandteile");
+    assert.ok(slot.parts.icon && slot.parts.name, "Symbol und Name gehören dazu");
+    // Relativ zum Platz: die Bestandteile liegen innerhalb, nicht daneben.
+    for (const teil of Object.values(slot.parts)) {
+      assert.ok(teil.left >= -0.01 && teil.left + teil.width <= 100.01, "Bestandteil ragt seitlich hinaus");
+      assert.ok(teil.top >= -0.01 && teil.top + teil.height <= 100.01, "Bestandteil ragt hinaus");
+      assert.equal(teil.px.length, 2, "Pixelmaße für die Schriftgröße fehlen");
+    }
+  }
+});
+
+test("cardGrid-Kacheln liegen nebeneinander, nicht untereinander", () => {
+  // Sanity-Check gegen ein vertauschtes Muster im Extraktionswerkzeug: die ersten drei Kacheln
+  // teilen sich eine Zeile, die vierte beginnt weiter unten.
+  const slots = entitySlots(previewSlots({ cardType: "cardGrid", capacity: 6, model: "eu" }));
+  assert.equal(slots[0].y, slots[1].y);
+  assert.ok(slots[1].x > slots[0].x);
+  assert.ok(slots[3].y > slots[0].y);
 });
 
 test("us-p steht hochkant, eu und us-l liegen quer", () => {

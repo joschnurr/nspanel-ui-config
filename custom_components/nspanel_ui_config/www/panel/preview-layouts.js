@@ -13,6 +13,15 @@
 //
 // Alle Maße sind **Prozent der Displayfläche**, nicht Pixel: so gilt dieselbe Definition für das
 // quer liegende EU-/US-L-Panel und das hochkant stehende US-P-Panel.
+//
+// **Zwei Quellen, in dieser Reihenfolge:**
+//  1. `layouts.js` – aus den HMI-Dumps erzeugt (tools/extract_layouts.py). Deckt cardEntities,
+//     cardGrid, cardGrid2, cardQR, cardMedia und cardPower für alle drei Modelle ab; dort ist die
+//     Vorschau abgemessen, inklusive der Bestandteile eines Platzes (Symbol, Name, Wert).
+//  2. Die Anordnungen weiter unten – für alles Übrige: die Screensaver (deren Zuordnung im
+//     Seitencode steckt, nicht in den Komponentennamen) und die Karten mit nur einer Entity.
+
+import { LAYOUTS } from "./layouts.js";
 
 /** Displaygröße je Modell. Nur us-p steht hochkant. */
 export const SCREEN = {
@@ -244,9 +253,63 @@ const SINGLE_WIDGETS = {
  * Rückgabe: `{ screen, slots, chrome }`. `chrome: false` heißt Vollbild ohne Titel- und Navileiste —
  * so zeigt das Panel den Screensaver.
  */
+/**
+ * Baut die Plätze aus einem abgemessenen Layout (`layouts.js`).
+ *
+ * Die Datei trägt Pixel des jeweiligen Displays – nachprüfbar gegen den Dump. Hier werden sie in
+ * Prozent umgerechnet, und die Bestandteile eines Platzes zusätzlich **relativ zum Platz selbst**,
+ * damit die Zeichenschicht sie ohne weitere Rechnerei setzen kann. Die Pixelmaße bleiben als `px`
+ * erhalten: die Schriftgröße richtet sich nach der echten Höhe des Textfeldes.
+ */
+function ausLayout(layout, capacity) {
+  const [breite, hoehe] = layout.screen;
+  const proz = ([x, y, w, h]) => ({ x: (x / breite) * 100, y: (y / hoehe) * 100, w: (w / breite) * 100, h: (h / hoehe) * 100 });
+  const huelle = (boxen) => {
+    const x = Math.min(...boxen.map((b) => b.x));
+    const y = Math.min(...boxen.map((b) => b.y));
+    return {
+      x,
+      y,
+      w: Math.max(...boxen.map((b) => b.x + b.w)) - x,
+      h: Math.max(...boxen.map((b) => b.y + b.h)) - y,
+    };
+  };
+
+  const slots = [];
+  const chrome = layout.chrome || {};
+  if (chrome.title) slots.push({ kind: "title", ...proz(chrome.title) });
+  for (const taste of ["prev", "next"]) {
+    if (chrome[taste]) slots.push({ kind: "navbtn", taste, ...proz(chrome[taste]) });
+  }
+
+  layout.slots.slice(0, capacity).forEach((teile, index) => {
+    const boxen = Object.values(teile).map(proz);
+    if (!boxen.length) return;
+    const rahmen = huelle(boxen);
+    const parts = {};
+    for (const [rolle, kasten] of Object.entries(teile)) {
+      const box = proz(kasten);
+      parts[rolle] = {
+        // Relativ zum Platz, damit die Zeichenschicht nur noch Prozente setzt.
+        left: ((box.x - rahmen.x) / rahmen.w) * 100,
+        top: ((box.y - rahmen.y) / rahmen.h) * 100,
+        width: (box.w / rahmen.w) * 100,
+        height: (box.h / rahmen.h) * 100,
+        px: kasten.slice(2),
+      };
+    }
+    slots.push({ kind: "measured", index, ...rahmen, parts });
+  });
+
+  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true };
+}
+
 export function previewSlots({ cardType, capacity, filled = 0, model = "eu" } = {}) {
   const screen = screenFor(model);
   const anzahl = Math.max(0, Number(capacity) || 0);
+
+  const gemessen = LAYOUTS[cardType] && LAYOUTS[cardType][model];
+  if (gemessen) return ausLayout(gemessen, anzahl);
 
   if (cardType === "screensaver") {
     return { screen, chrome: false, slots: screensaverLayout(anzahl, filled, model) };

@@ -274,6 +274,15 @@ const STYLES = `
   }
   .screen .slot.tpl { opacity: .75; }
   .screen .slot .warn { color: #ffb300; flex: none; font-size: 12px; }
+  /* Abgemessene Plätze: jeder Bestandteil sitzt an seiner eigenen Stelle, kein Flex-Fluss. */
+  .screen .slot.measured { display: block; padding: 0; }
+  .screen .slot.measured .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .screen .slot.measured .val { max-width: none; color: #d7d9dd; }
+  .screen .title.measured { border: none; }
+  .screen .navbtn {
+    display: flex; align-items: center; justify-content: center;
+    color: #7f8590; font-size: 20px;
+  }
 
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.45);
@@ -1327,6 +1336,20 @@ class NsPanelUiConfigPanel extends PanelBase {
       return element;
     }
 
+    if (slot.kind === "title" || slot.kind === "navbtn") {
+      // Rahmen aus dem abgemessenen Layout: Kartentitel und die beiden Blättertasten.
+      element.className = slot.kind === "title" ? "title measured" : "navbtn";
+      element.textContent =
+        slot.kind === "title"
+          ? card.title === undefined
+            ? ""
+            : String(card.title)
+          : slot.taste === "prev"
+          ? "◀"
+          : "▶";
+      return element;
+    }
+
     if (slot.kind === "clock" || slot.kind === "date") {
       element.className = slot.kind;
       // Näherung: die echte Formatierung macht das Backend nach timeFormat/dateFormat (strftime).
@@ -1344,6 +1367,9 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     const entity = slot.index === "flat" ? card : entities[slot.index];
     const inhalt = previewContent(entity, states);
+
+    if (slot.parts) return this._measuredSlot(element, slot, inhalt, auftraege, marke);
+
     const art = { icon: "icon-only", value: "row", "flat-title": "row" }[slot.kind] || slot.kind;
     element.className = `slot ${art}${inhalt.frei ? " frei" : ""}`;
     if (inhalt.frei) {
@@ -1387,6 +1413,82 @@ class NsPanelUiConfigPanel extends PanelBase {
       warnung.textContent = "⚠";
       element.appendChild(warnung);
     }
+    return element;
+  }
+
+  /**
+   * Ein Platz, dessen Geometrie aus den HMI-Dumps stammt (`layouts.js`).
+   *
+   * Anders als bei den nachempfundenen Anordnungen sitzt hier **jeder Bestandteil an seiner
+   * eigenen Stelle** – Symbol, Name und Bedienfläche stehen im Dump als getrennte Komponenten.
+   * Die Schriftgröße richtet sich nach der echten Höhe des Textfeldes, gedeckelt auf einen Wert,
+   * der im Browser noch lesbar bleibt.
+   */
+  _measuredSlot(element, slot, inhalt, auftraege, marke) {
+    element.className = `slot measured${inhalt.frei ? " frei" : ""}`;
+    if (inhalt.frei) {
+      element.title =
+        inhalt.kind === "delete" ? "entity: delete – Platz bleibt frei" : "Platz nicht belegt";
+      return element;
+    }
+
+    const setze = (kind, teil) => {
+      kind.style.position = "absolute";
+      kind.style.left = `${teil.left}%`;
+      kind.style.top = `${teil.top}%`;
+      kind.style.width = `${teil.width}%`;
+      kind.style.height = `${teil.height}%`;
+      kind.style.boxSizing = "border-box";
+    };
+
+    const { icon, name, value } = slot.parts;
+    if (icon) {
+      const symbol = this._slotIcon(inhalt, auftraege, marke);
+      setze(symbol, icon);
+      // Symbolflächen sind im HMI meist deutlich größer als das Symbol selbst.
+      symbol.style.setProperty("--mdc-icon-size", `${Math.round(Math.min(icon.px[0], icon.px[1]) * 0.8)}px`);
+      symbol.style.display = "flex";
+      symbol.style.alignItems = "center";
+      symbol.style.justifyContent = "center";
+      element.appendChild(symbol);
+    }
+    if (name) {
+      const text = document.createElement("span");
+      text.className = "name";
+      text.textContent = inhalt.name;
+      setze(text, name);
+      text.style.fontSize = `${Math.min(Math.round(name.px[1] * 0.62), 20)}px`;
+      text.style.display = "flex";
+      text.style.alignItems = "center";
+      this._registerTemplate(inhalt, "name", auftraege, marke, (gerendert) => {
+        text.textContent = gerendert;
+      });
+      element.appendChild(text);
+    }
+    if (value) {
+      const wert = document.createElement("span");
+      wert.className = "val";
+      wert.textContent = inhalt.value;
+      setze(wert, value);
+      wert.style.fontSize = `${Math.min(Math.round(value.px[1] * 0.55), 18)}px`;
+      wert.style.display = "flex";
+      wert.style.alignItems = "center";
+      wert.style.justifyContent = "center";
+      this._registerTemplate(inhalt, "value", auftraege, marke, (gerendert) => {
+        wert.textContent = gerendert;
+      });
+      element.appendChild(wert);
+    } else if (!name && inhalt.value) {
+      // Karten wie cardMedia haben nur eine Symbolfläche – der Wert bekommt dann keinen Platz.
+      element.title = `${inhalt.name}${inhalt.value ? `: ${inhalt.value}` : ""}`;
+    }
+
+    if (inhalt.color) element.style.color = inhalt.color;
+    this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
+      const rgb = parseTemplateColor(text);
+      if (rgb) element.style.color = rgbToHex(rgb);
+    });
+    if (inhalt.zustandFehlt) element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
     return element;
   }
 
