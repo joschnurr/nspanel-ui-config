@@ -36,6 +36,25 @@ aussieht. Über jedem Kartenformular steht jetzt eine Nachbildung des Displays i
   Symbol, das nicht selbst gesetzt ist, leitet das Backend eigenständig ab – hier steht ersatzweise
   das aus Home Assistant, blasser dargestellt.
 
+### Live-Ansicht: was das Gerät wirklich anzeigt
+
+Ein Umschalter über der Displayfläche zeigt statt der Nachbildung das, was das Backend zuletzt ans
+Panel geschickt hat. Damit fallen die letzten Näherungen weg: Symbole, die das Backend selbst
+ableitet, und Werte in seiner Formatierung stehen dort im Original.
+
+- Die Integration abonniert das `panelSendTopic` über die MQTT-Integration von Home Assistant und
+  zerlegt `entityUpd~`/`weatherUpdate~` (`protocol.py`). **Sie veröffentlicht nie** – eine einzige
+  Nachricht auf diesem Topic würde das echte Panel umschalten.
+- Ohne MQTT in Home Assistant oder ohne `panelSendTopic` im Modell sagt die Ansicht genau das,
+  statt leer zu bleiben.
+- Symbole kommen als Zeichen des Nextion-Fonts; `icon-chars.js` (neu, aus demselben Werkzeug wie
+  `icon-names.js`) führt sie auf ihren MDI-Namen zurück. Farben werden aus dem 16-Bit-Format des
+  Displays zurückgerechnet – mit dem Verlust, den das Display selbst hat.
+- Gefunden beim ersten Mitschnitt an einer echten Instanz: welcher der beiden Screensaver läuft,
+  steht **nicht** in der Nachricht (beide füllen dieselben 6er-Blöcke). Maßgeblich ist der
+  vorherige `pageType` – ohne ihn hätte die Ansicht bei `screensaver2` zwei Drittel der Einträge
+  weggeworfen.
+
 ### Ein Befund aus dem HMI: das alternative Screensaver-Layout verdrängt einen Eintrag
 
 Beim Abmessen der echten Screensaver-Geometrie kam heraus, dass die 6. Entity mehr tut als

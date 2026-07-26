@@ -17,6 +17,9 @@
 // Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py). Sie steckt in
 // einem eigenen Modul, damit dieses hier lesbar bleibt – 6896 Namen sind ~110 kB.
 import { ICON_NAMES } from "./icon-names.js";
+// Zu jedem Namen das Zeichen, mit dem das Backend dieses Icon überträgt. Gebraucht für die
+// Live-Vorschau: über MQTT kommt nur das Zeichen an, <ha-icon> will den Namen.
+import { ICON_CHARS } from "./icon-chars.js";
 // Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
 // Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
 import { previewSlots } from "./preview-layouts.js";
@@ -226,6 +229,11 @@ const STYLES = `
   details.preview > summary::-webkit-details-marker { display: none; }
   details.preview > summary .caret { display: inline-block; width: 12px; opacity: .6; font-size: 11px; }
   details[open].preview > summary .caret { transform: rotate(90deg); }
+  .modeswitch { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .body button.modebtn { font-size: 12.5px; padding: 4px 10px; border-radius: 12px; }
+  .body button.modebtn.aktiv {
+    background: var(--primary-color, #03a9f4); color: #fff; border-color: transparent;
+  }
   .screenwrap { padding: 0 12px 12px; overflow-x: auto; }
   .screenwrap .note { font-size: 12px; color: var(--secondary-text-color, #727272); margin: 0 0 8px; line-height: 1.45; }
   .screen {
@@ -628,6 +636,48 @@ function previewContent(entity, states = {}) {
 }
 
 /**
+ * Der Icon-Name zu einem Zeichen aus dem Nextion-Font – der Rückweg des Backend-Mappings.
+ *
+ * Über MQTT kommt das Symbol als Zeichen an (`icon_mapping.py` bildet Name → Zeichen ab).
+ * `icon-chars.js` steht in derselben Reihenfolge wie `icon-names.js`, der Index verbindet beide.
+ */
+function iconNameFromChar(zeichen) {
+  if (typeof zeichen !== "string" || zeichen === "") return null;
+  const index = ICON_CHARS.indexOf(zeichen[0]);
+  return index === -1 ? null : ICON_NAMES[index];
+}
+
+/**
+ * Ein Eintrag, wie ihn das Gerät gerade anzeigt, in der Form, die die Zeichenschicht erwartet.
+ *
+ * Hier ist **nichts abgeleitet**: Symbol, Farbe, Name und Wert stehen so in der Nachricht, die ans
+ * Display ging. Deshalb entfallen alle Kennzeichen der Modell-Vorschau (`iconAbgeleitet`,
+ * `templates`, `zustandFehlt`) – es gibt nichts zu schätzen und nichts nachzurendern.
+ */
+function liveContent(eintrag) {
+  if (!isPlain(eintrag)) {
+    return { frei: true, kind: "empty", name: "", value: "", icon: null, templates: [] };
+  }
+  const name = iconNameFromChar(eintrag.iconChar);
+  return {
+    frei: Boolean(eintrag.leer),
+    kind: eintrag.type || "state",
+    id: eintrag.entity || "",
+    name: eintrag.name || "",
+    value: eintrag.value || "",
+    icon: name ? `mdi:${name}` : null,
+    iconAbgeleitet: false,
+    iconSonderform: false,
+    // Ein Zeichen, das nicht im mitgelieferten Mapping steht, kommt aus einer neueren
+    // Backend-Version. Das Display zeigt es trotzdem – nur wir kennen den Namen nicht.
+    iconUnbekannt: Boolean(eintrag.iconChar) && !name,
+    color: Array.isArray(eintrag.rgb) ? rgbToHex(eintrag.rgb) : null,
+    zustandFehlt: false,
+    templates: [],
+  };
+}
+
+/**
  * Bündelt mehrere Templates in einen einzigen Aufruf von `/api/template`.
  *
  * Eine Karte kann leicht zwei Dutzend Templates tragen (Name, Wert, Icon und Farbe je Eintrag) –
@@ -734,6 +784,10 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._previewOpen = true;
     this._previewToken = 0;
     this._previewTimer = null;
+    // "model" = aus der bearbeiteten Konfiguration, "live" = was das Gerät gerade anzeigt.
+    this._previewMode = "model";
+    this._livePollTimer = null;
+    this._liveTitle = "";
   }
 
   // HA setzt `hass` bei *jedem* State-Update. Hier darf deshalb nichts neu gerendert werden –
@@ -1091,6 +1145,10 @@ class NsPanelUiConfigPanel extends PanelBase {
       ${typeNote ? `<p class="typenote">${esc(typeNote)}</p>` : ""}
       <details class="preview" id="preview"${this._previewOpen ? " open" : ""}>
         <summary><span class="caret">▶</span> Vorschau – wie das Display die Einträge anordnet</summary>
+        <div class="modeswitch">
+          <button class="modebtn${this._previewMode === "live" ? "" : " aktiv"}" data-mode="model">aus der Konfiguration</button>
+          <button class="modebtn${this._previewMode === "live" ? " aktiv" : ""}" data-mode="live">vom Gerät (live)</button>
+        </div>
         <div class="screenwrap" id="preview-host"></div>
       </details>
       <fieldset><legend>Karte</legend><div id="card-fields"></div>
@@ -1108,6 +1166,14 @@ class NsPanelUiConfigPanel extends PanelBase {
     vorschau.addEventListener("toggle", () => {
       this._previewOpen = vorschau.open;
       if (vorschau.open) this._renderPreview();
+      else this._stopLivePolling();
+    });
+    main.querySelectorAll(".modebtn").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._previewMode = button.dataset.mode;
+        main.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("aktiv", b === button));
+        this._renderPreview();
+      });
     });
     if (this._previewOpen) this._renderPreview();
 
@@ -1203,6 +1269,8 @@ class NsPanelUiConfigPanel extends PanelBase {
   _renderPreview() {
     const host = this._$("preview-host");
     if (!host || !this._model || !this._schema) return;
+    if (this._previewMode === "live") return this._renderLivePreview(host);
+    this._stopLivePolling();
     const card = this._selected();
     if (!isPlain(card)) {
       host.innerHTML = "";
@@ -1239,8 +1307,12 @@ class NsPanelUiConfigPanel extends PanelBase {
       screen.appendChild(nav);
     }
 
+    // Die Zeichenschicht bekommt den Inhalt als Funktion – dieselbe Fläche zeigt so wahlweise das
+    // Modell oder das, was das Gerät gerade anzeigt (siehe _renderLivePreview).
+    const inhaltFuer = (slot) =>
+      previewContent(slot.index === "flat" ? card : entities[slot.index], states);
     layout.slots.forEach((slot) => {
-      const element = this._slotElement(slot, card, entities, states, auftraege, marke);
+      const element = this._slotElement(slot, card, inhaltFuer, auftraege, marke);
       if (element) screen.appendChild(element);
     });
 
@@ -1261,6 +1333,137 @@ class NsPanelUiConfigPanel extends PanelBase {
     host.appendChild(screen);
 
     if (auftraege.length) this._resolvePreviewTemplates(auftraege, marke);
+  }
+
+  /** Der Titel, der auf der Displayfläche steht – im Live-Modus der des Geräts. */
+  _previewTitle(card) {
+    if (this._previewMode === "live") return this._liveTitle || "";
+    return isPlain(card) && card.title !== undefined ? String(card.title) : "";
+  }
+
+  /**
+   * Die Vorschau aus dem Mitschnitt des Geräts.
+   *
+   * **Was hier anders ist als in der Modell-Vorschau:** nichts wird abgeleitet. Symbol, Farbe, Name
+   * und Wert stehen genau so in der Nachricht, die ans Display ging – auch die Symbole, die das
+   * Backend selbst aus Domain und Zustand wählt, und die Formatierung der Werte. Dafür zeigt sie
+   * **die Karte, die das Panel gerade anzeigt**, nicht die, die man gerade bearbeitet.
+   */
+  async _renderLivePreview(host) {
+    let antwort;
+    try {
+      antwort = await this._hass.callApi("GET", "nspanel_ui_config/live");
+    } catch (err) {
+      this._stopLivePolling();
+      host.innerHTML = `<p class="note">Live-Ansicht nicht abrufbar: ${esc(this._errText(err))}</p>`;
+      return;
+    }
+    this._startLivePolling();
+
+    const nachricht = antwort && antwort.message;
+    if (!nachricht) {
+      const grund = (antwort && antwort.reason) || "Noch nichts empfangen.";
+      const topic = antwort && antwort.topic;
+      host.innerHTML = `<p class="note">${esc(grund)}${
+        topic ? `<br>Topic: <code>${esc(topic)}</code>` : ""
+      }</p>`;
+      return;
+    }
+
+    const model = (this._model.global || {}).model || "eu";
+    const eintraege = nachricht.entities || [];
+    const info = capacityInfo(this._schema, nachricht.cardType, eintraege.length, model);
+    const layout = previewSlots({
+      cardType: info.shownType,
+      capacity: info.limit === null ? eintraege.length : info.limit,
+      filled: eintraege.length,
+      model,
+    });
+
+    this._liveTitle = nachricht.title || "";
+    const marke = (this._previewToken = (this._previewToken || 0) + 1);
+
+    const screen = document.createElement("div");
+    screen.className = "screen";
+    screen.style.width = `${layout.screen.w}px`;
+    screen.style.height = `${layout.screen.h}px`;
+
+    if (layout.chrome) {
+      screen.appendChild(this._chromeSlot("title", 0, 0, 100, 11, this._liveTitle));
+      const nav = this._chromeSlot("nav", 0, 89, 100, 11, "");
+      nav.innerHTML = `<span>◀</span><span>⌂</span><span>▶</span>`;
+      screen.appendChild(nav);
+    }
+
+    // Kein Template-Rendering nötig: was hier ankommt, ist bereits gerendert.
+    const inhaltFuer = (slot) => liveContent(eintraege[slot.index]);
+    layout.slots.forEach((slot) => {
+      const element = this._slotElement(slot, {}, inhaltFuer, [], marke);
+      if (element) screen.appendChild(element);
+    });
+
+    host.innerHTML = "";
+    host.appendChild(this._liveNote(antwort, nachricht, eintraege.length));
+    host.appendChild(screen);
+  }
+
+  /** Erklärt, woher das Bild kommt – und worauf dabei zu achten ist. */
+  _liveNote(antwort, nachricht, anzahl) {
+    const hinweis = document.createElement("p");
+    hinweis.className = "note";
+    const alter = antwort.ageSeconds;
+    const wann =
+      alter === null || alter === undefined
+        ? ""
+        : alter < 60
+        ? `vor ${Math.round(alter)} s`
+        : `vor ${Math.round(alter / 60)} min`;
+    const frisch = antwort.fresh === false ? ", seither nichts Neues" : "";
+
+    const teile = [
+      `<b>Vom Gerät empfangen</b>${wann ? ` (${wann}${frisch})` : ""}: ` +
+        `${esc(nachricht.cardType || "unbekannte Karte")} mit ${anzahl} ${
+          anzahl === 1 ? "Eintrag" : "Einträgen"
+        }.`,
+    ];
+    if (!nachricht.strukturiert) {
+      teile.push(
+        "Diese Karte baut das Backend aus eigenen Feldern statt aus Einträgen – die Fläche bleibt " +
+          "deshalb leer."
+      );
+    }
+    // Der wichtigste Hinweis: das Gerät zeigt seine Karte, nicht die hier bearbeitete.
+    const bearbeitet = this._selected();
+    if (isPlain(bearbeitet) && bearbeitet.type && nachricht.cardType !== bearbeitet.type) {
+      teile.push(
+        `Am Panel läuft gerade <code>${esc(nachricht.cardType || "?")}</code>, bearbeitet wird ` +
+          `<code>${esc(bearbeitet.type)}</code> – zum Vergleichen die Karte am Gerät aufrufen.`
+      );
+    }
+    teile.push(
+      "Hier ist nichts geschätzt: Symbole, Farben und Werte kommen so, wie sie ans Display gingen."
+    );
+    hinweis.innerHTML = teile.join(" ");
+    return hinweis;
+  }
+
+  /** Holt den Live-Stand regelmäßig nach, solange die Ansicht offen ist. */
+  _startLivePolling() {
+    if (this._livePollTimer) return;
+    this._livePollTimer = setInterval(() => {
+      if (this._previewMode !== "live" || !this._previewOpen) {
+        this._stopLivePolling();
+        return;
+      }
+      const host = this._$("preview-host");
+      if (host) this._renderLivePreview(host);
+    }, 3000);
+  }
+
+  _stopLivePolling() {
+    if (!this._livePollTimer) return;
+    clearInterval(this._livePollTimer);
+    this._livePollTimer = null;
   }
 
   /** Erklärt, was die Vorschau zeigt – und was sie nicht leisten kann. */
@@ -1300,8 +1503,14 @@ class NsPanelUiConfigPanel extends PanelBase {
     return element;
   }
 
-  /** Ein Platz der Vorschau – entweder eine Entity oder eine Fläche, die das Backend selbst füllt. */
-  _slotElement(slot, card, entities, states, auftraege, marke) {
+  /**
+   * Ein Platz der Vorschau – entweder ein Eintrag oder eine Fläche, die das Backend selbst füllt.
+   *
+   * `inhaltFuer(slot)` liefert den Inhalt: aus dem bearbeiteten Modell (`previewContent`) oder aus
+   * dem Mitschnitt des Geräts (`liveContent`). Beide liefern dieselbe Form, deshalb kommt die
+   * Zeichenschicht mit einer einzigen Fassung aus.
+   */
+  _slotElement(slot, card, inhaltFuer, auftraege, marke) {
     const element = document.createElement("div");
     Object.assign(element.style, {
       position: "absolute",
@@ -1329,7 +1538,7 @@ class NsPanelUiConfigPanel extends PanelBase {
         typeof platzhalter === "string" ? platzhalter : platzhalter[slot.widget] || "";
       if (slot.kind === "flat-main") {
         // Auf diesen Karten trägt die Karte selbst die Entity – ihr Name gehört sichtbar dazu.
-        const inhalt = previewContent(card, states);
+        const inhalt = inhaltFuer(slot);
         element.textContent = `${element.textContent}${inhalt.name ? `\n${inhalt.name}` : ""}`;
         element.style.whiteSpace = "pre-line";
       }
@@ -1341,9 +1550,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       element.className = slot.kind === "title" ? "title measured" : "navbtn";
       element.textContent =
         slot.kind === "title"
-          ? card.title === undefined
-            ? ""
-            : String(card.title)
+          ? this._previewTitle(card)
           : slot.taste === "prev"
           ? "◀"
           : "▶";
@@ -1365,8 +1572,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       return element;
     }
 
-    const entity = slot.index === "flat" ? card : entities[slot.index];
-    const inhalt = previewContent(entity, states);
+    const inhalt = inhaltFuer(slot);
 
     if (slot.parts) return this._measuredSlot(element, slot, inhalt, auftraege, marke);
 
@@ -2343,6 +2549,8 @@ export {
   previewColor,
   previewContent,
   iconFromRendered,
+  iconNameFromChar,
+  liveContent,
   joinTemplates,
   splitTemplateResult,
 };

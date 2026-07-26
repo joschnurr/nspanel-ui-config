@@ -37,8 +37,13 @@ Assistant wählen. Jedes Feld ist beschriftet mit dem, was es bewirkt, und den W
 annehmen darf.
 
 **Vorschau** – über jedem Formular eine Nachbildung der Displayfläche in Originalgröße: die
-Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Man sieht, wie die
-Karte wirkt, bevor sie auf dem Panel landet. → [docs/funktionen.md](docs/funktionen.md#vorschau)
+Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Die Geometrie ist
+aus der Display-Firmware abgemessen, nicht geschätzt. Man sieht, wie die Karte wirkt, bevor sie auf
+dem Panel landet. → [docs/funktionen.md](docs/funktionen.md#vorschau)
+
+**Live-Ansicht** – wer ein laufendes NSPanel hat, schaltet die Vorschau auf *vom Gerät*: dann zeigt
+sie, was das Backend zuletzt ans Display geschickt hat. Rein lesend über MQTT, nichts wird
+veröffentlicht. → [docs/funktionen.md](docs/funktionen.md#live-ansicht-was-das-gerät-wirklich-anzeigt)
 
 **Anzeigekapazität** – „5 von 4 Plätzen": der Editor weiß, wie viele Einträge jeder Kartentyp auf
 deinem Panel-Modell wirklich zeigt, und markiert überzählige.

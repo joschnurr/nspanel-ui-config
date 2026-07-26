@@ -33,6 +33,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
+from . import live
 from .http_api import async_register_http_api
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,6 +78,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Authentifizierte HTTP-API (Modell laden/speichern, Generieren).
     async_register_http_api(hass)
+
+    # Mitschnitt dessen, was das Backend ans Display schickt — nur lesend und nur, wenn Home
+    # Assistant MQTT hat und im Modell ein Sende-Topic steht. Schlägt es fehl, ist das kein Grund,
+    # die Integration nicht zu laden: der Editor funktioniert auch ohne Live-Bild.
+    unsub_live = await live.async_start(hass, domain_data[entry.entry_id])
+    if unsub_live is not None:
+        domain_data[entry.entry_id]["live_unsub"] = unsub_live
+        entry.async_on_unload(unsub_live)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_options))
     _LOGGER.info("NSPanel UI Config eingerichtet (Panel unter /%s)", PANEL_URL_PATH)

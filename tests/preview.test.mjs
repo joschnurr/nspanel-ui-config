@@ -15,11 +15,20 @@ const layouts = await import(
 );
 
 const { previewSlots, entitySlots, SCREEN } = layouts;
+const icons = await import(
+  "../custom_components/nspanel_ui_config/www/panel/icon-names.js"
+);
+const iconChars = await import(
+  "../custom_components/nspanel_ui_config/www/panel/icon-chars.js"
+);
+
 const {
   entityKind,
   previewColor,
   previewContent,
   iconFromRendered,
+  iconNameFromChar,
+  liveContent,
   joinTemplates,
   splitTemplateResult,
 } = panel;
@@ -310,4 +319,56 @@ test("stimmt die Teilezahl nicht, wird null gemeldet statt falsch zugeordnet", (
   const kaputt = joinTemplates(["a", "b", "c"]);
   assert.equal(splitTemplateResult(kaputt, 2), null);
   assert.equal(splitTemplateResult("", 2), null);
+});
+
+// --- Live-Ansicht (Mitschnitt vom Gerät) -------------------------------------------------------
+
+test("das Icon-Zeichen des Backends findet zu seinem Namen zurück", () => {
+  // Über MQTT kommt nicht "lightbulb", sondern das Zeichen aus dem Nextion-Font.
+  const index = icons.ICON_NAMES.indexOf("lightbulb");
+  const zeichen = iconChars.ICON_CHARS[index];
+  assert.equal(iconNameFromChar(zeichen), "lightbulb");
+  assert.equal(iconNameFromChar(""), null);
+  assert.equal(iconNameFromChar(undefined), null);
+  // Ein Zeichen außerhalb des Mappings (neuere Backend-Version) ergibt keinen Namen.
+  assert.equal(iconNameFromChar("\ufb00"), null);
+});
+
+test("beide Icon-Listen bleiben in Reihenfolge und Länge gekoppelt", () => {
+  // Sie werden aus demselben Lauf erzeugt; driften sie auseinander, zeigt die Live-Ansicht
+  // durchgehend falsche Symbole – und zwar plausibel aussehende.
+  assert.equal(iconChars.ICON_CHARS.length, icons.ICON_NAMES.length);
+});
+
+test("liveContent übernimmt, was das Gerät bekommen hat – ohne etwas abzuleiten", () => {
+  const index = icons.ICON_NAMES.indexOf("thermometer");
+  const inhalt = liveContent({
+    type: "text",
+    entity: "sensor.puffer",
+    iconChar: iconChars.ICON_CHARS[index],
+    rgb: [16, 142, 255],
+    name: "Puffer oben",
+    value: "48.2 °C",
+    leer: false,
+  });
+  assert.equal(inhalt.name, "Puffer oben");
+  assert.equal(inhalt.value, "48.2 °C");
+  assert.equal(inhalt.icon, "mdi:thermometer");
+  assert.equal(inhalt.color, "#108eff");
+  // Nichts zu schätzen, nichts nachzurendern.
+  assert.equal(inhalt.iconAbgeleitet, false);
+  assert.deepEqual(inhalt.templates, []);
+  assert.equal(inhalt.zustandFehlt, false);
+});
+
+test("gelöschte und fehlende Einträge bleiben auch live freie Plätze", () => {
+  assert.equal(liveContent({ type: "delete", leer: true }).frei, true);
+  assert.equal(liveContent(undefined).frei, true);
+  assert.equal(liveContent({ type: "light", leer: false }).frei, false);
+});
+
+test("ein Symbol aus einer neueren Backend-Version wird als unbekannt gekennzeichnet", () => {
+  const inhalt = liveContent({ type: "light", iconChar: "\ufb00", name: "x", value: "" });
+  assert.equal(inhalt.icon, null);
+  assert.equal(inhalt.iconUnbekannt, true);
 });

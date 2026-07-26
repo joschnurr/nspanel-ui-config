@@ -4,6 +4,7 @@
   "codeowners": ["@joschnurr"],
   "config_flow": true,
   "dependencies": ["http", "frontend"],
+  "after_dependencies": ["mqtt"],
   "documentation": "https://github.com/joschnurr/nspanel-ui-config",
   "integration_type": "service",
   "iot_class": "calculated",

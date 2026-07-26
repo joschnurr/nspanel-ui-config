@@ -76,6 +76,38 @@ Beim Screensaver zeigt die Vorschau zusätzlich, was sonst niemand sieht: im alt
 der 6. Entity, quer) hat die 5. Entity keinen Platz mehr und wird gar nicht erst gezeichnet. Siehe
 [kapazitaet.md](kapazitaet.md).
 
+### Live-Ansicht: was das Gerät wirklich anzeigt
+
+Über der Displayfläche steht ein Umschalter: **aus der Konfiguration** (das oben Beschriebene) oder
+**vom Gerät (live)**. Im Live-Modus zeigt dieselbe Fläche das, was das Backend zuletzt ans Display
+geschickt hat — und da ist **nichts mehr geschätzt**: Symbole, die das Backend selbst aus Domain und
+Zustand ableitet, Werte in seiner Formatierung, Farben so, wie das Display sie darstellt.
+
+**Wie das geht:** das Backend schickt seine Zeilen als MQTT-Nachricht ans Panel
+(`entityUpd~…`/`weatherUpdate~…` auf dem `panelSendTopic`). Die Integration abonniert dieses Topic
+und zerlegt die Nachrichten (`protocol.py`). Vorher schickt das Backend `pageType~<karte>` — erst
+damit ist der Aufbau der folgenden Nachricht bekannt, denn sie selbst sagt nicht, zu welcher Karte
+sie gehört.
+
+> **Ausschließlich lesend.** Die Integration abonniert, sie veröffentlicht nie. Das ist Absicht:
+> eine einzige Nachricht auf dem Sende-Topic würde das echte Panel umschalten.
+
+Voraussetzungen: die MQTT-Integration ist in Home Assistant eingerichtet, und im Modell steht ein
+`panelSendTopic`. Fehlt eines von beidem, sagt die Live-Ansicht genau das — statt leer zu bleiben.
+
+**Zwei Dinge, die man wissen muss:**
+
+- Das Gerät zeigt **seine** Karte, nicht die gerade bearbeitete. Weichen sie ab, weist die Ansicht
+  darauf hin; zum Vergleichen ruft man die Karte am Panel auf.
+- Farben kommen als 16-Bit-Wert des Displays zurück (5/6/5 Bit). Zurückgerechnet ergibt das leichte
+  Abweichungen zum konfigurierten RGB — das ist kein Fehler, sondern genau die Farbe, die das
+  Display darstellt.
+
+Symbole überträgt das Protokoll als Zeichen des Nextion-Fonts. `www/panel/icon-chars.js` (erzeugt
+von `tools/extract_icon_names.py`, in derselben Reihenfolge wie `icon-names.js`) führt sie zurück
+auf ihren MDI-Namen. Ein Zeichen aus einer neueren Backend-Version bleibt namenlos und wird als
+solches gekennzeichnet.
+
 ## Template-Editor
 
 Felder, die das Backend als Jinja rendert, haben im Formular einen Umschalter **„als Template

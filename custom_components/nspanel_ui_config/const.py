@@ -68,3 +68,5 @@ API_IMPORT: Final = "/api/nspanel_ui_config/import"
 API_SCHEMA: Final = "/api/nspanel_ui_config/schema"
 API_BACKUPS: Final = "/api/nspanel_ui_config/backups"
 API_BACKUP_RESTORE: Final = "/api/nspanel_ui_config/backups/restore"
+# Was das Backend zuletzt ans Display geschickt hat (Mitschnitt über MQTT, siehe live.py).
+API_LIVE: Final = "/api/nspanel_ui_config/live"

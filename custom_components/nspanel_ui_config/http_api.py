@@ -8,6 +8,7 @@ Endpunkte (alle nur für Admins):
   POST /api/nspanel_ui_config/generate  → YAML erzeugen, schreiben und AppDaemon neu laden
   GET  /api/nspanel_ui_config/backups   → vorhandene Sicherungen der Ausgabedatei
   POST /api/nspanel_ui_config/backups/restore → eine Sicherung zurückspielen
+  GET  /api/nspanel_ui_config/live      → was das Backend zuletzt ans Display geschickt hat
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
+from . import live
 from .backup import list_backups, restore_backup
 from .const import (
     API_BACKUP_RESTORE,
@@ -28,6 +30,7 @@ from .const import (
     API_CONFIG,
     API_GENERATE,
     API_IMPORT,
+    API_LIVE,
     API_SCHEMA,
     CONF_BACKUP_COUNT,
     CONF_IMPORT_YAML_PATH,
@@ -52,6 +55,7 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelGenerateView(hass))
     hass.http.register_view(NsPanelBackupsView(hass))
     hass.http.register_view(NsPanelBackupRestoreView(hass))
+    hass.http.register_view(NsPanelLiveView(hass))
 
 
 def _backup_count(options: dict[str, Any]) -> int:
@@ -147,6 +151,9 @@ class NsPanelConfigView(_NsPanelView):
             return self.json_message("Modell muss ein Objekt sein", HTTPStatus.BAD_REQUEST)
         data["model"] = model
         await data["store"].async_save(model)
+        # Mit dem Modell kann sich das Sende-Topic ändern – ein Abo auf dem alten wäre still
+        # wirkungslos, deshalb hier erneuern.
+        await live.async_restart(self.hass, data)
         return self.json({"ok": True, "findings": validate_model(model)})
 
 
@@ -345,3 +352,38 @@ class NsPanelBackupRestoreView(_NsPanelView):
 
         _LOGGER.info("Sicherung '%s' nach %s zurückgespielt", payload["name"], output_path)
         return self.json({"ok": True, **result})
+
+
+class NsPanelLiveView(_NsPanelView):
+    """Was das Backend zuletzt ans Display geschickt hat.
+
+    Die Antwort sagt auch, *warum* nichts da ist (kein MQTT in HA, kein Sende-Topic im Modell,
+    noch nichts gehört) — sonst steht der Nutzer vor einer leeren Vorschau ohne Erklärung.
+    """
+
+    url = API_LIVE
+    name = "api:nspanel_ui_config:live"
+
+    async def get(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        zustand = data.get("live")
+        if zustand is None:
+            return self.json(
+                {
+                    "available": False,
+                    "reason": data.get("live_reason", "Mitschnitt nicht aktiv."),
+                    "topic": live.send_topic_of(data.get("model")),
+                }
+            )
+        antwort = zustand.as_dict()
+        antwort["available"] = True
+        if antwort.get("message") is None:
+            # Abonniert, aber noch nichts gehört: das Panel sendet erst, wenn sich etwas ändert
+            # oder man eine Karte aufruft.
+            antwort["reason"] = (
+                "Abonniert, aber noch keine Anzeige-Nachricht empfangen. Am Panel eine Karte "
+                "aufrufen oder auf die nächste Aktualisierung warten."
+            )
+        return self.json(antwort)
