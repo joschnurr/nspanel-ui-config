@@ -1062,9 +1062,15 @@ class NsPanelUiConfigPanel extends PanelBase {
       <h2>Globale Einstellungen</h2>
       <p class="hint">Gelten für das gesamte Panel. Leere Felder werden nicht in die YAML geschrieben –
         das Backend nutzt dann seinen Standardwert (in Klammern).</p>
+      ${this._previewBlockHtml()}
       <fieldset><legend>Panel</legend><div id="global-known"></div></fieldset>
       ${rest.length ? `<fieldset><legend>Weitere Felder aus der Quelldatei</legend><div id="global-rest"></div></fieldset>` : ""}
     `;
+
+    // Auch hier eine Vorschau, und zwar aus zwei Gründen: dies ist die Startseite des Editors –
+    // ohne sie fände man die Vorschau erst, wenn man links etwas auswählt –, und `model`
+    // (eu/us-l/us-p) ändert unmittelbar Größe und Aufteilung des Displays.
+    this._bindPreview(main);
 
     const host = main.querySelector("#global-known");
     known.forEach((name) => host.appendChild(this._field(settings, name, { showDefault: true })));
@@ -1143,14 +1149,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       <h2>${esc(title)}</h2>
       <p class="hint">${esc(options.hint || "")}</p>
       ${typeNote ? `<p class="typenote">${esc(typeNote)}</p>` : ""}
-      <details class="preview" id="preview"${this._previewOpen ? " open" : ""}>
-        <summary><span class="caret">▶</span> Vorschau – wie das Display die Einträge anordnet</summary>
-        <div class="modeswitch">
-          <button class="modebtn${this._previewMode === "live" ? "" : " aktiv"}" data-mode="model">aus der Konfiguration</button>
-          <button class="modebtn${this._previewMode === "live" ? " aktiv" : ""}" data-mode="live">vom Gerät (live)</button>
-        </div>
-        <div class="screenwrap" id="preview-host"></div>
-      </details>
+      ${this._previewBlockHtml()}
       <fieldset><legend>Karte</legend><div id="card-fields"></div>
         ${options.removable ? `<button class="danger" id="remove-card">Entfernen</button>` : ""}
       </fieldset>
@@ -1162,20 +1161,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       <div id="extra-host"></div>
     `;
 
-    const vorschau = main.querySelector("#preview");
-    vorschau.addEventListener("toggle", () => {
-      this._previewOpen = vorschau.open;
-      if (vorschau.open) this._renderPreview();
-      else this._stopLivePolling();
-    });
-    main.querySelectorAll(".modebtn").forEach((button) => {
-      button.addEventListener("click", () => {
-        this._previewMode = button.dataset.mode;
-        main.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("aktiv", b === button));
-        this._renderPreview();
-      });
-    });
-    if (this._previewOpen) this._renderPreview();
+    this._bindPreview(main);
 
     const fieldHost = main.querySelector("#card-fields");
     cardFields.forEach((name) => {
@@ -1259,6 +1245,54 @@ class NsPanelUiConfigPanel extends PanelBase {
 
   // --- Vorschau ------------------------------------------------------------------------------
 
+  /** Der aufklappbare Vorschau-Block – identisch auf jeder Seite des Editors. */
+  _previewBlockHtml() {
+    return `
+      <details class="preview" id="preview"${this._previewOpen ? " open" : ""}>
+        <summary><span class="caret">▶</span> Vorschau – wie das Display die Einträge anordnet</summary>
+        <div class="modeswitch">
+          <button class="modebtn${this._previewMode === "live" ? "" : " aktiv"}" data-mode="model">aus der Konfiguration</button>
+          <button class="modebtn${this._previewMode === "live" ? " aktiv" : ""}" data-mode="live">vom Gerät (live)</button>
+        </div>
+        <div class="screenwrap" id="preview-host"></div>
+      </details>`;
+  }
+
+  /** Hängt die Bedienung an den Vorschau-Block und zeichnet ihn, wenn er offen ist. */
+  _bindPreview(main) {
+    const vorschau = main.querySelector("#preview");
+    if (!vorschau) return;
+    vorschau.addEventListener("toggle", () => {
+      this._previewOpen = vorschau.open;
+      if (vorschau.open) this._renderPreview();
+      else this._stopLivePolling();
+    });
+    main.querySelectorAll(".modebtn").forEach((button) => {
+      button.addEventListener("click", () => {
+        this._previewMode = button.dataset.mode;
+        main.querySelectorAll(".modebtn").forEach((b) => b.classList.toggle("aktiv", b === button));
+        this._renderPreview();
+      });
+    });
+    if (this._previewOpen) this._renderPreview();
+  }
+
+  /**
+   * Welche Karte die Vorschau zeigt.
+   *
+   * Auf den globalen Einstellungen gibt es keine ausgewählte Karte – dort steht stellvertretend der
+   * Screensaver, sonst die erste Karte. `stellvertretend` sagt der Beschriftung, dass die gezeigte
+   * Karte nicht die bearbeitete ist.
+   */
+  _previewCard() {
+    if (this._selection.kind !== "global") return { card: this._selected() };
+    const screensaver = this._model.screensaver;
+    if (isPlain(screensaver)) return { card: screensaver, stellvertretend: "Screensaver" };
+    const erste = (this._model.cards || []).find((eintrag) => isPlain(eintrag));
+    if (erste) return { card: erste, stellvertretend: `Karte „${cardLabel(erste)}“` };
+    return { card: null };
+  }
+
   /**
    * Zeichnet die Displayfläche der ausgewählten Karte neu.
    *
@@ -1271,9 +1305,10 @@ class NsPanelUiConfigPanel extends PanelBase {
     if (!host || !this._model || !this._schema) return;
     if (this._previewMode === "live") return this._renderLivePreview(host);
     this._stopLivePolling();
-    const card = this._selected();
+    const { card, stellvertretend } = this._previewCard();
     if (!isPlain(card)) {
-      host.innerHTML = "";
+      host.innerHTML = `<p class="note">Noch keine Karte, die sich zeigen ließe – zuerst eine
+        anlegen oder eine bestehende <code>apps.yaml</code> importieren.</p>`;
       return;
     }
 
@@ -1328,7 +1363,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     for (let i = 0; i < Math.min(entities.length, info.limit === null ? 0 : info.limit); i++) {
       if (!belegt.has(i)) verdeckt.push(i + 1);
     }
-    hinweis.innerHTML = this._previewNote(info, model, entities.length, verdeckt);
+    hinweis.innerHTML = this._previewNote(info, model, entities.length, verdeckt, stellvertretend);
     host.appendChild(hinweis);
     host.appendChild(screen);
 
@@ -1467,8 +1502,12 @@ class NsPanelUiConfigPanel extends PanelBase {
   }
 
   /** Erklärt, was die Vorschau zeigt – und was sie nicht leisten kann. */
-  _previewNote(info, model, entityCount, verdeckt = []) {
-    const teile = [`Modell <code>${esc(model)}</code>, ${esc(info.shownType)}`];
+  _previewNote(info, model, entityCount, verdeckt = [], stellvertretend = null) {
+    const teile = [
+      stellvertretend
+        ? `Stellvertretend: ${esc(stellvertretend)} – Modell <code>${esc(model)}</code>`
+        : `Modell <code>${esc(model)}</code>, ${esc(info.shownType)}`,
+    ];
     if (info.switched) teile.push("vom Backend automatisch umgestellt");
     const kopf = teile.join(" – ");
     const ueber =

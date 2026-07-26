@@ -3,6 +3,22 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.10.1 – 2026-07-26
+
+### Die Vorschau war auf der Startseite nicht zu finden
+
+Der Editor öffnet mit den **globalen Einstellungen** – und genau dort gab es keine Vorschau. Wer das
+Panel aufrief, sah sie erst, wenn er links eine Karte auswählte, und hielt sie darum leicht für
+nicht vorhanden.
+
+- Die globale Seite zeigt jetzt ebenfalls eine Vorschau, stellvertretend den Screensaver (sonst die
+  erste Karte), erkennbar beschriftet. Das passt auch inhaltlich: `model` (eu/us-l/us-p) steht dort
+  und ändert Größe und Aufteilung des Displays unmittelbar.
+- Ist noch gar nichts konfiguriert, steht dort der Hinweis, zuerst eine Karte anzulegen oder eine
+  `apps.yaml` zu importieren – statt einer leeren Fläche.
+- Vorschau-Block und seine Bedienung sind jetzt an einer Stelle definiert (`_previewBlockHtml` /
+  `_bindPreview`), statt in jedem Formular wiederholt zu werden.
+
 ## 0.10.0 – 2026-07-26
 
 ### Vorschau der Displayfläche
