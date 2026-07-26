@@ -20,6 +20,12 @@ Die zwei Wege haben unterschiedliche Voraussetzungen, deshalb bleibt der Modus k
     Startet den AppDaemon-Container über die Docker-API neu. Braucht keinen zusätzlichen Mount,
     dafür ``/var/run/docker.sock`` im HA-Container — und ist grob: alle AppDaemon-Apps starten neu.
 
+``restart_addon``
+    Das Gegenstück für Home Assistant OS und Supervised, wo AppDaemon als **Add-on** läuft und es
+    weder einen Docker-Socket noch einen selbst gelegten Mount gibt: der Supervisor startet das
+    Add-on über seine eigene API neu. Ebenfalls grob, aber ohne jede Zusatzeinrichtung — der
+    Zugangstoken steht dort ohnehin in der Umgebung des HA-Containers.
+
 Der Inhalt der angetickten Datei wird nie verändert (``os.utime``), und ein fehlgeschlagener Reload
 lässt die bereits geschriebene YAML unangetastet — der Aufrufer meldet ihn als Warnung, nicht als
 Fehlschlag des Generierens.
@@ -34,14 +40,19 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from .const import (
+    CONF_RELOAD_ADDON,
     CONF_RELOAD_CONTAINER,
     CONF_RELOAD_MODE,
     CONF_RELOAD_TOUCH_PATH,
+    DEFAULT_RELOAD_ADDON,
     DEFAULT_RELOAD_CONTAINER,
     DOCKER_SOCKET,
+    RELOAD_MODE_ADDON,
     RELOAD_MODE_NONE,
     RELOAD_MODE_RESTART,
     RELOAD_MODE_TOUCH,
+    SUPERVISOR_TOKEN_ENV,
+    SUPERVISOR_URL,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung, hält Home Assistant aus den Tests
@@ -51,6 +62,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Docker gibt dem Neustart eines Containers Zeit; darunter läuft ein SIGTERM + Wartezeit.
 _DOCKER_TIMEOUT = 60
+# Der Supervisor stoppt und startet das Add-on; das dauert erfahrungsgemäß länger als ein
+# nackter Container-Neustart.
+_SUPERVISOR_TIMEOUT = 120
 
 
 class ReloadError(Exception):
@@ -103,6 +117,47 @@ async def async_restart_container(
         raise ReloadError(f"Docker-Aufruf fehlgeschlagen: {err}") from err
 
 
+async def async_restart_addon(slug: str, timeout: int = _SUPERVISOR_TIMEOUT) -> None:
+    """Starte ein Add-on über die Supervisor-API neu (Home Assistant OS / Supervised).
+
+    Der Token steht bei diesen Installationsarten als ``SUPERVISOR_TOKEN`` in der Umgebung des
+    HA-Containers; fehlt er, läuft Home Assistant nicht unter einem Supervisor und der Modus ist
+    schlicht der falsche.
+    """
+    token = os.environ.get(SUPERVISOR_TOKEN_ENV)
+    if not token:
+        raise ReloadError(
+            "Kein Supervisor gefunden (SUPERVISOR_TOKEN fehlt). Dieser Modus ist nur für "
+            "Home Assistant OS und Supervised gedacht – bei einer Container-Installation "
+            "stattdessen 'touch_module' oder 'restart_container' verwenden."
+        )
+
+    # Lokaler Import aus demselben Grund wie oben: hält aiohttp aus den Logik-Tests heraus.
+    import aiohttp
+
+    url = f"{SUPERVISOR_URL}/addons/{quote(slug, safe='')}/restart"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as response:
+                if response.status == 200:
+                    return
+                if response.status in (400, 404):
+                    raise ReloadError(
+                        f"Add-on '{slug}' nicht gefunden. Der Slug steht in der URL der "
+                        f"Add-on-Seite (…/hassio/addon/<slug>/info)."
+                    )
+                body = (await response.text())[:200]
+                raise ReloadError(f"Supervisor antwortete {response.status}: {body}")
+    except ReloadError:
+        raise
+    except Exception as err:  # noqa: BLE001 – Netzfehler jeder Art als Klartext melden
+        raise ReloadError(f"Supervisor-Aufruf fehlgeschlagen: {err}") from err
+
+
 async def async_trigger_reload(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, Any]:
     """Führe den konfigurierten Reload aus und beschreibe das Ergebnis für die API-Antwort.
 
@@ -131,5 +186,11 @@ async def async_trigger_reload(hass: HomeAssistant, options: dict[str, Any]) -> 
         await async_restart_container(name)
         _LOGGER.debug("AppDaemon-Reload: Container %s neu gestartet", name)
         return {"mode": mode, "ok": True, "detail": f"Container '{name}' neu gestartet"}
+
+    if mode == RELOAD_MODE_ADDON:
+        slug = options.get(CONF_RELOAD_ADDON) or DEFAULT_RELOAD_ADDON
+        await async_restart_addon(slug)
+        _LOGGER.debug("AppDaemon-Reload: Add-on %s neu gestartet", slug)
+        return {"mode": mode, "ok": True, "detail": f"Add-on '{slug}' neu gestartet"}
 
     raise ReloadError(f"Unbekannter Reload-Modus: {mode}")

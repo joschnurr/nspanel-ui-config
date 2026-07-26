@@ -3,19 +3,22 @@
     "step": {
       "user": {
         "title": "NSPanel UI Config",
-        "description": "Konfigurations-Schicht für das AppDaemon-Backend (nspanel-lovelace-ui).",
+        "description": "Erkannte Installationsart: **{installation}**\n\n{hinweis}",
         "data": {
-          "output_path": "Ausgabepfad der generierten YAML (im geteilten Bind-Mount)",
+          "output_path": "Ausgabepfad der generierten YAML (aus Sicht von Home Assistant)",
           "reload_mode": "AppDaemon-Reload nach dem Generieren",
+          "reload_addon": "Nur bei „restart_addon“: Slug des AppDaemon-Add-ons",
           "reload_touch_path": "Nur bei „touch_module“: Pfad der anzutickenden Datei",
           "reload_container": "Nur bei „restart_container“: Name des AppDaemon-Containers",
           "import_yaml_path": "Optional: Pfad einer bestehenden apps.yaml zum Import",
           "backup_count": "Anzahl aufbewahrter Sicherungen der Ausgabedatei"
         },
         "data_description": {
-          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden, „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen, „restart_container“ = AppDaemon-Container über die Docker-API neu starten.",
-          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Sie muss im HA-Container sichtbar sein, also zusätzlich hineingemountet werden.",
-          "reload_container": "Setzt voraus, dass /var/run/docker.sock im HA-Container gemountet ist.",
+          "output_path": "Wohin die erzeugte YAML geschrieben wird. Entscheidend ist, dass AppDaemon genau diese Datei lesen kann – bei einem Add-on über /share, bei getrennten Containern über einen gemeinsamen Mount.",
+          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden · „restart_addon“ = AppDaemon-Add-on über den Supervisor neu starten (Home Assistant OS/Supervised) · „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen (feingranular, braucht Dateizugriff) · „restart_container“ = Docker-Container über die Docker-API neu starten.",
+          "reload_addon": "Steht in der URL der Add-on-Seite (…/hassio/addon/<slug>/info). Für das Community-Add-on „AppDaemon“ ist das a0d7b954_appdaemon.",
+          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Home Assistant muss sie sehen können.",
+          "reload_container": "Setzt voraus, dass /var/run/docker.sock in den Home-Assistant-Container gemountet ist.",
           "backup_count": "Vor jedem Überschreiben wird der bisherige Stand in ein Unterverzeichnis „backups“ neben der Ausgabedatei kopiert; ältere werden nach dieser Zahl abgeräumt. 0 schaltet die Sicherung ab – dann ist ein Fehlgriff im Editor nicht mehr rückholbar."
         }
       }
@@ -29,19 +32,23 @@
       "init": {
         "title": "NSPanel UI Config – Optionen",
         "data": {
-          "output_path": "Ausgabepfad der generierten YAML",
+          "output_path": "Ausgabepfad der generierten YAML (aus Sicht von Home Assistant)",
           "reload_mode": "AppDaemon-Reload nach dem Generieren",
+          "reload_addon": "Nur bei „restart_addon“: Slug des AppDaemon-Add-ons",
           "reload_touch_path": "Nur bei „touch_module“: Pfad der anzutickenden Datei",
           "reload_container": "Nur bei „restart_container“: Name des AppDaemon-Containers",
           "import_yaml_path": "Optional: Pfad einer bestehenden apps.yaml zum Import",
           "backup_count": "Anzahl aufbewahrter Sicherungen der Ausgabedatei"
         },
         "data_description": {
-          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden, „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen, „restart_container“ = AppDaemon-Container über die Docker-API neu starten.",
-          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Sie muss im HA-Container sichtbar sein, also zusätzlich hineingemountet werden.",
-          "reload_container": "Setzt voraus, dass /var/run/docker.sock im HA-Container gemountet ist.",
+          "output_path": "Wohin die erzeugte YAML geschrieben wird. Entscheidend ist, dass AppDaemon genau diese Datei lesen kann – bei einem Add-on über /share, bei getrennten Containern über einen gemeinsamen Mount.",
+          "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden · „restart_addon“ = AppDaemon-Add-on über den Supervisor neu starten (Home Assistant OS/Supervised) · „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen (feingranular, braucht Dateizugriff) · „restart_container“ = Docker-Container über die Docker-API neu starten.",
+          "reload_addon": "Steht in der URL der Add-on-Seite (…/hassio/addon/<slug>/info). Für das Community-Add-on „AppDaemon“ ist das a0d7b954_appdaemon.",
+          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Home Assistant muss sie sehen können.",
+          "reload_container": "Setzt voraus, dass /var/run/docker.sock in den Home-Assistant-Container gemountet ist.",
           "backup_count": "Vor jedem Überschreiben wird der bisherige Stand in ein Unterverzeichnis „backups“ neben der Ausgabedatei kopiert; ältere werden nach dieser Zahl abgeräumt. 0 schaltet die Sicherung ab – dann ist ein Fehlgriff im Editor nicht mehr rückholbar."
-        }
+        },
+        "description": "Erkannte Installationsart: **{installation}**\n\n{hinweis}"
       }
     }
   }

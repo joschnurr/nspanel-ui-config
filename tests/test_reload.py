@@ -20,12 +20,16 @@ from typing import Any, Callable
 
 from nspanel_ui_config import reload as reload_mod  # via conftest.py registriert
 from nspanel_ui_config.const import (
+    CONF_RELOAD_ADDON,
     CONF_RELOAD_CONTAINER,
     CONF_RELOAD_MODE,
     CONF_RELOAD_TOUCH_PATH,
+    RELOAD_MODE_ADDON,
     RELOAD_MODE_NONE,
     RELOAD_MODE_RESTART,
     RELOAD_MODE_TOUCH,
+    RELOAD_MODES,
+    SUPERVISOR_TOKEN_ENV,
 )
 
 
@@ -148,3 +152,58 @@ def test_restart_nutzt_den_standardcontainer_wenn_keiner_gesetzt_ist() -> None:
 def test_restart_nimmt_den_konfigurierten_containernamen() -> None:
     options = {CONF_RELOAD_MODE: RELOAD_MODE_RESTART, CONF_RELOAD_CONTAINER: "appdaemon-test"}
     assert _mit_fake_restart(options) == ["appdaemon-test"]
+
+
+# --- Home Assistant OS / Supervised: AppDaemon als Add-on ---------------------------------------
+
+
+def _ohne_supervisor_token() -> str | None:
+    """Entfernt den Token aus der Umgebung und gibt den alten Wert zum Zurücksetzen zurück."""
+    return os.environ.pop(SUPERVISOR_TOKEN_ENV, None)
+
+
+def _token_zuruecksetzen(alt: str | None) -> None:
+    if alt is not None:
+        os.environ[SUPERVISOR_TOKEN_ENV] = alt
+
+
+def test_addon_modus_ohne_supervisor_erklaert_sich() -> None:
+    """Wer restart_addon auf einer Container-Installation wählt, soll den Grund lesen können."""
+    alt = _ohne_supervisor_token()
+    try:
+        erwarte_fehler(
+            "SUPERVISOR_TOKEN",
+            lambda: trigger({CONF_RELOAD_MODE: RELOAD_MODE_ADDON}),
+        )
+        # Der Text muss auf die passende Alternative verweisen, sonst hilft er nicht weiter.
+        try:
+            trigger({CONF_RELOAD_MODE: RELOAD_MODE_ADDON})
+        except reload_mod.ReloadError as err:
+            assert "restart_container" in str(err) or "touch_module" in str(err), str(err)
+    finally:
+        _token_zuruecksetzen(alt)
+
+
+def test_addon_modus_ist_verdrahtet() -> None:
+    """Der Modus darf nicht in 'Unbekannter Reload-Modus' laufen."""
+    alt = _ohne_supervisor_token()
+    try:
+        try:
+            trigger({CONF_RELOAD_MODE: RELOAD_MODE_ADDON, CONF_RELOAD_ADDON: "a0d7b954_appdaemon"})
+        except reload_mod.ReloadError as err:
+            assert "Unbekannter Reload-Modus" not in str(err), str(err)
+    finally:
+        _token_zuruecksetzen(alt)
+
+
+def test_jeder_angebotene_modus_wird_behandelt() -> None:
+    """Was im Einrichtungsdialog zur Auswahl steht, muss reload.py auch kennen."""
+    alt = _ohne_supervisor_token()
+    try:
+        for modus in RELOAD_MODES:
+            try:
+                trigger({CONF_RELOAD_MODE: modus})
+            except reload_mod.ReloadError as err:
+                assert "Unbekannter Reload-Modus" not in str(err), f"'{modus}' fehlt in reload.py"
+    finally:
+        _token_zuruecksetzen(alt)

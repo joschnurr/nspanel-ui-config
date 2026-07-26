@@ -78,9 +78,18 @@ Der Config-Schicht-Ansatz liefert früh Nutzen und bleibt kompatibel mit Updates
 
 - Home Assistant 2024.4 oder neuer
 - ein laufendes **nspanel-lovelace-ui**-Setup auf AppDaemon
-- eine **gemeinsame Datei** zwischen HA- und AppDaemon-Container. Beide laufen in getrennten
-  Volumes und teilen sich sonst keinen Pfad; ein einmaliger Bind-Mount genügt.
-  → [docs/architecture.md#transport](docs/architecture.md#transport)
+- **eine Datei, die Home Assistant und AppDaemon beide sehen.** Was dafür nötig ist, hängt an deiner
+  Installationsart — bei zwei der drei Varianten ist es gar nichts:
+
+| Installationsart | AppDaemon läuft als | Gemeinsame Datei | Reload |
+| --- | --- | --- | --- |
+| **Home Assistant OS / Supervised** | Add-on | `/share/…` – vom Add-on ohne Zutun sichtbar | Add-on über den Supervisor neu starten |
+| **Home Assistant Container** | eigener Docker-Container | einmaliger Bind-Mount in beide Container | `touch_module` oder Container-Neustart |
+| **Home Assistant Core** (venv) | Prozess auf demselben Host | gleiches Dateisystem, Pfad frei wählbar | `touch_module` |
+
+Der Einrichtungsdialog **erkennt die Installationsart** und belegt Pfad und Reload-Weg passend vor;
+überschreiben lässt sich alles. Details:
+[docs/architecture.md#transport](docs/architecture.md#transport)
 
 ## Installation
 

@@ -24,15 +24,36 @@ Backend rendert unverändert weiter.
 
 ## Transport (HA ➜ AppDaemon) <a id="transport"></a>
 
-**Problem:** HA-Container nutzt `vol-homeassistant:/config`, AppDaemon `vol-appdaemon:/conf` – zwei
-getrennte, externe Docker-Volumes ohne gemeinsamen Pfad. Eine HA-Integration kann die AppDaemon-YAML
-also nicht direkt schreiben.
+**Grundproblem:** Die Integration läuft in Home Assistant, die Zieldatei gehört AppDaemon. Ob beide
+überhaupt denselben Pfad sehen, hängt an der Installationsart — und die unterscheidet sich stärker,
+als es zunächst aussieht. **Allen Varianten gemeinsam ist nur das Prinzip: HA schreibt eine Datei,
+AppDaemon bindet sie per `!include` ein.** Wo sie liegt und wie AppDaemon zum Neuladen bewegt wird,
+ist von Fall zu Fall verschieden.
 
-**Gewählter Weg (MVP): gemeinsame Include-Datei per Bind-Mount.**
+Der Einrichtungsdialog erkennt die Installationsart über Home Assistants `installation_type` und
+belegt die Felder passend vor ([`install_profile.py`](../custom_components/nspanel_ui_config/install_profile.py)) —
+überschreibbar, damit ungewöhnliche Aufbauten nicht ausgesperrt sind.
+
+### Home Assistant OS / Supervised — AppDaemon als Add-on
+
+**Kein Mount nötig.** Das AppDaemon-Add-on hat laut seiner `config.yaml` unter anderem `share:rw`
+und `homeassistant_config:rw` — es sieht `/share` also unter demselben Pfad wie Home Assistant.
+Genau deshalb ist `/share` hier der Ort der Wahl: HAs eigenes Konfigurationsverzeichnis sieht das
+Add-on zwar auch, aber unter `/homeassistant` statt `/config`, was beim Einrichten zuverlässig in
+die Irre führt.
+
+- Ausgabepfad: `/share/nspanel/nspanel_config.yaml`
+- In der `apps.yaml` des Add-ons: `config: !include /share/nspanel/nspanel_config.yaml`
+- Reload: `restart_addon` (siehe unten)
+
+### Home Assistant Container — zwei Docker-Container
+
+Hier greift das ursprüngliche Problem: `vol-homeassistant:/config` und `vol-appdaemon:/conf` sind
+getrennte, externe Volumes ohne gemeinsamen Pfad.
 
 - Einmalig einen Host-Ordner in **beide** Container mounten, z. B.
   `- /srv/nspanel-shared:/nspanel-shared` (HA rw, AppDaemon ro).
-- Die Integration schreibt `nspanel_config.yaml` in diesen Ordner.
+- Ausgabepfad: `/nspanel-shared/nspanel_config.yaml`
 - AppDaemons `apps.yaml` bindet ihn ein:
   ```yaml
   nspanel-1:
@@ -40,8 +61,13 @@ also nicht direkt schreiben.
     class: NsPanelLovelaceUIManager
     config: !include /nspanel-shared/nspanel_config.yaml
   ```
-- Der Ausgabepfad ist in der Integration konfigurierbar; der Bind-Mount ist ein einmaliger,
-  dokumentierter Setup-Schritt.
+- Reload: `touch_module` oder `restart_container`
+
+### Home Assistant Core — venv/pip auf demselben Host
+
+**Ebenfalls kein Mount nötig**, hier aus dem umgekehrten Grund: beide laufen im selben Dateisystem.
+Der Ausgabepfad ist frei wählbar, HAs Konfigurationsordner liegt nahe. Reload: `touch_module` auf
+AppDaemons App-Modul — hier ohne jede Zusatzeinrichtung möglich.
 
 **Verworfene/aufgeschobene Alternativen:**
 
@@ -61,11 +87,18 @@ Ohne Reload steht die neue YAML also auf der Platte, während das NSPanel weiter
 Konfiguration zeigt — ein Zustand, den der Editor nicht als Erfolg melden darf. Umgesetzt in
 [`reload.py`](../custom_components/nspanel_ui_config/reload.py), Modus über die Integrations-Optionen:
 
-| Modus | Wirkung | Voraussetzung |
-| --- | --- | --- |
-| `none` (Standard) | nichts; man lädt AppDaemon selbst neu | – |
-| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`) → AppDaemon lädt genau diese App neu | HA muss die Datei sehen: AppDaemons `apps/` zusätzlich in den HA-Container mounten |
-| `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; grob, alle Apps starten neu |
+| Modus | Wirkung | Voraussetzung | typisch für |
+| --- | --- | --- | --- |
+| `none` (Standard) | nichts; man lädt AppDaemon selbst neu | – | alle |
+| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`) → AppDaemon lädt genau diese App neu | HA muss die Datei sehen | Core (dort ohne Weiteres), Container (mit zusätzlichem Mount von `apps/`) |
+| `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; grob, alle Apps starten neu | Container |
+| `restart_addon` | startet das AppDaemon-Add-on über den Supervisor neu (`POST http://supervisor/addons/<slug>/restart`) | Supervisor vorhanden; grob, alle Apps starten neu | HA OS / Supervised |
+
+Zu `restart_addon`: der Token steht bei diesen Installationsarten als `SUPERVISOR_TOKEN` ohnehin in
+der Umgebung des HA-Containers, es ist also nichts einzurichten. Fehlt er, ist schlicht der falsche
+Modus gewählt — die Fehlermeldung sagt das und verweist auf die Alternativen. Der Slug des
+Community-Add-ons ist `a0d7b954_appdaemon`; nachzusehen ist er in der URL der Add-on-Seite
+(`…/hassio/addon/<slug>/info`), da andere Add-on-Repositories eigene Präfixe vergeben.
 
 Details, die leicht schiefgehen:
 

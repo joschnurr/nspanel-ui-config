@@ -98,13 +98,20 @@ angleichen will, importiert die Datei anschließend.
 Datei nur inline mit und überwacht ausschließlich die Dateien im `apps/`-Verzeichnis. Ohne Reload
 steht die neue YAML also auf der Platte, während das Panel weiter die alte Konfiguration zeigt.
 
-Nach dem Generieren löst die Integration deshalb den in den Optionen gewählten Reload aus:
+Nach dem Generieren löst die Integration deshalb den in den Optionen gewählten Reload aus. Welcher
+Weg möglich ist, hängt an der Installationsart — der Einrichtungsdialog wählt den passenden vor:
 
 | `reload_mode` | Wirkung | Voraussetzung |
 | --- | --- | --- |
 | `none` (Standard) | nichts – man lädt AppDaemon selbst neu | – |
-| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`); AppDaemon lädt daraufhin genau diese App neu | HA muss die Datei sehen: AppDaemons `apps/` zusätzlich in den HA-Container mounten, Pfad unter `reload_touch_path` angeben |
-| `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; Containername unter `reload_container` |
+| `restart_addon` | startet das AppDaemon-**Add-on** über den Supervisor neu | Home Assistant OS/Supervised; Slug unter `reload_addon` (Community-Add-on: `a0d7b954_appdaemon`) |
+| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`); AppDaemon lädt daraufhin genau diese App neu | HA muss die Datei sehen. Bei Core ohne Weiteres gegeben; bei getrennten Containern AppDaemons `apps/` zusätzlich in den HA-Container mounten. Pfad unter `reload_touch_path` |
+| `restart_container` | startet den AppDaemon-**Container** über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; Containername unter `reload_container` |
+
+`touch_module` ist der feingranularste Weg – nur die betroffene App startet neu. `restart_addon` und
+`restart_container` sind grob (alle AppDaemon-Apps starten neu), dafür brauchen sie keinen
+zusätzlichen Dateizugriff. Beim Add-on-Weg ist gar nichts einzurichten: der `SUPERVISOR_TOKEN` steht
+dort ohnehin in der Umgebung des HA-Containers.
 
 Angetickt wird nur die mtime, der Inhalt bleibt unberührt; nicht existierende Dateien werden nicht
 angelegt. Scheitert der Reload, bleibt die geschriebene YAML gültig – die API antwortet mit `200`

@@ -20,10 +20,24 @@ CONF_BACKUP_COUNT: Final = "backup_count"
 RELOAD_MODE_NONE: Final = "none"
 RELOAD_MODE_TOUCH: Final = "touch_module"
 RELOAD_MODE_RESTART: Final = "restart_container"
-RELOAD_MODES: Final = [RELOAD_MODE_NONE, RELOAD_MODE_TOUCH, RELOAD_MODE_RESTART]
+RELOAD_MODE_ADDON: Final = "restart_addon"
+RELOAD_MODES: Final = [
+    RELOAD_MODE_NONE,
+    RELOAD_MODE_TOUCH,
+    RELOAD_MODE_RESTART,
+    RELOAD_MODE_ADDON,
+]
 
 # Docker-Engine-API für RELOAD_MODE_RESTART; der Socket muss im HA-Container liegen.
 DOCKER_SOCKET: Final = "/var/run/docker.sock"
+
+# Supervisor-API für RELOAD_MODE_ADDON (Home Assistant OS / Supervised).
+CONF_RELOAD_ADDON: Final = "reload_addon"
+SUPERVISOR_URL: Final = "http://supervisor"
+SUPERVISOR_TOKEN_ENV: Final = "SUPERVISOR_TOKEN"
+# Slug des Community-Add-ons „AppDaemon" (hassio-addons). Andere Repos vergeben andere Präfixe,
+# der Slug ist deshalb einstellbar — nachzusehen in der URL der Add-on-Seite.
+DEFAULT_RELOAD_ADDON: Final = "a0d7b954_appdaemon"
 
 # Voreinstellungen
 DEFAULT_OUTPUT_PATH: Final = "/nspanel-shared/nspanel_config.yaml"

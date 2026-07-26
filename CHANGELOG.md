@@ -3,6 +3,26 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.9.0 – 2026-07-26
+
+### Alle Installationsarten statt nur Docker
+
+Die Einrichtung setzte bisher unausgesprochen eine Container-Installation voraus: getrennte Volumes,
+selbst gelegter Bind-Mount, Docker-Socket für den Reload. Für Home Assistant OS ist davon nichts
+richtig – dort läuft AppDaemon als Add-on, es gibt keinen Docker-Socket, und einen Mount braucht es
+auch nicht. Bei einer Core-Installation liegen beide sogar im selben Dateisystem.
+
+- **Der Einrichtungsdialog erkennt die Installationsart** (über Home Assistants `installation_type`)
+  und belegt Ausgabepfad und Reload-Weg passend vor. Über dem Formular steht, was erkannt wurde und
+  was in diesem Fall zu tun ist. Alle Felder bleiben überschreibbar.
+- **Neuer Reload-Modus `restart_addon`**: startet das AppDaemon-Add-on über den Supervisor neu
+  (`POST http://supervisor/addons/<slug>/restart`). Einzurichten ist dafür nichts – der
+  `SUPERVISOR_TOKEN` steht bei HA OS/Supervised ohnehin in der Umgebung. Slug einstellbar
+  (Community-Add-on: `a0d7b954_appdaemon`).
+- **Kein Bind-Mount unter HA OS.** Das AppDaemon-Add-on hat `share:rw`, sieht `/share` also unter
+  demselben Pfad wie Home Assistant. Vorgabe dort: `/share/nspanel/nspanel_config.yaml`.
+- Wird der falsche Modus gewählt, sagt die Fehlermeldung das und nennt die passende Alternative.
+
 ## 0.8.0 – 2026-07-26
 
 ### Sicherungen der erzeugten YAML
