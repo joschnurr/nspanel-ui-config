@@ -251,3 +251,23 @@ def test_wirkungslose_keys_werden_gebuendelt_gemeldet() -> None:
     unit_meldungen = [f for f in schema.validate_model(model) if "'unit'" in f["message"]]
     assert len(unit_meldungen) == 1, "Wirkungslose Keys sollen je Karte gebündelt werden"
     assert "1, 2, 3" in unit_meldungen[0]["message"]
+
+
+def test_wirkungslose_keys_werden_auch_im_extra_dict_gefunden() -> None:
+    """Der Fall, der in der Praxis zählt.
+
+    Nach dem Import steht ein unbekannter Key nicht auf der Entity selbst, sondern in ihrem
+    ``extra``-Dict – wer nur die Entity durchsucht, findet ihn nie und der Hinweis bleibt aus.
+    """
+    model = {
+        "global": {"model": "eu"},
+        "cards": [
+            {
+                "type": "cardEntities",
+                "entities": [{"entity": "sensor.pv", "extra": {"unit": "kWh"}}],
+            }
+        ],
+    }
+    unit_meldungen = [f for f in schema.validate_model(model) if "'unit'" in f["message"]]
+    assert unit_meldungen, "unit im extra-Dict muss ebenfalls auffallen"
+    assert "Zeile 1" in unit_meldungen[0]["message"]

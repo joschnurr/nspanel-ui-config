@@ -730,8 +730,11 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
                 findings.append(
                     {"level": "error", "path": entity_path, "message": "Entity-Zeile ohne 'entity'"}
                 )
+            # Wichtig: unbekannte Keys stehen nach dem Import nicht direkt auf der Entity, sondern
+            # in ihrem ``extra``-Dict (importer.entity_to_model). Genau dort landet auch ``unit``.
+            vorhanden = set(entity) | set(entity.get("extra") or {})
             for key in KNOWN_IGNORED_FIELDS:
-                if key in entity:
+                if key in vorhanden:
                     ignored_rows.setdefault(key, []).append(index + 1)
         for key, rows in ignored_rows.items():
             positions = ", ".join(str(row) for row in rows)
