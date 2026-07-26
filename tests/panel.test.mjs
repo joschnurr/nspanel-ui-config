@@ -11,6 +11,7 @@ const module = await import(
   "../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js"
 );
 const {
+  capacityInfo,
   widgetFor,
   setField,
   cardLabel,
@@ -272,4 +273,57 @@ test("isPlain trennt Objekte/Listen von Skalaren", () => {
   assert.equal(isPlain(null), false);
   assert.equal(isPlain("x"), false);
   assert.equal(isPlain(0), false);
+});
+
+// --- Anzeigekapazität ------------------------------------------------------------------------
+//
+// Die Zahlen kommen aus schema.py; hier wird nur geprüft, dass das Panel sie richtig auswählt.
+// Falsch gewählt hieße: eine Warnung, die es nicht geben darf, oder eine fehlende, die den
+// Nutzer stillschweigend Einträge verlieren lässt.
+
+const SCHEMA_STUB = {
+  cardCapacity: {
+    cardEntities: { eu: 4, "us-l": 4, "us-p": 6 },
+    cardGrid: { eu: 6, "us-l": 6, "us-p": 6 },
+    cardGrid2: { eu: 8, "us-l": 8, "us-p": 9 },
+  },
+  cardsWithoutEntityList: ["cardThermo", "cardAlarm", "cardChart", "cardUnlock"],
+  gridAutoSwitchAt: 6,
+};
+
+test("capacityInfo richtet sich nach dem Panel-Modell", () => {
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 5, "eu").limit, 4);
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 5, "eu").over, 1);
+  // Dieselbe Karte auf us-p: passt, also keine Übersteigung.
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 5, "us-p").limit, 6);
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 5, "us-p").over, 0);
+});
+
+test("capacityInfo fällt bei unbekanntem Modell auf eu zurück", () => {
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 0, undefined).limit, 4);
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardEntities", 0, "quatsch").limit, 4);
+});
+
+test("capacityInfo bildet den automatischen Wechsel auf cardGrid2 nach", () => {
+  // Bis 6 bleibt es ein Grid …
+  const sechs = capacityInfo(SCHEMA_STUB, "cardGrid", 6, "eu");
+  assert.equal(sechs.shownType, "cardGrid");
+  assert.equal(sechs.over, 0);
+  // … ab 7 stellt das Backend selbst um, es geht also nichts verloren.
+  const sieben = capacityInfo(SCHEMA_STUB, "cardGrid", 7, "eu");
+  assert.equal(sieben.shownType, "cardGrid2");
+  assert.equal(sieben.switched, true);
+  assert.equal(sieben.over, 0);
+  // Erst jenseits von cardGrid2 fehlen wirklich Einträge.
+  assert.equal(capacityInfo(SCHEMA_STUB, "cardGrid", 9, "eu").over, 1);
+});
+
+test("capacityInfo behauptet nichts über Karten ohne Entity-Liste", () => {
+  const info = capacityInfo(SCHEMA_STUB, "cardThermo", 3, "eu");
+  assert.equal(info.limit, null);
+  assert.equal(info.noList, true);
+  // Unbekannter Typ: ebenfalls keine Aussage, aber auch nicht als "ohne Liste" ausgeben.
+  const fremd = capacityInfo(SCHEMA_STUB, "cardNeuAusUpstream", 3, "eu");
+  assert.equal(fremd.limit, null);
+  assert.equal(fremd.noList, false);
 });

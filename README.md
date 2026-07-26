@@ -2,7 +2,7 @@
 
 # NSPanel UI Config
 
-> **Frühe Entwicklungsphase (v0.6.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
+> **Frühe Entwicklungsphase (v0.7.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
 > öffentliche Veröffentlichung, sobald ein brauchbarer Funktionsumfang steht.
 
 Eine **Home-Assistant-Integration (HACS)**, mit der sich die
@@ -75,6 +75,7 @@ liefert früh Nutzen und bleibt kompatibel mit Updates des Upstream-Backends.
 | Icon/Brand-Assets (HACS + HA-Integrationskarte) | ✅ v0.4 |
 | Icon-Picker (geprüft gegen das Backend-Mapping) und Farbwähler | ✅ v0.5 |
 | Template-Editor (Jinja) mit Live-Vorschau über HAs Template-API | ✅ v0.6 |
+| Erklärte Felder (Funktion + mögliche Werte) und Anzeigekapazität je Karte | ✅ v0.7 |
 
 Details und Designentscheidungen: **[docs/architecture.md](docs/architecture.md)**.
 
@@ -131,6 +132,77 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
 aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
 Administrator gesetzt.
+
+## Erklärte Felder statt nackter Feldnamen
+
+Die Feldnamen des Backends sagen für sich genommen wenig – `forecastSkip`, `assumed_state`,
+`sleepOverride`, `speed`. Jedes Eingabefeld im Editor trägt deshalb zwei Zeilen:
+
+- **was es bewirkt** (aus Sicht dessen, was auf dem Panel passiert), und
+- **welche Werte zulässig sind** – Wertebereiche, Aufzählungen, Schreibweisen.
+
+Beides steht in `schema.py` (`FIELD_DESCRIPTIONS` / `FIELD_VALUE_HINTS`) und kommt über
+`GET /api/nspanel_ui_config/schema` ins Panel; im JavaScript wird nichts davon dupliziert. Ein Test
+hält es vollständig: [`tests/test_schema_payload.py`](tests/test_schema_payload.py) schlägt fehl,
+sobald ein gerendertes Feld ohne Beschreibung *oder* ohne Angabe der möglichen Werte dasteht.
+
+Wo ein Feld je Kartentyp etwas anderes bedeutet, gewinnt die spezifische Fassung
+(`CARD_FIELD_DESCRIPTIONS`) – `entity` heißt auf `cardThermo` „die climate-Entity dieser Karte", auf
+dem Screensaver dagegen „die Wetter-Entity". Jede Karte bekommt zusätzlich einen Einzeiler darüber,
+was sie überhaupt darstellt.
+
+## Anzeigekapazität: wie viele Entities passen wirklich auf eine Karte?
+
+**Der stille Fehler schlechthin.** Weder Backend noch Generator kürzen die `entities`-Liste – zu viele
+Einträge werden mitgesendet und vom Display einfach ignoriert. Die YAML ist gültig, das Log
+schweigt, und auf dem Panel fehlt der letzte Eintrag. Eine `cardEntities` mit fünf Entities zeigt auf
+einem EU-Panel nur vier.
+
+Der Editor zeigt deshalb an jeder Entity-Liste „*n* von *m* Plätzen", markiert überzählige Einträge
+als **nicht sichtbar** und erklärt, wie sich die Plätze auf der Karte verteilen. Die Validierung
+meldet es zusätzlich als Befund.
+
+| Karte | eu | us-l | us-p |
+| --- | --- | --- | --- |
+| `cardEntities` | 4 | 4 | 6 |
+| `cardGrid` | 6 | 6 | 6 |
+| `cardGrid2` | 8 | 8 | 9 |
+| `cardQR` | 2 | 2 | 2 |
+| `cardMedia` (untere Reihe) | 6 | 6 | 6 |
+| `cardPower` (2 Mitte + 6 außen) | 8 | 8 | 8 |
+| `screensaver` | 6 | 6 | 6 |
+| `screensaver2` | 15 | 15 | 15 |
+
+`cardThermo`, `cardAlarm`, `cardChart` und `cardUnlock` werten keine Entity-Liste aus.
+
+Zwei Feinheiten, die der Editor mit abbildet:
+
+- **`cardGrid` wechselt von selbst.** Ab 7 Entities stellt das Backend die Karte intern auf
+  `cardGrid2` um (`pages.py`). Eine Warnung ab 7 wäre also falsch – erst ab 9 (eu) fehlt wirklich
+  etwas.
+- **Beim `screensaver` schaltet die 6. Entity das Layout um.** 1. Entity = Hauptsymbol, 2.–5. = die
+  vier Vorhersagespalten; eine sechste aktiviert das alternative Layout. `screensaver2` verteilt
+  stattdessen auf 1 + 3 + 6 + 5 Plätze.
+
+**Woher die Zahlen stammen:** aus der Display-Firmware selbst – den Textdumps der HMI-Seiten
+(`HMI/n2t-out-visual/`, für die US-Modelle unter `HMI/US/*/n2t-out-visual/`) und, für die beiden
+Screensaver, dem Nextion-Codegenerator `HMI/code_gen/pages/screensaver{,2}.py` im Upstream-Repo.
+Nachprüfbar mit einer lokalen Kopie davon:
+
+```bash
+python3 tools/check_card_capacity.py /pfad/zu/nspanel-lovelace-ui
+```
+
+Das Skript zählt die Slot-Komponenten je Seite und Modell nach und vergleicht sie mit `schema.py`.
+Nach einem Upstream-Update erneut laufen lassen – ein neues Display-Layout ändert genau hier die
+Wahrheit.
+
+### Wirkungslose Keys
+
+Manche Keys sehen plausibel aus, werden vom Backend aber nirgends gelesen – `unit:` etwa. Die
+Einheit kommt aus dem HA-Attribut `unit_of_measurement`; für eigenen Text ist `value` zuständig
+(`"{{ states('sensor.x') }} kWh"`). Die Validierung weist darauf hin und nennt die betroffenen
+Zeilen, **löscht aber nichts** – der verlustfreie Round-Trip gilt auch für Wirkungsloses.
 
 ## Template-Editor
 
@@ -197,10 +269,19 @@ Brands-Eintrag zeigt HA den generischen Platzhalter des CDN.
 Das GitHub-**Social-Preview**-Bild lässt sich nicht per API setzen; das geht nur über *Settings →
 General → Social preview* im Web-UI (dafür eignet sich `docs/brand-source.jpg`).
 
+## Vorschau des Panels
+
+Untersucht, noch nicht umgesetzt: **[docs/vorschau-machbarkeit.md](docs/vorschau-machbarkeit.md)**.
+Kurzfassung — der im Upstream beschriebene Nextion-Editor-„Emulator" scheidet aus (Windows-Software,
+und er braucht trotz des Namens eine echte ESP32-Platine), eine **eigene Vorschau im Editor** ist
+dagegen gut machbar: die Slot-Geometrie aller HMI-Seiten liegt exakt vor, und Icons, Farben und
+Template-Auswertung sind im Panel bereits vorhanden.
+
 ## Referenzen
 
 - Backend: <https://github.com/joBr99/nspanel-lovelace-ui>
 - Doku/Config-Schema: <https://docs.nspanel.pky.eu/>
+- Display-Protokoll und HMI-Seiten: `HMI/README.md` im Backend-Repo
 
 ## Lizenz
 

@@ -106,6 +106,32 @@ const STYLES = `
   .field .desc { font-size: 12px; color: var(--secondary-text-color, #727272); margin-bottom: 3px; }
   .field .row { display: flex; align-items: center; gap: 6px; }
   .field .err { font-size: 12px; color: var(--error-color, #db4437); margin-top: 3px; }
+  /* Zulässige Werte: bewusst schwächer als die Beschreibung – erst *was* das Feld tut, dann *womit*. */
+  .field .vals {
+    font-size: 11.5px; color: var(--secondary-text-color, #727272); opacity: .85;
+    margin-bottom: 4px; line-height: 1.45;
+  }
+  .field .vals b { font-weight: 500; opacity: .8; }
+
+  /* Kapazitätsanzeige an der Entity-Liste. */
+  legend .cap { font-weight: 400; }
+  legend .cap.over { color: var(--error-color, #db4437); font-weight: 500; }
+  .caphint {
+    font-size: 12px; color: var(--secondary-text-color, #727272);
+    margin: -4px 0 10px; line-height: 1.45;
+  }
+  .caphint.over { color: var(--error-color, #db4437); }
+  /* Einträge jenseits der Anzeigekapazität: sichtbar, aber erkennbar wirkungslos. */
+  details.entity.over { border-color: var(--error-color, #db4437); }
+  details.entity.over > summary .title { opacity: .6; }
+  details.entity > summary .badge {
+    font-size: 10.5px; padding: 1px 6px; border-radius: 9px; flex: none;
+    background: var(--error-color, #db4437); color: #fff; font-weight: 500;
+  }
+  .typenote {
+    font-size: 12.5px; color: var(--secondary-text-color, #727272);
+    margin: 0 0 14px; line-height: 1.5;
+  }
 
   input[type="text"], input[type="number"], select, textarea {
     font: inherit; font-size: 14px; width: 100%; box-sizing: border-box;
@@ -207,6 +233,35 @@ function setField(target, key, value) {
  * Ein Dict/eine Liste landet immer im JSON-Editor, ein Template in einem number-Feld im Textfeld –
  * so kann die Vereinfachung im Schema nie einen echten Wert zerstören.
  */
+/**
+ * Wie viele Entities das Display für diese Karte tatsächlich anzeigt.
+ *
+ * Spiegelt `schema.capacity_for` / `schema.effective_card_type`: die Zahlen kommen aus dem Schema,
+ * hier steht nur die Auswahl. `limit === null` heißt „keine Aussage möglich“ – dann behauptet der
+ * Editor nichts.
+ */
+function capacityInfo(schema, cardType, entityCount, panelModel) {
+  const table = (schema && schema.cardCapacity) || {};
+  const switchAt = schema && typeof schema.gridAutoSwitchAt === "number" ? schema.gridAutoSwitchAt : 6;
+  // Einziger Fall, in dem das Backend den Typ selbst wechselt (pages.py).
+  const shownType = cardType === "cardGrid" && entityCount > switchAt ? "cardGrid2" : cardType;
+  const byModel = table[shownType];
+  if (!byModel) {
+    const noList = ((schema && schema.cardsWithoutEntityList) || []).includes(cardType);
+    return { limit: null, shownType, over: 0, noList };
+  }
+  const model = byModel[panelModel] === undefined ? "eu" : panelModel;
+  const limit = byModel[model];
+  return {
+    limit,
+    shownType,
+    model,
+    over: Math.max(0, entityCount - limit),
+    switched: shownType !== cardType,
+    noList: false,
+  };
+}
+
 function widgetFor(hint, value) {
   // Farben sind der Sonderfall: [r,g,b] und {on,off} sind Objekte, gehören aber gerade *nicht* in
   // den JSON-Editor – für genau diese zwei Formen gibt es den Farbwähler.
@@ -700,7 +755,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       return;
     }
     this._renderCardLike(main, this._model.screensaver, "Screensaver", {
-      hint: "Die Anzeige im Ruhezustand. `entities` sind hier die Status-/Wetterzeilen.",
+      hint: "Die Anzeige im Ruhezustand.",
       typeOptions: this._schema.screensaverTypes,
       removable: true,
       onRemove: () => {
@@ -748,21 +803,31 @@ class NsPanelUiConfigPanel extends PanelBase {
       ...(schema.cardTypeFields[type] || []),
     ].filter((name, index, all) => all.indexOf(name) === index);
 
+    const capacity = this._capacity(card);
+    const typeNote = (schema.cardTypeNotes || {})[type];
+
     main.innerHTML = `
       <h2>${esc(title)}</h2>
       <p class="hint">${esc(options.hint || "")}</p>
+      ${typeNote ? `<p class="typenote">${esc(typeNote)}</p>` : ""}
       <fieldset><legend>Karte</legend><div id="card-fields"></div>
         ${options.removable ? `<button class="danger" id="remove-card">Entfernen</button>` : ""}
       </fieldset>
       ${isFlat ? `<fieldset><legend>Entity der Karte</legend><div id="flat-entity"></div></fieldset>` : ""}
-      ${showEntityList ? `<fieldset><legend>Entity-Liste</legend><div id="entity-list-host"></div>
+      ${showEntityList ? `<fieldset><legend>Entity-Liste${capacity.legend}</legend>
+        ${capacity.note ? `<p class="caphint${capacity.over ? " over" : ""}">${capacity.note}</p>` : ""}
+        <div id="entity-list-host"></div>
         <button class="primary" id="add-entity">+ Entity</button></fieldset>` : ""}
       <div id="extra-host"></div>
     `;
 
     const fieldHost = main.querySelector("#card-fields");
     cardFields.forEach((name) => {
-      const opts = name === "type" ? { options: options.typeOptions, onChange: () => this._retypeCard() } : {};
+      const opts = { cardType: type };
+      if (name === "type") {
+        opts.options = options.typeOptions;
+        opts.onChange = () => this._retypeCard();
+      }
       fieldHost.appendChild(this._field(card, name, opts));
     });
 
@@ -772,7 +837,9 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     if (isFlat) {
       const flatHost = main.querySelector("#flat-entity");
-      schema.entityFields.forEach((name) => flatHost.appendChild(this._field(card, name)));
+      schema.entityFields.forEach((name) =>
+        flatHost.appendChild(this._field(card, name, { cardType: type }))
+      );
     }
 
     if (showEntityList) {
@@ -788,6 +855,52 @@ class NsPanelUiConfigPanel extends PanelBase {
     main.querySelector("#extra-host").appendChild(this._extraEditor(card));
   }
 
+  /**
+   * Kapazitätsanzeige für die Entity-Liste einer Karte: Legendenzusatz, Erläuterung und wie viele
+   * Einträge über dem Limit liegen. Ein zu langer Block ist sonst nicht zu bemerken – die YAML
+   * bleibt gültig, das Backend schweigt, und auf dem Panel fehlen die Einträge einfach.
+   */
+  _capacity(card) {
+    const entities = Array.isArray(card.entities) ? card.entities : [];
+    const info = capacityInfo(
+      this._schema,
+      card.type,
+      entities.length,
+      (this._model.global || {}).model
+    );
+    if (info.limit === null) {
+      if (!info.noList) return { limit: null, over: 0, legend: "", note: "" };
+      return {
+        limit: null,
+        over: 0,
+        legend: "",
+        note: `${esc(card.type)} wertet keine Entity-Liste aus – maßgeblich ist die Entity der Karte.`,
+      };
+    }
+
+    const layout = (this._schema.capacityLayoutNotes || {})[info.shownType];
+    const modelNote = info.model ? ` auf Modell <code>${esc(info.model)}</code>` : "";
+    const switched = info.switched
+      ? ` Weil mehr als ${this._schema.gridAutoSwitchAt} Entities konfiguriert sind, stellt das
+         Backend die Karte selbst auf <code>cardGrid2</code> um.`
+      : "";
+    const overNote = info.over
+      ? ` <b>Die letzten ${info.over} erscheinen nicht auf dem Display</b> – sie bleiben in der
+         Konfiguration erhalten, werden aber nirgends angezeigt.`
+      : "";
+
+    return {
+      limit: info.limit,
+      over: info.over,
+      legend: ` <span class="cap${info.over ? " over" : ""}">– ${entities.length} von ${
+        info.limit
+      } Plätzen</span>`,
+      note: `${esc(info.shownType)} zeigt${modelNote} ${info.limit} Einträge.${switched}${
+        layout ? ` ${esc(layout)}` : ""
+      }${overNote}`,
+    };
+  }
+
   /** Nach einem Typwechsel ändern sich die anzuzeigenden Felder – Formular komplett neu bauen. */
   _retypeCard() {
     this._renderNav();
@@ -800,16 +913,20 @@ class NsPanelUiConfigPanel extends PanelBase {
       host.innerHTML = `<p class="empty">Noch keine Entities.</p>`;
       return;
     }
+    const limit = this._capacity(card).limit;
     host.innerHTML = "";
     entities.forEach((entity, index) => {
       const details = document.createElement("details");
-      details.className = "entity";
+      // Über der Kapazität: der Eintrag bleibt bedienbar, wird aber als wirkungslos gekennzeichnet.
+      const beyond = limit !== null && index >= limit;
+      details.className = beyond ? "entity over" : "entity";
       const label = isPlain(entity) ? entity.entity || "(ohne entity)" : String(entity);
       const name = isPlain(entity) && entity.name ? ` – ${entity.name}` : "";
       details.innerHTML = `
         <summary>
           <span class="caret">▶</span>
           <span class="title">${esc(index + 1)}. ${esc(label)}<small>${esc(name)}</small></span>
+          ${beyond ? `<span class="badge" title="Über der Anzeigekapazität dieser Karte">nicht sichtbar</span>` : ""}
           <button class="icon" data-act="up" title="Nach oben">▲</button>
           <button class="icon" data-act="down" title="Nach unten">▼</button>
           <button class="icon" data-act="dup" title="Duplizieren">⧉</button>
@@ -828,7 +945,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       const inner = details.querySelector(".inner");
       if (isPlain(entity)) {
         this._schema.entityFields.forEach((fieldName) =>
-          inner.appendChild(this._field(entity, fieldName))
+          inner.appendChild(this._field(entity, fieldName, { cardType: card.type }))
         );
         inner.appendChild(this._extraEditor(entity));
       } else {
@@ -854,6 +971,13 @@ class NsPanelUiConfigPanel extends PanelBase {
 
   // --- Felder --------------------------------------------------------------------------------
 
+  /** Beschreibung eines Feldes – kartentyp-spezifische Fassung schlägt die allgemeine. */
+  _fieldDescription(name, cardType) {
+    const perCard = (this._schema.cardFieldDescriptions || {})[cardType];
+    if (perCard && perCard[name]) return perCard[name];
+    return this._schema.fieldDescriptions[name];
+  }
+
   /**
    * Baut ein Eingabefeld für `target[name]`. Schreibt bei `change` direkt ins Modell zurück –
    * nicht bei jedem Tastendruck, damit das Formular während der Eingabe nicht neu aufgebaut wird.
@@ -862,7 +986,10 @@ class NsPanelUiConfigPanel extends PanelBase {
     const value = target[name];
     const hint = options.forceWidget || this._schema.fieldHints[name] || "string";
     const widget = options.forceWidget || widgetFor(hint, value);
-    const description = this._schema.fieldDescriptions[name];
+    // Kartentyp-spezifische Beschreibung geht vor: `entity` heißt auf cardThermo etwas anderes
+    // als auf dem Screensaver.
+    const description = this._fieldDescription(name, options.cardType);
+    const valueHint = (this._schema.fieldValueHints || {})[name];
     const fallback = options.showDefault ? this._schema.globalDefaults[name] : undefined;
 
     const wrapper = document.createElement("div");
@@ -876,6 +1003,8 @@ class NsPanelUiConfigPanel extends PanelBase {
           )})</span>`;
     wrapper.innerHTML = `<label>${labelText}</label>${
       description ? `<div class="desc">${esc(description)}</div>` : ""
+    }${
+      valueHint ? `<div class="vals"><b>Mögliche Werte:</b> ${esc(valueHint)}</div>` : ""
     }<div class="row"></div><div class="err" hidden></div>`;
 
     const row = wrapper.querySelector(".row");
@@ -1408,6 +1537,7 @@ if (typeof customElements !== "undefined" && !customElements.get(ELEMENT_NAME)) 
 
 export {
   NsPanelUiConfigPanel,
+  capacityInfo,
   widgetFor,
   setField,
   cardLabel,

@@ -37,6 +37,87 @@ SCREENSAVER_TYPES: Final[tuple[str, ...]] = ("screensaver", "screensaver2")
 MODELS: Final[tuple[str, ...]] = ("eu", "us-l", "us-p")
 
 
+# --- Anzeigekapazität je Kartentyp ------------------------------------------------------------
+
+# **Wie viele Einträge der `entities`-Liste das Display tatsächlich anzeigt.**
+#
+# Weder Backend noch Generator kürzen die Liste — überzählige Entities werden mitgesendet und vom
+# Nextion-Display schlicht ignoriert. Ein zu langer `entities`-Block ist deshalb ein *stiller*
+# Fehler: in der YAML steht alles, auf dem Panel fehlt es. Genau dafür sind diese Zahlen da.
+#
+# Quelle sind die Slot-Komponenten der HMI-Seiten (`HMI/n2t-out-visual/*.txt` bzw.
+# `HMI/US/{landscape,portrait}/n2t-out-visual/*.txt` im Upstream-Repo joBr99/nspanel-lovelace-ui)
+# und für die Screensaver der Nextion-Codegenerator `HMI/code_gen/pages/screensaver{,2}.py`,
+# der den `weatherUpdate~`-String in 6er-Blöcken auf feste Slots verteilt. Nachgezählt, nicht
+# geschätzt — Stand 2026-07-26.
+CARD_CAPACITY: Final[dict[str, dict[str, int]]] = {
+    # cardEntities/cardGrid2 sind die einzigen Karten, deren Kapazität vom Modell abhängt.
+    "cardEntities": {"eu": 4, "us-l": 4, "us-p": 6},
+    "cardGrid": {"eu": 6, "us-l": 6, "us-p": 6},
+    "cardGrid2": {"eu": 8, "us-l": 8, "us-p": 9},
+    "cardQR": {"eu": 2, "us-l": 2, "us-p": 2},
+    # Untere Symbolreihe. Die Lautsprecherauswahl hängt das Backend selbst hinten an.
+    "cardMedia": {"eu": 6, "us-l": 6, "us-p": 6},
+    # 2 in der Mitte (tHome/tHome2) + 6 außen (t0…t5).
+    "cardPower": {"eu": 8, "us-l": 8, "us-p": 8},
+    # 1 Haupt + 4 Forecast + 1 weitere, die das alternative Layout auslöst.
+    "screensaver": {"eu": 6, "us-l": 6, "us-p": 6},
+    # 1 Haupt + 3 (Icon/Wert) + 6 (Icon/Name/Wert) + 5 (nur Icon).
+    "screensaver2": {"eu": 15, "us-l": 15, "us-p": 15},
+}
+
+# Karten *ohne* Entity-Liste (sie tragen genau eine Entity flach auf der Karte) bzw. ganz ohne
+# Entities. Bewusst getrennt von CARD_CAPACITY, damit "keine Liste" nicht mit "0 Slots" verwechselt
+# wird.
+CARDS_WITHOUT_ENTITY_LIST: Final[tuple[str, ...]] = (
+    "cardThermo",
+    "cardAlarm",
+    "cardChart",
+    "cardUnlock",
+)
+
+# Das Backend wechselt selbstständig von cardGrid auf cardGrid2, sobald mehr als 6 Entities
+# konfiguriert sind (pages.py: ``if card.cardType == "cardGrid" and len(card.entities) > 6``).
+# Ein cardGrid mit 7–8 Einträgen verliert also nichts, es sieht nur anders aus als erwartet.
+GRID_AUTO_SWITCH_AT: Final[int] = 6
+
+# Wie sich die Plätze innerhalb einer Karte aufteilen — als Klartext für den Editor, weil die reine
+# Zahl nicht erklärt, *wo* die Einträge landen.
+CAPACITY_LAYOUT_NOTES: Final[dict[str, str]] = {
+    "cardEntities": "Eine Zeile je Entity, von oben nach unten.",
+    "cardGrid": "3×2-Raster. Ab dem 7. Eintrag stellt das Backend automatisch auf cardGrid2 um.",
+    "cardGrid2": "4×2-Raster (us-p: 3×3) mit kleineren Kacheln.",
+    "cardQR": "Zwei Textzeilen neben dem QR-Code.",
+    "cardMedia": "Untere Symbolreihe. Das Backend hängt die Lautsprecherauswahl automatisch an; "
+    "mit 6 eigenen Einträgen (notfalls `entity: delete`) verdrängt man sie.",
+    "cardPower": "Die ersten beiden Entities stehen in der Mitte, die restlichen sechs außen herum. "
+    "`entity: delete` hält einen Außenplatz frei.",
+    "screensaver": "1. Entity = großes Hauptsymbol, 2.–5. = die vier Vorhersagespalten. "
+    "Eine 6. Entity schaltet das Display auf das alternative Layout um (die erste "
+    "Vorhersagespalte weicht dann einem zweiten Textblock).",
+    "screensaver2": "1. Entity = Hauptbereich, 2.–4. = Zeile mit Symbol und Wert, "
+    "5.–10. = Kacheln mit Symbol, Name und Wert, 11.–15. = reine Symbole.",
+}
+
+# Einzeiler zum Kartentyp selbst — was die Karte überhaupt darstellt.
+CARD_TYPE_NOTES: Final[dict[str, str]] = {
+    "cardEntities": "Liste mit einer bedienbaren Zeile je Entity (Schalter, Regler, Rollladen …).",
+    "cardGrid": "Kachelraster mit Symbol und Name — kompakter als cardEntities, dafür ohne Regler.",
+    "cardGrid2": "Wie cardGrid, nur mit mehr und kleineren Kacheln.",
+    "cardThermo": "Thermostatseite für genau eine `climate`-Entity (Soll-/Ist-Temperatur, Modi).",
+    "cardMedia": "Medienseite für genau einen `media_player` samt Lautstärke und Titelanzeige.",
+    "cardAlarm": "Bedienfeld für eine `alarm_control_panel`-Entity mit Zifferntastatur.",
+    "cardQR": "QR-Code (typischerweise WLAN-Zugang) mit zwei Textzeilen daneben.",
+    "cardPower": "Energiefluss-Darstellung: Verbraucher/Erzeuger um einen Mittelpunkt herum, "
+    "verbunden durch animierte Punkte (`speed`).",
+    "cardUnlock": "PIN-Eingabe, die auf eine versteckte Karte weiterleitet.",
+    "cardChart": "Balkendiagramm für eine Entity.",
+    "screensaver": "Klassische Ruheanzeige: großes Wettersymbol, Uhrzeit, Datum, vier "
+    "Vorhersagespalten.",
+    "screensaver2": "Alternative Ruheanzeige (ab Backend 4.0) mit deutlich mehr Kacheln.",
+}
+
+
 # --- Entity-Felder ---------------------------------------------------------------------------
 
 # Felder, die ``config.py::Entity`` ausliest. Reihenfolge = Ausgabereihenfolge im Generator.
@@ -149,6 +230,14 @@ GLOBAL_DEFAULTS: Final[dict[str, Any]] = {
     "dateAdditionalTemplate": "",
     "timeAdditionalTemplate": "",
     "dateFormat": "%A, %d. %B %Y",
+    # Die folgenden Keys stehen nicht in ``_DEFAULT_CONFIG`` des Backends, werden aber sehr wohl
+    # ausgewertet (``pages.py`` bzw. ``nspanel.py``) — ohne Eintrag hier kennt sie der Editor nicht
+    # und der Anwender erfährt nie, dass es sie gibt.
+    "timezone": None,
+    "displayURL-EU": None,
+    "displayURL-US-L": None,
+    "displayURL-US-P": None,
+    "berryURL": None,
 }
 
 # Reihenfolge der globalen Settings im generierten YAML. Nicht gelistete Keys folgen dahinter.
@@ -178,7 +267,7 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "state_template": "string",
     "assumed_state": "boolean",
     "status": "entity",
-    "font": "number",
+    "font": "select",
     "data": "json",
     "effectList": "json",
     "speed": "number",
@@ -192,7 +281,7 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "statusIcon2": "entity_object",
     "sleepTimeout": "number",
     "cooldown": "number",
-    "temperatureUnit": "string",
+    "temperatureUnit": "select",
     "supportedModes": "json",
     "mediaControl": "json",
     "alarmControl": "entity",
@@ -200,7 +289,7 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "pin": "string",
     "destination": "string",
     "theme": "json",
-    "weatherUnit": "string",
+    "weatherUnit": "select",
     "forecastSkip": "number",
     "weatherOverrideForecast1": "json",
     "weatherOverrideForecast2": "json",
@@ -216,18 +305,24 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "model": "select",
     "sleepBrightness": "number",
     "screenBrightness": "number",
-    "defaultBackgroundColor": "string",
+    "defaultBackgroundColor": "select",
     "featureExperimentalSliders": "boolean",
     "sleepTracking": "entity",
     "sleepTrackingZones": "json",
-    "sleepOverride": "entity",
-    "locale": "string",
+    # Dict aus ``entity`` und ``brightness`` (controller.py), kein einzelner entity_id.
+    "sleepOverride": "json",
+    "locale": "select",
     "quiet": "boolean",
     "timeFormat": "string",
-    "dateFormatBabel": "string",
+    "dateFormatBabel": "select",
     "dateAdditionalTemplate": "string",
     "timeAdditionalTemplate": "string",
     "dateFormat": "string",
+    "timezone": "select",
+    "displayURL-EU": "string",
+    "displayURL-US-L": "string",
+    "displayURL-US-P": "string",
+    "berryURL": "string",
 }
 
 # Felder, die das Backend als Jinja-Template rendert — nachgesehen an den ``render_template``-Aufrufen
@@ -265,25 +360,232 @@ FIELD_OPTIONS: Final[dict[str, tuple[str, ...]]] = {
     "model": MODELS,
     "updateMode": ("auto-notify", "auto", "manual"),
     "type": CARD_TYPES,
+    "temperatureUnit": ("celsius", "fahrenheit"),
+    "weatherUnit": ("celsius", "fahrenheit"),
+    "defaultBackgroundColor": ("ha-dark", "black"),
+    "dateFormatBabel": ("full", "long", "medium", "short"),
+    # Schriftgröße der Symbole auf cardGrid. Das Backend übersetzt diese Namen in Font-IDs und
+    # akzeptiert daneben auch direkt eine Zahl (pages.py) — die Liste ist deshalb ein Vorschlag.
+    "font": ("small", "medium-icon", "medium", "large"),
+    # Von babel unterstützte Sprachen laut docs.nspanel.pky.eu (config-overview). Bestimmt sowohl
+    # das Datumsformat als auch die Übersetzung der Beschriftungen auf dem Panel.
+    "locale": (
+        "de_DE", "en_US", "af_ZA", "ar_SY", "bg_BG", "ca_ES", "cs_CZ", "da_DK", "el_GR", "es_ES",
+        "et_EE", "fa_IR", "fi_FI", "fr_FR", "he_IL", "hr_xx", "hu_HU", "hy_AM", "id_ID", "is_IS",
+        "it_IT", "lb_xx", "lt_LT", "lv_LV", "nb_NO", "nl_NL", "nn_NO", "pl_PL", "pt_PT", "ro_RO",
+        "ru_RU", "sk_SK", "sl_SI", "sv_SE", "th_TH", "tr_TR", "uk_UA", "vi_VN", "zh_CN", "zh_TW",
+    ),
+    # Nur eine Handreichung für den häufigsten Fall; erlaubt ist jeder tz-Datenbank-Bezeichner.
+    "timezone": ("Europe/Berlin", "Europe/Vienna", "Europe/Zurich", "UTC"),
 }
 
-# Kurzbeschreibungen, die der Editor als Hilfetext neben dem Feld zeigt. Bewusst knapp und nur
-# dort, wo der Feldname allein nicht trägt.
+# Was das Feld bewirkt — ein Satz, im Zweifel aus der Sicht dessen, was auf dem Panel passiert.
+# Quellen: docs.nspanel.pky.eu (config-overview, config-screensaver, entities, card-*) und, wo die
+# Doku schweigt oder von der eingesetzten Backend-Version abweicht, der Backend-Quelltext selbst.
 FIELD_DESCRIPTIONS: Final[dict[str, str]] = {
-    "entity": "entity_id oder Spezial-Präfix (iText., navigate., delete, …)",
-    "key": "Optionaler eindeutiger Schlüssel für die Navigation zu dieser Karte",
-    "value": "Angezeigter Wert; Jinja-Template erlaubt",
-    "color": "[r, g, b], je Zustand {on, off} – oder ein Jinja-Template, das eine RGB-Liste liefert",
-    "state_template": "Bedingung als Template — Zeile nur zeigen, wenn wahr",
-    "font": "Font-Index des Nextion-Displays",
-    "sleepTimeout": "Sekunden bis zum Screensaver (0 = nie)",
-    "navItem1": "Linkes Navigationssymbol der Karte",
-    "navItem2": "Rechtes Navigationssymbol der Karte",
-    "defaultCard": "Karte, zu der der Screensaver beim Aufwachen springt (key)",
-    "panelRecvTopic": "MQTT-Topic, auf dem Tasmota die Panel-Ereignisse meldet",
-    "panelSendTopic": "MQTT-Topic, über das Befehle ans Panel gehen",
-    "sleepTracking": "Personen-/Geräte-Entity; Panel bleibt wach, solange jemand da ist",
-    "dateFormatBabel": "Babel-Datumsformat (full, long, medium, short)",
+    # --- Entity-Zeile ---
+    "entity": "Welche Home-Assistant-Entity die Zeile anzeigt und bedient.",
+    "name": "Überschreibt den angezeigten Namen (sonst der friendly_name aus HA).",
+    "icon": "Überschreibt das Symbol. Auch je Zustand möglich, z. B. on/off getrennt.",
+    "color": "Überschreibt die Farbe des Symbols.",
+    "value": "Überschreibt den angezeigten Wert rechts in der Zeile.",
+    "type": "Erzwingt die Behandlung als ein bestimmter Entity-Typ statt sie aus der entity_id "
+    "abzuleiten. Beim Screensaver stattdessen die Nummer der Vorhersagespalte (0–3).",
+    "state": "Zeile nur anzeigen, wenn der Zustand exakt diesem Wert entspricht.",
+    "state_not": "Zeile nur anzeigen, wenn der Zustand nicht diesem Wert entspricht.",
+    "state_template": "Zeile nur anzeigen, wenn dieses Template wahr ergibt.",
+    "assumed_state": "Nur für Rollläden: Auf/Stopp/Ab dauerhaft anzeigen, statt sie aus dem "
+    "gemeldeten Zustand abzuleiten.",
+    "status": "Zusätzliche Entity, deren Zustand Symbol und Farbe bestimmt — gedacht für "
+    "navigate.- und service.-Einträge, die selbst keinen Zustand haben.",
+    "font": "Schriftgröße des Symbols auf cardGrid.",
+    "data": "Zusätzliche Daten für service.-Einträge, z. B. entity_id und Parameter des Aufrufs.",
+    "effectList": "Nur für Licht: Auswahl an Effekten, die auf der Detailseite erscheinen soll.",
+    "speed": "Nur cardPower: Richtung und Tempo des Laufpunkts zu dieser Entity. "
+    "Negative Werte laufen zur Mitte hin.",
+    # --- Karte ---
+    "key": "Eigener Name für diese Karte, damit navigate.<key> sie ansteuern kann.",
+    "title": "Überschrift am oberen Rand der Karte.",
+    "navItem1": "Ersetzt die linke Navigationsschaltfläche dieser Karte (Aufbau wie eine Entity).",
+    "navItem2": "Ersetzt die rechte Navigationsschaltfläche dieser Karte (Aufbau wie eine Entity).",
+    "sleepTimeout": "Überschreibt für diese Karte, nach wie vielen Sekunden der Screensaver kommt.",
+    "cooldown": "Frühestens nach so vielen Sekunden neu zeichnen — beruhigt Karten mit schnell "
+    "wechselnden Werten.",
+    "temperatureUnit": "Einheit, die auf der Karte hinter Temperaturen steht.",
+    "supportedModes": "Schränkt die auf der Karte angebotenen Betriebs- bzw. Scharfschaltmodi ein.",
+    "mediaControl": "Ersetzt die Aktion der Schaltfläche links oben auf der Medienkarte.",
+    "alarmControl": "Ersetzt die Aktion der Schaltfläche links unten. Ohne Angabe zeigt sie nach "
+    "einem fehlgeschlagenen Scharfschalten die offenen Sensoren.",
+    "qrCode": "Inhalt des QR-Codes. Für WLAN: WIFI:S:<SSID>;T:WPA;P:<Passwort>;; — "
+    "wird als Template ausgewertet, das Passwort kann also aus HA kommen.",
+    "pin": "PIN, die zum Entsperren eingegeben werden muss.",
+    "destination": "Ziel nach erfolgreicher PIN-Eingabe, als navigate.<key> der versteckten Karte.",
+    # --- Screensaver ---
+    "theme": "Farben der einzelnen Screensaver-Elemente, je Element als [r, g, b].",
+    "weatherUnit": "Einheit der Temperaturen auf dem Screensaver.",
+    "forecastSkip": "Überspringt so viele Vorhersageeinträge — z. B. 1, um die aktuelle Stunde "
+    "auszulassen.",
+    "weatherOverrideForecast1": "Ersetzt die erste Vorhersagespalte durch eine eigene Entity.",
+    "weatherOverrideForecast2": "Ersetzt die zweite Vorhersagespalte durch eine eigene Entity.",
+    "weatherOverrideForecast3": "Ersetzt die dritte Vorhersagespalte durch eine eigene Entity.",
+    "weatherOverrideForecast4": "Ersetzt die vierte Vorhersagespalte durch eine eigene Entity.",
+    "doubleTapToUnlock": "Verlangt zwei Berührungen zum Verlassen des Screensavers — schützt vor "
+    "versehentlichem Schalten.",
+    "alternativeLayout": "Alternatives Screensaver-Layout. Es schaltet sich ohnehin selbst ein, "
+    "sobald eine 6. Entity konfiguriert ist.",
+    "statusIcon1": "Kleines Symbol links neben dem Datum. Aufbau wie eine Entity; zusätzlich ist "
+    "hier altFont: true für eine größere Schrift möglich.",
+    "statusIcon2": "Kleines Symbol rechts neben dem Datum. Aufbau wie statusIcon1.",
+    "defaultCard": "Karte, die nach dem Aufwachen erscheint, als navigate.<key>. Ohne Angabe die "
+    "erste Karte. Wird als Template ausgewertet.",
+    # --- Globale Settings ---
+    "panelRecvTopic": "MQTT-Topic, auf dem Tasmota meldet, was am Panel passiert.",
+    "panelSendTopic": "MQTT-Topic, über das die Befehle ans Panel gehen.",
+    "updateMode": "Wie die Display-Firmware aktualisiert wird, wenn das Backend neuer ist.",
+    "model": "Bauform des Panels. Bestimmt mit, wie viele Einträge auf eine Karte passen.",
+    "sleepTimeout": "Sekunden ohne Berührung bis zum Screensaver. 0 schaltet ihn ab.",
+    "sleepBrightness": "Helligkeit im Screensaver. Auch als Tagesplan oder als entity_id möglich.",
+    "screenBrightness": "Helligkeit während der Bedienung. Gleiche Schreibweisen wie "
+    "sleepBrightness.",
+    "defaultBackgroundColor": "Hintergrund aller Karten.",
+    "featureExperimentalSliders": "Schaltet experimentelle Schieberegler frei.",
+    "sleepTracking": "Anwesenheits-Entity. Ist sie abwesend/aus, geht das Display ganz aus. "
+    "Hat Vorrang vor sleepOverride.",
+    "sleepTrackingZones": "Zustände, die für sleepTracking als abwesend gelten.",
+    "sleepOverride": "Hebt die Screensaver-Helligkeit an, solange eine Entity an ist — etwa "
+    "damit das Panel bei Licht im Raum sichtbar bleibt.",
+    "locale": "Sprache der Panel-Beschriftungen und Grundlage des Datumsformats.",
+    "quiet": "Unterdrückt ausführliche Log-Ausgaben des Backends.",
+    "timeFormat": "Uhrzeitformat. Was hinter einem ? steht, landet in einem eigenen kleineren "
+    "Textfeld — so bekommt man AM/PM klein gesetzt.",
+    "dateFormatBabel": "Ausführlichkeit des Datums, wenn babel installiert ist (Normalfall).",
+    "dateAdditionalTemplate": "Zusatztext hinter dem Datum, Template erlaubt.",
+    "timeAdditionalTemplate": "Zusatztext unter der Uhrzeit, Template erlaubt.",
+    "dateFormat": "Datumsformat als Ausweichlösung, falls babel fehlt.",
+    "timezone": "Zeitzone für die Uhr auf dem Panel. Ohne Angabe die Zeit des AppDaemon-Servers.",
+    "displayURL-EU": "Eigene Bezugsquelle für die Display-Firmware des EU-Modells — nur nötig, "
+    "wenn das Panel nicht ins Internet darf.",
+    "displayURL-US-L": "Wie displayURL-EU, für das US-Modell im Querformat.",
+    "displayURL-US-P": "Wie displayURL-EU, für das US-Modell im Hochformat.",
+    "berryURL": "Eigene Bezugsquelle für das Tasmota-Berry-Skript (autoexec.be).",
+}
+
+# Welche Werte zulässig sind — die zweite Hälfte der Frage, die der Feldname nie beantwortet.
+# Der Editor zeigt das direkt unter der Beschreibung. Bewusst als Klartext und nicht als
+# maschinenlesbare Regel: geprüft wird hier nichts, das Backend bleibt die letzte Instanz.
+FIELD_VALUE_HINTS: Final[dict[str, str]] = {
+    # --- Entity-Zeile ---
+    "entity": "entity_id wie light.wohnzimmer · iText.<text> für festen Text · "
+    "navigate.<key> zum Blättern auf eine andere Karte · service.<domain>.<dienst> für einen "
+    "Dienstaufruf (Parameter dann unter data) · delete lässt den Platz frei",
+    "name": "Freier Text oder Template",
+    "icon": "mdi:<name> aus der Icon-Liste des Backends · {on: …, off: …} je Zustand · "
+    "text:<text> statt Symbol · ha:<template> für berechnete Inhalte",
+    "color": "[r, g, b] mit 0–255 · {on: [r,g,b], off: [r,g,b]} je Zustand · Template, das eine "
+    "solche Liste liefert",
+    "value": "Freier Text oder Template. Text nach der letzten } bleibt unverändert stehen — so "
+    "entstehen Einheiten wie {{ … }} °C",
+    "type": "Entity-Typ wie light, switch, sensor, shutter · beim Screensaver 0–3 für die "
+    "Vorhersagespalte",
+    "state": "Der Zustandswert als Text, z. B. on, off, home",
+    "state_not": "Der Zustandswert als Text, z. B. on, off, home",
+    "state_template": "Template, das true oder false ergibt",
+    "assumed_state": "true oder false",
+    "status": "entity_id",
+    "font": "small, medium-icon, medium, large — oder direkt eine Font-Nummer",
+    "data": "Zuordnung von Parametern, z. B. entity_id: light.küche",
+    "effectList": "Liste von Effektnamen, z. B. [Android, Aurora]",
+    "speed": "Ganzzahl −100 bis 100, auch als Template",
+    # --- Karte ---
+    "key": "Kurzer Name ohne Leer- und Sonderzeichen, z. B. wohnzimmer",
+    "title": "Freier Text",
+    "navItem1": "Aufbau wie eine Entity, üblich sind entity: navigate.<key> und icon",
+    "navItem2": "Aufbau wie eine Entity, üblich sind entity: navigate.<key> und icon",
+    "sleepTimeout": "Sekunden als Ganzzahl, 0 schaltet den Screensaver ab",
+    "cooldown": "Sekunden, auch mit Nachkommastelle (z. B. 0.5)",
+    "temperatureUnit": "celsius oder fahrenheit",
+    "supportedModes": "Liste, z. B. [heat, off] bei cardThermo oder [arm_away, arm_night] bei "
+    "cardAlarm",
+    "mediaControl": "Aufbau wie eine Entity",
+    "alarmControl": "entity_id",
+    "qrCode": "Freier Text oder Template",
+    "pin": "Ziffernfolge, Standard 3830",
+    "destination": "navigate.<key> einer Karte aus hiddenCards",
+    # --- Screensaver ---
+    "theme": "Zuordnung von Element zu [r, g, b], z. B. date: [255, 0, 0]. Mögliche Elemente: "
+    "background, time, timeAMPM, date, tMainText, bar, tTimeAdd, tMainTextAlt2 sowie "
+    "tForecast1–4 und tForecast1Val–4Val",
+    "weatherUnit": "celsius oder fahrenheit",
+    "forecastSkip": "Ganzzahl ab 0",
+    "weatherOverrideForecast1": "Aufbau wie eine Entity",
+    "weatherOverrideForecast2": "Aufbau wie eine Entity",
+    "weatherOverrideForecast3": "Aufbau wie eine Entity",
+    "weatherOverrideForecast4": "Aufbau wie eine Entity",
+    "doubleTapToUnlock": "true oder false",
+    "alternativeLayout": "true oder false",
+    "statusIcon1": "Aufbau wie eine Entity, zusätzlich altFont: true",
+    "statusIcon2": "Aufbau wie eine Entity, zusätzlich altFont: true",
+    "defaultCard": "navigate.<key>, auch als Template",
+    # --- Globale Settings ---
+    "panelRecvTopic": "MQTT-Topic, z. B. NSPanel_1/tele/RESULT",
+    "panelSendTopic": "MQTT-Topic, z. B. NSPanel_1/cmnd/CustomSend",
+    "updateMode": "auto-notify (nachfragen), auto (sofort) oder manual (nie von selbst)",
+    "model": "eu, us-l (Querformat) oder us-p (Hochformat)",
+    "sleepBrightness": "0–100 · oder eine Liste aus time und value (Uhrzeit, sunrise, "
+    "\"sunset + 1:00:00\") · oder die entity_id eines input_number",
+    "screenBrightness": "0–100, sonst wie sleepBrightness",
+    "defaultBackgroundColor": "ha-dark oder black",
+    "featureExperimentalSliders": "true oder false",
+    "sleepTracking": "entity_id einer person, eines device_tracker oder einer group",
+    "sleepTrackingZones": "Liste von Zuständen, Standard [not_home, off]",
+    "sleepOverride": "entity und brightness zusammen, z. B. "
+    "{entity: light.schlafzimmer, brightness: 20}",
+    "locale": "Sprachcode wie de_DE oder en_US",
+    "quiet": "true oder false",
+    "timeFormat": "strftime-Muster, z. B. %H:%M — oder \"%I:%M   ?%p\" für 12 Stunden mit AM/PM",
+    "dateFormatBabel": "full, long, medium oder short",
+    "dateAdditionalTemplate": "Freier Text oder Template",
+    "timeAdditionalTemplate": "Freier Text oder Template",
+    "dateFormat": "strftime-Muster, z. B. %A, %d. %B %Y",
+    "timezone": "Zeitzonenname wie Europe/Berlin",
+    "displayURL-EU": "http(s)-Adresse einer .tft-Datei",
+    "displayURL-US-L": "http(s)-Adresse einer .tft-Datei",
+    "displayURL-US-P": "http(s)-Adresse einer .tft-Datei",
+    "berryURL": "http(s)-Adresse einer .be-Datei",
+}
+
+# Felder, deren Bedeutung sich je Kartentyp ändert. Überschreiben FIELD_DESCRIPTIONS für genau
+# diesen Typ; alles Übrige bleibt bei der allgemeinen Beschreibung.
+CARD_FIELD_DESCRIPTIONS: Final[dict[str, dict[str, str]]] = {
+    "cardThermo": {"entity": "Die climate-Entity, die diese Karte steuert."},
+    "cardMedia": {
+        "entity": "Der media_player, den diese Karte steuert.",
+        "status": "Zusätzliche Entity für Symbol und Farbe links oben.",
+    },
+    "cardAlarm": {"entity": "Die alarm_control_panel-Entity, die diese Karte bedient."},
+    "cardChart": {"entity": "Die Entity, deren Verlauf das Diagramm zeigt."},
+    "screensaver": {
+        "entity": "Die Wetter-Entity des Screensavers. Ohne entities-Liste baut das Backend daraus "
+        "automatisch Hauptsymbol und vier Vorhersagespalten.",
+        "theme": "Farben der Screensaver-Elemente.",
+    },
+    "screensaver2": {
+        "entity": "Die Wetter-Entity des Screensavers.",
+        # Der color~-Befehl adressiert die Elemente des klassischen Layouts; screensaver2 hat
+        # andere Bausteine, deshalb greift theme dort bestenfalls teilweise.
+        "theme": "Für dieses Layout nicht vorgesehen — die Farbschlüssel gehören zum klassischen "
+        "Screensaver. Der Wert bleibt erhalten, wirkt hier aber allenfalls teilweise.",
+    },
+}
+
+# Keys, die immer wieder gesetzt werden, obwohl das Backend sie nirgends liest — sie stehen dann
+# wirkungslos in der YAML. Der Editor weist darauf hin, löscht aber nichts.
+KNOWN_IGNORED_FIELDS: Final[dict[str, str]] = {
+    "unit": "Das Backend liest kein unit. Die Einheit kommt aus dem Attribut unit_of_measurement "
+    "der Entity in Home Assistant; für eigenen Text stattdessen value verwenden, z. B. "
+    "\"{{ states('sensor.x') }} kWh\".",
+    "unit_of_measurement": "Wird aus Home Assistant übernommen und hier nicht ausgewertet — "
+    "für eigenen Text stattdessen value verwenden.",
 }
 
 
@@ -307,6 +609,17 @@ def schema_payload() -> dict[str, Any]:
         "fieldHints": FIELD_HINTS,
         "fieldOptions": {key: list(value) for key, value in FIELD_OPTIONS.items()},
         "fieldDescriptions": FIELD_DESCRIPTIONS,
+        # Zulässige Werte je Feld, als Klartext unter der Beschreibung.
+        "fieldValueHints": FIELD_VALUE_HINTS,
+        # Beschreibungen, die nur für einen bestimmten Kartentyp gelten.
+        "cardFieldDescriptions": CARD_FIELD_DESCRIPTIONS,
+        # Wie viele Entities das Display je Kartentyp und Modell wirklich zeigt.
+        "cardCapacity": {key: dict(value) for key, value in CARD_CAPACITY.items()},
+        "capacityLayoutNotes": CAPACITY_LAYOUT_NOTES,
+        "cardTypeNotes": CARD_TYPE_NOTES,
+        "cardsWithoutEntityList": list(CARDS_WITHOUT_ENTITY_LIST),
+        "gridAutoSwitchAt": GRID_AUTO_SWITCH_AT,
+        "knownIgnoredFields": KNOWN_IGNORED_FIELDS,
         # Felder, für die der Editor den Template-Modus anbietet (siehe TEMPLATE_FIELDS).
         "templateFields": list(TEMPLATE_FIELDS),
         "templateSuffixFields": list(TEMPLATE_SUFFIX_FIELDS),
@@ -316,6 +629,35 @@ def schema_payload() -> dict[str, Any]:
         # Entity-Liste aus. Der Screensaver hat beides: flache Entity *und* entities-Liste.
         "singleEntityCardTypes": list(SINGLE_ENTITY_CARD_TYPES),
     }
+
+
+def capacity_for(card_type: Any, model: Any = None) -> int | None:
+    """Wie viele Entities dieser Kartentyp auf diesem Panel-Modell anzeigt.
+
+    ``None`` heißt "unbekannt oder keine Entity-Liste" — dann macht der Editor keine Aussage,
+    statt eine zu erfinden. Unbekannte Modelle fallen auf ``eu`` zurück, weil das der Standard des
+    Backends ist.
+    """
+    if not isinstance(card_type, str):
+        return None
+    by_model = CARD_CAPACITY.get(card_type)
+    if by_model is None:
+        return None
+    if not isinstance(model, str) or model not in by_model:
+        model = "eu"
+    return by_model[model]
+
+
+def effective_card_type(card_type: Any, entity_count: int) -> Any:
+    """Der Kartentyp, den das Backend daraus tatsächlich macht.
+
+    Einziger Fall: ``cardGrid`` mit mehr als ``GRID_AUTO_SWITCH_AT`` Entities wird vom Backend
+    selbst auf ``cardGrid2`` umgestellt (pages.py). Wer das nicht weiß, wundert sich über ein
+    plötzlich anderes Layout — und über eine Kapazitätswarnung, die gar keine sein dürfte.
+    """
+    if card_type == "cardGrid" and entity_count > GRID_AUTO_SWITCH_AT:
+        return "cardGrid2"
+    return card_type
 
 
 def card_known_fields(card_type: Any, has_flat_entity: bool = False) -> tuple[str, ...]:
@@ -360,6 +702,7 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
     Level: ``error`` = Backend läuft damit sicher in einen Fehler, ``warning`` = vermutlich Tippfehler.
     """
     findings: list[dict[str, str]] = []
+    panel_model = (model.get("global") or {}).get("model")
 
     def check_card(card: Any, path: str) -> None:
         if not isinstance(card, dict):
@@ -372,16 +715,65 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
             findings.append(
                 {"level": "warning", "path": path, "message": f"Unbekannter Kartentyp '{card_type}'"}
             )
-        for index, entity in enumerate(card.get(CARD_ENTITIES_FIELD) or []):
+        entities = card.get(CARD_ENTITIES_FIELD) or []
+        # Wirkungslose Keys je Karte sammeln statt je Zeile melden – sonst steht dieselbe
+        # Erklärung fünfmal untereinander.
+        ignored_rows: dict[str, list[int]] = {}
+        for index, entity in enumerate(entities):
             entity_path = f"{path}.entities[{index}]"
             if not isinstance(entity, dict):
                 findings.append(
                     {"level": "error", "path": entity_path, "message": "Entity-Zeile ist kein Objekt"}
                 )
-            elif not entity.get("entity"):
+                continue
+            if not entity.get("entity"):
                 findings.append(
                     {"level": "error", "path": entity_path, "message": "Entity-Zeile ohne 'entity'"}
                 )
+            for key in KNOWN_IGNORED_FIELDS:
+                if key in entity:
+                    ignored_rows.setdefault(key, []).append(index + 1)
+        for key, rows in ignored_rows.items():
+            positions = ", ".join(str(row) for row in rows)
+            findings.append(
+                {
+                    "level": "warning",
+                    "path": f"{path}.entities",
+                    "message": f"'{key}' in Zeile {positions} bleibt wirkungslos. "
+                    f"{KNOWN_IGNORED_FIELDS[key]}",
+                }
+            )
+
+        # Zu viele Entities sind der stille Fehler schlechthin: die YAML ist gültig, das Backend
+        # meldet nichts, und auf dem Panel fehlen die überzähligen Einträge einfach.
+        shown_type = effective_card_type(card_type, len(entities))
+        capacity = capacity_for(shown_type, panel_model)
+        if capacity is not None and len(entities) > capacity:
+            model_note = f" (Modell {panel_model})" if isinstance(panel_model, str) else ""
+            switch_note = (
+                f" – bei über {GRID_AUTO_SWITCH_AT} Entities zeigt das Backend die Karte als "
+                f"{shown_type}"
+                if shown_type != card_type
+                else ""
+            )
+            findings.append(
+                {
+                    "level": "warning",
+                    "path": f"{path}.entities",
+                    "message": f"{len(entities)} Entities, aber {shown_type} zeigt auf diesem "
+                    f"Panel nur {capacity}{model_note}{switch_note}. Ab Nummer {capacity + 1} "
+                    f"erscheint nichts mehr auf dem Display.",
+                }
+            )
+        elif capacity is None and entities and card_type in CARDS_WITHOUT_ENTITY_LIST:
+            findings.append(
+                {
+                    "level": "warning",
+                    "path": f"{path}.entities",
+                    "message": f"{card_type} wertet keine entities-Liste aus – die Karte zeigt "
+                    f"nur die eine Entity, die direkt auf ihr konfiguriert ist.",
+                }
+            )
 
     if model.get("screensaver") is not None:
         check_card(model["screensaver"], "screensaver")
