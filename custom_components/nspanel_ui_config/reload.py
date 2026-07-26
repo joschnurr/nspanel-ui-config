@@ -148,7 +148,7 @@ async def async_restart_addon(slug: str, timeout: int = _SUPERVISOR_TIMEOUT) -> 
                 if response.status in (400, 404):
                     raise ReloadError(
                         f"Add-on '{slug}' nicht gefunden. Der Slug steht in der URL der "
-                        f"Add-on-Seite (…/hassio/addon/<slug>/info)."
+                        f"Add-on-Seite (…/hassio/addon/SLUG/info)."
                     )
                 body = (await response.text())[:200]
                 raise ReloadError(f"Supervisor antwortete {response.status}: {body}")

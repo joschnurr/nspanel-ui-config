@@ -84,3 +84,42 @@ def test_brand_assets_sind_vorhanden_und_nicht_leer() -> None:
         assert datei.is_file(), f"brand/{name} fehlt"
         assert datei.stat().st_size > 1000, f"brand/{name} ist verdächtig klein"
         assert datei.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"brand/{name} ist kein PNG"
+
+
+# --- Übersetzungen ------------------------------------------------------------------------------
+
+
+def test_uebersetzungen_enthalten_kein_html() -> None:
+    """Hassfest lehnt spitze Klammern in Übersetzungstexten als HTML ab.
+
+    Die Falle sind Platzhalter wie ``<slug>`` – gut gemeint, aber sie machen die CI rot. Statt
+    dessen SLUG oder ähnliches schreiben.
+    """
+    import re
+
+    muster = re.compile(r"<[^>]+>")
+    for name in ("strings.json", "translations/de.json", "translations/en.json"):
+        pfad = INTEGRATION / name
+        daten = json.loads(pfad.read_text(encoding="utf-8"))
+
+        def pruefe(obj: object, pfadangabe: str = "") -> None:
+            if isinstance(obj, dict):
+                for schluessel, wert in obj.items():
+                    pruefe(wert, f"{pfadangabe}.{schluessel}")
+            elif isinstance(obj, str):
+                assert not muster.search(obj), f"{name}{pfadangabe} enthält HTML-artiges: {obj[:60]}"
+
+        pruefe(daten)
+
+
+def test_uebersetzungen_decken_dieselben_felder_ab() -> None:
+    """Ein Feld nur auf Deutsch beschriftet wäre auf Englisch namenlos."""
+    de = json.loads((INTEGRATION / "translations/de.json").read_text(encoding="utf-8"))
+    en = json.loads((INTEGRATION / "translations/en.json").read_text(encoding="utf-8"))
+    for bereich, schritt in (("config", "user"), ("options", "init")):
+        de_felder = set(de[bereich]["step"][schritt].get("data", {}))
+        en_felder = set(en[bereich]["step"][schritt].get("data", {}))
+        assert de_felder == en_felder, (
+            f"{bereich}/{schritt}: nur de {sorted(de_felder - en_felder)}, "
+            f"nur en {sorted(en_felder - de_felder)}"
+        )

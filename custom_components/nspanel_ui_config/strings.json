@@ -16,7 +16,7 @@
         "data_description": {
           "output_path": "Where the generated YAML is written. What matters is that AppDaemon can read exactly this file – via /share for an add-on, or via a shared mount for separate containers.",
           "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API.",
-          "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/<slug>/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
+          "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/SLUG/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
           "reload_touch_path": "A file AppDaemon watches – its app module (apps/nspanel.py) or the apps.yaml. Home Assistant must be able to see it.",
           "reload_container": "Requires /var/run/docker.sock to be mounted into the Home Assistant container.",
           "backup_count": "Before every overwrite the previous state is copied into a \"backups\" subdirectory next to the output file; older ones are pruned to this count. 0 disables backups – a mistake in the editor is then irreversible."
@@ -43,7 +43,7 @@
         "data_description": {
           "output_path": "Where the generated YAML is written. What matters is that AppDaemon can read exactly this file – via /share for an add-on, or via a shared mount for separate containers.",
           "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API.",
-          "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/<slug>/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
+          "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/SLUG/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
           "reload_touch_path": "A file AppDaemon watches – its app module (apps/nspanel.py) or the apps.yaml. Home Assistant must be able to see it.",
           "reload_container": "Requires /var/run/docker.sock to be mounted into the Home Assistant container.",
           "backup_count": "Before every overwrite the previous state is copied into a \"backups\" subdirectory next to the output file; older ones are pruned to this count. 0 disables backups – a mistake in the editor is then irreversible."

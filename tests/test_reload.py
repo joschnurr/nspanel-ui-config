@@ -197,13 +197,28 @@ def test_addon_modus_ist_verdrahtet() -> None:
 
 
 def test_jeder_angebotene_modus_wird_behandelt() -> None:
-    """Was im Einrichtungsdialog zur Auswahl steht, muss reload.py auch kennen."""
+    """Was im Einrichtungsdialog zur Auswahl steht, muss reload.py auch kennen.
+
+    Die Optionen sind so gewählt, dass **nichts wirklich passiert**: ein Containername, den es
+    nicht gibt, ein Pfad, den es nicht gibt, und kein Supervisor-Token. Auf einem CI-Runner ist
+    ein Docker-Socket durchaus vorhanden — ohne diese Vorsicht könnte der Test dort einen echten
+    Container neu starten.
+
+    Abgefangen wird jede Exception, nicht nur ReloadError: Ob ein Modus am fehlenden ``aiohttp``
+    scheitert, ist hier gleichgültig; geprüft wird allein, dass keiner in den
+    „Unbekannter Reload-Modus"-Zweig fällt.
+    """
     alt = _ohne_supervisor_token()
+    optionen = {
+        CONF_RELOAD_CONTAINER: "nspanel-ui-config-existiert-nicht",
+        CONF_RELOAD_TOUCH_PATH: "/nicht/vorhanden/nspanel.py",
+        CONF_RELOAD_ADDON: "nspanel-ui-config-existiert-nicht",
+    }
     try:
         for modus in RELOAD_MODES:
             try:
-                trigger({CONF_RELOAD_MODE: modus})
-            except reload_mod.ReloadError as err:
+                trigger({CONF_RELOAD_MODE: modus, **optionen})
+            except Exception as err:  # noqa: BLE001 – siehe Docstring
                 assert "Unbekannter Reload-Modus" not in str(err), f"'{modus}' fehlt in reload.py"
     finally:
         _token_zuruecksetzen(alt)
