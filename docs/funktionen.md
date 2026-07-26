@@ -35,10 +35,10 @@ Templates einer Karte **in einem einzigen Aufruf** von `/api/template`, getrennt
 Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten Template
 scheitert, wird einzeln gerendert.
 
-**Die Geometrie ist abgemessen, nicht geschätzt.** Für `cardEntities`, `cardGrid`, `cardGrid2`,
-`cardQR`, `cardMedia` und `cardPower` steht in `www/panel/layouts.js` die Position jeder
-Slot-Komponente – Symbol, Name und Bedienfläche einzeln, für alle drei Panel-Modelle. Erzeugt wird
-die Datei von `tools/extract_layouts.py` aus den HMI-Dumps der Display-Firmware:
+**Die Geometrie ist abgemessen, nicht geschätzt.** Für alle Karten mit Entity-Liste und für beide
+Screensaver steht in `www/panel/layouts.js` die Position jeder Slot-Komponente – Symbol, Name und
+Bedienfläche einzeln, für alle drei Panel-Modelle. Erzeugt wird die Datei von
+`tools/extract_layouts.py` aus den HMI-Dumps der Display-Firmware:
 
 ```bash
 python3 tools/extract_layouts.py /pfad/zu/nspanel-lovelace-ui
@@ -46,9 +46,14 @@ python3 tools/extract_layouts.py /pfad/zu/nspanel-lovelace-ui
 
 Das Werkzeug prüft dabei gegen `CARD_CAPACITY` und schreibt nichts, wenn die Platzzahl abweicht –
 eine Vorschau, die dem Editor widerspricht, wäre schlimmer als gar keine. `tests/test_layouts.py`
-prüft dieselbe Übereinstimmung ohne Netz, damit eine vergessene Neuerzeugung auffällt. Der
-Screensaver ist ebenfalls abgemessen, aber von Hand: dort steckt die Zuordnung nicht in den
-Komponentennamen, sondern in den `spstr`-Aufrufen des Seitencodes.
+prüft dieselbe Übereinstimmung ohne Netz, damit eine vergessene Neuerzeugung auffällt.
+
+Bei den Karten reicht dafür die Namenskonvention der Komponenten (`tEntity1…`, `bEntity1…`).
+**Beim Screensaver nicht** – dort verrät kein Name, welchen Listeneintrag eine Komponente zeigt. Die
+Zuordnung wird stattdessen aus den `spstr`-Aufrufen des Seitencodes hergeleitet: der
+`weatherUpdate~`-String trägt sechs Felder je Eintrag, aus dem Feldindex folgen Eintrag und Rolle
+(`entity = (index-1) // 6`, `rolle = (index-1) % 6`). Dass die Herleitung trägt, zeigt der Abgleich –
+sie ergibt genau die Aufteilung, die schon im Schema stand.
 
 **Was Näherung bleibt:**
 

@@ -36,7 +36,7 @@ etwas. Das Layout ändert sich dabei allerdings sichtbar: kleinere Kacheln, ande
 | Karte | Aufteilung der Plätze |
 | --- | --- |
 | `screensaver` | 1. = großes Hauptsymbol · 2.–5. = die vier Vorhersagespalten · eine 6. aktiviert das alternative Layout (siehe unten) |
-| `screensaver2` | 1. = Hauptbereich · 2.–4. = Zeile mit Symbol und Wert · 5.–10. = Kacheln mit Symbol, Name und Wert · 11.–15. = reine Symbole |
+| `screensaver2` | 1. = großer Hauptbereich · 2.–4. = drei Einträge mit Symbol und Wert, untereinander · 5.–10. = sechs Kacheln mit Symbol, Name und Wert · 11.–15. = fünf reine Symbole (auf dem eu-Panel *über* den Kacheln, nicht darunter) |
 
 **Das alternative Layout des `screensaver` verdrängt quer einen Eintrag.** Sobald eine 6. Entity
 gesetzt ist, trägt der Hauptbereich zwei Textblöcke (1. und 6. Entity). Was mit den

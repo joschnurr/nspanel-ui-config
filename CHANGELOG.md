@@ -15,11 +15,18 @@ aussieht. Über jedem Kartenformular steht jetzt eine Nachbildung des Displays i
   werden über Home Assistants `/api/template` gerendert – alle einer Karte in einem einzigen Aufruf,
   mit Einzelaufrufen als Rückfallebene.
 - **Die Geometrie ist abgemessen, nicht geschätzt.** `tools/extract_layouts.py` liest die
-  Slot-Positionen aus den HMI-Dumps der Display-Firmware und erzeugt `www/panel/layouts.js` – für
-  `cardEntities`, `cardGrid`, `cardGrid2`, `cardQR`, `cardMedia` und `cardPower` in allen drei
-  Panel-Modellen, mit Symbol-, Namens- und Wertfläche jedes Platzes einzeln. Das Werkzeug schreibt
-  nur, wenn die Platzzahl zu `CARD_CAPACITY` passt; `tests/test_layouts.py` prüft dasselbe ohne Netz.
-  Nebenbei bestätigt: alle 18 Kombinationen ergeben genau die Zahlen, die schon im Schema standen.
+  Slot-Positionen aus den HMI-Dumps der Display-Firmware und erzeugt `www/panel/layouts.js` – alle
+  Karten mit Entity-Liste **und beide Screensaver**, in allen drei Panel-Modellen, mit Symbol-,
+  Namens- und Wertfläche jedes Platzes einzeln. Das Werkzeug schreibt nur, wenn die Platzzahl zu
+  `CARD_CAPACITY` passt; `tests/test_layouts.py` prüft dasselbe ohne Netz. Nebenbei bestätigt: alle
+  24 Kombinationen ergeben genau die Zahlen, die schon im Schema standen.
+- Beim Screensaver steht die Zuordnung nicht in den Komponentennamen, sondern im Seitencode. Sie
+  wird deshalb aus den `spstr`-Aufrufen **hergeleitet**: der `weatherUpdate~`-String trägt sechs
+  Felder je Eintrag, aus dem Feldindex folgen Eintrag *und* Rolle. Das Ergebnis deckt sich exakt mit
+  der Aufteilung, die `CAPACITY_LAYOUT_NOTES` beschreibt.
+- Dabei fiel auf, dass die Notiz zu `screensaver2` zu grob war: die fünf reinen Symbole
+  (Einträge 11–15) stehen auf dem eu-Panel **über** den sechs Kacheln, nicht darunter, und die
+  Einträge 2–4 stehen untereinander statt in einer Zeile. Korrigiert.
 - **Die Zahl der Plätze bleibt allein Sache des Schemas** (`CARD_CAPACITY`); die Vorschau bekommt sie
   übergeben und kann ihr deshalb nicht widersprechen.
 - Freie Plätze (`entity: delete`, leer) sind als solche zu sehen, `iText.`/`navigate.`/`service.`

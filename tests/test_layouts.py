@@ -71,11 +71,20 @@ def test_kein_rechteck_liegt_ausserhalb_des_displays() -> None:
                 )
 
 
+SCREENSAVER = ("screensaver", "screensaver2")
+
+
 def test_jede_karte_hat_titel_und_blaettertasten() -> None:
-    """Der Rahmen sitzt bei allen Karten oben – Titel mittig, die Tasten links und rechts davon."""
+    """Der Rahmen sitzt bei allen Karten oben – Titel mittig, die Tasten links und rechts davon.
+
+    Die Screensaver haben ihn nicht: sie füllen das Display vollständig aus.
+    """
     for card_type, je_modell in LAYOUTS.items():
         for model, layout in je_modell.items():
             chrome = layout.get("chrome", {})
+            if card_type in SCREENSAVER:
+                assert not chrome, f"{card_type}/{model} sollte keinen Rahmen haben"
+                continue
             assert set(chrome) == {"title", "prev", "next"}, f"{card_type}/{model}: {sorted(chrome)}"
             titel_x = chrome["title"][0]
             assert chrome["prev"][0] < titel_x < chrome["next"][0], (
@@ -86,11 +95,12 @@ def test_jede_karte_hat_titel_und_blaettertasten() -> None:
 def test_die_plaetze_stehen_in_anzeigereihenfolge() -> None:
     """Erst von links nach rechts, dann nach unten – sonst wäre die entities-Liste vertauscht.
 
-    Ausgenommen ist cardPower: dort stehen die ersten beiden Einträge in der Mitte, die übrigen
-    außen herum (siehe CAPACITY_LAYOUT_NOTES).
+    Ausgenommen sind die Karten, deren Plätze bewusst nicht in Leserichtung liegen: ``cardPower``
+    hält die ersten beiden Einträge in der Mitte, und beim Screensaver gehört der letzte Platz dem
+    alternativen Layout (er sitzt im Hauptbereich, also weiter oben als die Vorhersagespalten).
     """
     for card_type, je_modell in LAYOUTS.items():
-        if card_type == "cardPower":
+        if card_type in ("cardPower",) + SCREENSAVER:
             continue
         for model, layout in je_modell.items():
             oben_links = [
@@ -102,3 +112,27 @@ def test_die_plaetze_stehen_in_anzeigereihenfolge() -> None:
                 assert y2 > y1 or (abs(y2 - y1) <= 2 and x2 > x1), (
                     f"{card_type}/{model}: Reihenfolge springt von ({x1},{y1}) auf ({x2},{y2})"
                 )
+
+
+def test_screensaver_vorhersagespalten_stehen_nebeneinander() -> None:
+    """Die Einträge 2–5 sind die Vorhersagespalten und laufen nach rechts.
+
+    Das ist der Teil der Screensaver-Zuordnung, der beim Herleiten aus dem Seitencode schiefgehen
+    könnte: ein vertauschter Feldindex würde die Spalten in falscher Reihenfolge belegen.
+    """
+    for model, layout in LAYOUTS["screensaver"].items():
+        spalten = [min(r[0] for r in slot.values()) for slot in layout["slots"][1:5]]
+        assert spalten == sorted(spalten), f"{model}: Vorhersagespalten nicht von links nach rechts"
+
+
+def test_screensaver_kennt_uhrzeit_datum_und_das_alternative_layout() -> None:
+    for model, layout in LAYOUTS["screensaver"].items():
+        assert "tTime" in layout["special"], f"{model}: Uhrzeit fehlt"
+        assert "tDate" in layout["special"], f"{model}: Datum fehlt"
+        # Der Hauptbereich hat eine zweite Position für das alternative Layout (Eintrag 1 rückt
+        # dorthin, sobald eine 6. Entity gesetzt ist).
+        assert "0" in layout.get("alt", {}), f"{model}: Alt-Position von Eintrag 1 fehlt"
+
+    for model, layout in LAYOUTS["screensaver2"].items():
+        assert "tTime" in layout["special"], f"{model}: Uhrzeit fehlt"
+        assert not layout.get("alt"), f"{model}: screensaver2 hat kein alternatives Layout"

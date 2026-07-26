@@ -118,10 +118,17 @@ ist die Grundlage für alles Weitere. Option C bleibt als Ausbaustufe offen, Opt
   ab. Dass die Muster stimmen, zeigt der Abgleich: **alle 18 Kombinationen aus Karte und Modell
   ergeben genau die Platzzahl, die schon in `CARD_CAPACITY` stand** – zwei unabhängig hergeleitete
   Wege mit demselben Ergebnis.
-- **Beim Screensaver reicht das nicht.** Dort heißen die Komponenten nicht durchnummeriert nach
-  Listenposition; welche welchen Eintrag zeigt, steht in den `spstr`-Aufrufen des Seitencodes
-  (`spstr strCommand.txt,tForecast1.txt,"~",11` – Feldindex 11 des `weatherUpdate~`-Strings). Seine
-  Werte sind deshalb von Hand eingetragen, mit Verweis auf die Fundstelle.
+- **Beim Screensaver reicht das nicht** – und der Seitencode liefert die Zuordnung trotzdem. Kein
+  Komponentenname verrät dort die Listenposition, aber jede holt sich ihr Feld mit
+  `spstr strCommand.txt,tForecast1.txt,"~",11`. Der `weatherUpdate~`-String trägt sechs Felder je
+  Eintrag, also folgen aus dem Index beides: `entity = (index-1) // 6` und
+  `rolle = (index-1) % 6` (2 = Symbol, 4 = Name, 5 = Wert). Wichtig ist dabei, nur den Block
+  `if(tInstruction.txt=="weatherUpdate")` auszuwerten – `tIcon1` etwa holt sich Feld 1 des
+  *statusUpdate*-Strings und wäre sonst fälschlich der erste Listeneintrag.
+- **Die Herleitung bestätigt das Schema und korrigiert es zugleich.** Sie ergibt für `screensaver`
+  6 Einträge und für `screensaver2` die Gruppen 1/3/6/5 – genau wie in `CAPACITY_LAYOUT_NOTES`.
+  Die Positionen zeigten aber, dass die Notiz zu `screensaver2` zu grob war: die reinen Symbole
+  stehen auf dem eu-Panel *über* den Kacheln, nicht darunter.
 - **Dabei ist ein echter Befund abgefallen:** im alternativen Screensaver-Layout blendet das HMI
   quer die erste Vorhersagespalte aus und rückt die übrigen nach rechts – die 5. Entity verliert
   ihren Platz. Hochkant passiert das nicht (`if(p0.w!=320)`). Das steht in keiner Dokumentation und

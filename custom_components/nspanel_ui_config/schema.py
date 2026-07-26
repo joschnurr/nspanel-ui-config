@@ -98,8 +98,10 @@ CAPACITY_LAYOUT_NOTES: Final[dict[str, str]] = {
     "die erste Vorhersagespalte aus und rückt die übrigen nach rechts — die 5. Entity "
     "verliert dadurch ihren Platz. Hochkant (us-p) stehen die Textblöcke nebeneinander, "
     "dort bleiben alle sechs sichtbar.",
-    "screensaver2": "1. Entity = Hauptbereich, 2.–4. = Zeile mit Symbol und Wert, "
-    "5.–10. = Kacheln mit Symbol, Name und Wert, 11.–15. = reine Symbole.",
+    "screensaver2": "1. Entity = großer Hauptbereich. 2.–4. = drei Einträge mit Symbol und Wert, "
+    "untereinander an derselben Seite. 5.–10. = sechs Kacheln mit Symbol, Name und Wert in einer "
+    "eigenen Reihe. 11.–15. = fünf reine Symbole, wieder in einer eigenen Reihe — sie stehen auf "
+    "dem eu-Panel *über* den Kacheln, nicht darunter. Die Vorschau zeigt die genaue Lage.",
 }
 
 # Einzeiler zum Kartentyp selbst — was die Karte überhaupt darstellt.

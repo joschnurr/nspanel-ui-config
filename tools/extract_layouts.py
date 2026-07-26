@@ -146,6 +146,86 @@ def slots_card_power(komponenten: dict) -> list[dict]:
     return slots
 
 
+# --- Screensaver ------------------------------------------------------------------------------
+#
+# Hier tragen die Komponentennamen die Zuordnung *nicht*: ``tMainText`` und ``tForecast3`` verraten
+# nicht, welchen Listeneintrag sie zeigen. Das steht im Seitencode, und zwar präzise: der
+# ``weatherUpdate~``-String besteht aus 6 Feldern je Entity, und jede Komponente holt sich ihr Feld
+# mit ``spstr strCommand.txt,<komponente>.txt,"~",<feldindex>``. Aus dem Index folgt beides —
+# Eintrag und Rolle:
+#
+#     entity = (feldindex - 1) // 6
+#     rolle  = (feldindex - 1) %  6   →  0 type, 1 entityId, 2 icon, 3 color, 4 name, 5 value
+#
+# Damit ist die Zuordnung *hergeleitet* statt abgeschrieben. Probe aufs Exempel: sie ergibt für
+# ``screensaver`` genau 6 Einträge (1 Hauptbereich, 4 Vorhersagen, 1 für das alternative Layout) und
+# für ``screensaver2`` genau 15 in den Gruppen 1 / 3 / 6 / 5 — dieselbe Aufteilung, die
+# ``CAPACITY_LAYOUT_NOTES`` beschreibt.
+SPSTR = re.compile(r'spstr\s+strCommand\.txt\s*,\s*(\w+)\.txt\s*,\s*"~"\s*,\s*(\d+)')
+BLOCK = re.compile(r'if\(tInstruction\.txt=="(\w+)"')
+ALIAS = re.compile(r"(\w+)\.txt\s*=\s*(\w+)\.txt")
+FELD_ROLLEN = {2: "icon", 4: "name", 5: "value"}
+
+# Komponenten anderer Befehle (Uhrzeit, Datum, Statussymbole). Sie gehören nicht zur Entity-Liste,
+# die Vorschau braucht ihre Lage aber, sonst fehlte die halbe Anzeige.
+SPECIAL_BLOCKS = {"time": "time", "date": "date", "statusUpdate": "status"}
+
+
+def _blocks(text: str) -> dict[str, str]:
+    """Der Seitencode, zerlegt nach ``if(tInstruction.txt=="…")``.
+
+    Ohne diese Trennung liest man Feldindizes anderer Befehle mit — ``tIcon1`` etwa holt sich Feld 1
+    des *statusUpdate*-Strings und wäre sonst fälschlich Eintrag 0 der Entity-Liste.
+    """
+    marken = [(m.start(), m.group(1)) for m in BLOCK.finditer(text)]
+    ergebnis: dict[str, str] = {}
+    for i, (pos, name) in enumerate(marken):
+        ende = marken[i + 1][0] if i + 1 < len(marken) else len(text)
+        ergebnis.setdefault(name, text[pos:ende])
+    return ergebnis
+
+
+def slots_screensaver(text: str, komponenten: dict) -> tuple[list[dict], dict, dict]:
+    """(slots, alt, special) für eine Screensaver-Seite."""
+    nach_name = {kopf.split(" ", 1)[1]: rect for kopf, rect in komponenten.items()}
+    bloecke = _blocks(text)
+    zuordnung: dict[str, tuple[int, str]] = {}
+    for name, index in SPSTR.findall(bloecke.get("weatherUpdate", "")):
+        if name == "tTmp":  # Hilfsfeld für die Farbumrechnung, keine Anzeige
+            continue
+        entity, offset = divmod(int(index) - 1, 6)
+        if offset in FELD_ROLLEN:
+            zuordnung.setdefault(name, (entity, FELD_ROLLEN[offset]))
+
+    anzahl = max((e for e, _ in zuordnung.values()), default=-1) + 1
+    slots: list[dict] = [{} for _ in range(anzahl)]
+    for name, (entity, rolle) in zuordnung.items():
+        if name in nach_name:
+            slots[entity][rolle] = list(nach_name[name])
+
+    # Das alternative Layout zeigt denselben Eintrag an anderer Stelle. Diese Komponenten holen
+    # sich kein eigenes Feld, sondern werden zugewiesen (`tMainTextAlt.txt=tMainText.txt`) — und
+    # heißen wie das Original mit angehängtem Alt/Alt2.
+    alt: dict[str, dict] = {}
+    for ziel, quelle in ALIAS.findall(bloecke.get("weatherUpdate", "")):
+        if not re.fullmatch(rf"{re.escape(quelle)}Alt\d*", ziel) or quelle not in zuordnung:
+            continue
+        entity, rolle = zuordnung[quelle]
+        if ziel in nach_name:
+            alt.setdefault(str(entity), {})[rolle] = list(nach_name[ziel])
+
+    special = {}
+    for block, schluessel in SPECIAL_BLOCKS.items():
+        for name, _ in SPSTR.findall(bloecke.get(block, "")):
+            if name != "tTmp" and name in nach_name:
+                special[name] = list(nach_name[name])
+    # tTime wird nicht per spstr gefüllt (die Uhr kommt aus der RTC), gehört aber dazu.
+    for name in ("tTime", "tTimeAdd", "tDate", "tAMPM"):
+        if name in nach_name:
+            special.setdefault(name, list(nach_name[name]))
+    return slots, alt, special
+
+
 # Wie die Plätze je Seite heißen. Gruppe 1 des Musters ist die Nummer im Namen.
 SEITEN = {
     "cardEntities": lambda k: _rollen(
@@ -174,9 +254,19 @@ SEITEN = {
     "cardPower": slots_card_power,
 }
 
+# Diese beiden gehen den Weg über den Seitencode (siehe slots_screensaver).
+SCREENSAVER_SEITEN = ("screensaver", "screensaver2")
+
 
 def layout_fuer(dump: str, model: str, seite: str) -> dict:
     komponenten = parse_components(dump)
+    if seite in SCREENSAVER_SEITEN:
+        slots, alt, special = slots_screensaver(dump, komponenten)
+        layout = {"screen": list(SCREENS[model]), "chrome": {}, "slots": slots, "special": special}
+        if alt:
+            layout["alt"] = alt
+        return layout
+
     chrome = {}
     for rolle, muster in CHROME_PATTERNS.items():
         for name, rect in komponenten.items():
@@ -200,7 +290,7 @@ def main(argv: list[str]) -> int:
 
     layouts: dict[str, dict] = {}
     abweichungen = 0
-    for seite in SEITEN:
+    for seite in list(SEITEN) + list(SCREENSAVER_SEITEN):
         layouts[seite] = {}
         for model, unterordner in MODEL_DIRS.items():
             datei = repo / unterordner / f"{seite}.txt"
