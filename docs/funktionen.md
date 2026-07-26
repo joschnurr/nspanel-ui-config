@@ -203,3 +203,19 @@ node tools/optimize-brand-png.mjs quelle.png ziel.png 128
 
 Das drückt sie um ~83 % (14,1 / 47,5 / 38,8 kB) **ohne sichtbaren Unterschied**. Bei 64 Farben
 zeigt der dunkle Rahmen des Icons Banding – 128 ist die Grenze.
+
+### Social Preview
+
+`docs/social-preview.jpg` (1280×640, ~105 kB) ist das Bild, das GitHub in jeder Linkvorschau des
+Repos zeigt. Erzeugt aus derselben Quelle:
+
+```bash
+npm install jpeg-js
+node tools/make-social-preview.mjs docs/brand-source.jpg docs/social-preview.jpg
+```
+
+Das Motiv wird proportional eingepasst und auf Fast-Schwarz zentriert, **nicht beschnitten** – ein
+2:1-Ausschnitt würde den Schriftzug am unteren Rand kosten.
+
+**Hochladen lässt es sich nur von Hand:** *Settings → General → Social preview* im Web-UI von
+GitHub. Es gibt dafür keinen API-Endpunkt, die Datei im Repo genügt also nicht.
