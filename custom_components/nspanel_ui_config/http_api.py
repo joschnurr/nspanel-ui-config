@@ -9,6 +9,7 @@ Endpunkte (alle nur für Admins):
   GET  /api/nspanel_ui_config/backups   → vorhandene Sicherungen der Ausgabedatei
   POST /api/nspanel_ui_config/backups/restore → eine Sicherung zurückspielen
   GET  /api/nspanel_ui_config/live      → was das Backend zuletzt ans Display geschickt hat
+  POST /api/nspanel_ui_config/show      → das Panel auf eine bestimmte Karte bitten
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from .const import (
     API_IMPORT,
     API_LIVE,
     API_SCHEMA,
+    API_SHOW,
     CONF_BACKUP_COUNT,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
@@ -56,6 +58,7 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelBackupsView(hass))
     hass.http.register_view(NsPanelBackupRestoreView(hass))
     hass.http.register_view(NsPanelLiveView(hass))
+    hass.http.register_view(NsPanelShowView(hass))
 
 
 def _backup_count(options: dict[str, Any]) -> int:
@@ -392,3 +395,34 @@ class NsPanelLiveView(_NsPanelView):
                 "aufrufen oder auf die nächste Aktualisierung warten."
             )
         return self.json(antwort)
+
+
+class NsPanelShowView(_NsPanelView):
+    """Bittet das Panel, eine bestimmte Karte anzuzeigen.
+
+    Body: ``{"key": "<key der Karte>"}``. Damit lässt sich die Live-Ansicht gezielt füllen, statt
+    auf das zu warten, was das Gerät zufällig anzeigt — im Ruhezustand ist das immer der
+    Screensaver. **Das echte Panel wechselt dabei sichtbar die Anzeige**, deshalb passiert es nur
+    auf ausdrückliche Anforderung aus dem Editor.
+    """
+
+    url = API_SHOW
+    name = "api:nspanel_ui_config:show"
+
+    async def post(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        try:
+            payload = await request.json()
+        except ValueError:
+            return self.json_message("Ungültiges JSON", HTTPStatus.BAD_REQUEST)
+        key = payload.get("key") if isinstance(payload, dict) else None
+        if not isinstance(key, str) or not key.strip():
+            return self.json_message("'key' fehlt", HTTPStatus.BAD_REQUEST)
+
+        try:
+            await live.async_show_card(self.hass, data, key.strip())
+        except live.LiveError as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        return self.json({"ok": True, "key": key.strip()})

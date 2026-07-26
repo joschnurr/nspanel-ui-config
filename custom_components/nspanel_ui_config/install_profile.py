@@ -90,7 +90,7 @@ PROFILES: Final[dict[str, dict[str, Any]]] = {
         "hint": (
             "Home Assistant und AppDaemon teilen sich das Dateisystem, ein Mount entfällt. Der "
             "Ausgabepfad ist frei wählbar; unter „Datei zum Anticken“ AppDaemons App-Modul "
-            "angeben (z. B. /home/appdaemon/conf/apps/nspanel.py), dann lädt AppDaemon nur diese "
+            "angeben (z. B. /home/appdaemon/conf/apps/apps.yaml – es muss die apps.yaml sein), dann lädt AppDaemon nur diese "
             "eine App neu."
         ),
     },

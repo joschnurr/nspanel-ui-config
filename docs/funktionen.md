@@ -32,13 +32,14 @@ Verzögerung durch, ohne dass das Formular neu aufgebaut wird (der Fokus bleibt 
 zweiten Tabelle im Frontend), die Symbole, die Farben – auch `{on, off}`, das nach dem aktuellen
 Zustand auswählt – und die Werte, inklusive gerenderter Templates.
 
+Für die Templates macht das Panel **einen einzigen Aufruf** von `/api/template` je Karte, getrennt
+durch ein Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten
+Template scheitert, wird einzeln gerendert.
+
 **Die Farbe liegt auf dem Symbol**, nicht auf Name und Wert. So macht es das Gerät: das HMI schreibt
 die übertragene Farbe in die Schriftfarbe der Icon-Komponente (`covx tTmp.txt,tF1Icon.pco`), während
-die Textfelder ihre feste Farbe behalten. Ein `color`-Template färbt also das Symbol – wer den Text
-einfärben will, findet dafür im Backend keine Möglichkeit. Für die rendert das Panel alle
-Templates einer Karte **in einem einzigen Aufruf** von `/api/template`, getrennt durch ein
-Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten Template
-scheitert, wird einzeln gerendert.
+die Textfelder ihre feste Farbe behalten. Ein `color`-Template färbt also das Symbol – für farbige
+Beschriftungen gibt es im Backend keine Möglichkeit.
 
 **Die Geometrie ist abgemessen, nicht geschätzt.** Für alle Karten mit Entity-Liste und für beide
 Screensaver steht in `www/panel/layouts.js` die Position jeder Slot-Komponente – Symbol, Name und
@@ -94,8 +95,10 @@ und zerlegt die Nachrichten (`protocol.py`). Vorher schickt das Backend `pageTyp
 damit ist der Aufbau der folgenden Nachricht bekannt, denn sie selbst sagt nicht, zu welcher Karte
 sie gehört.
 
-> **Ausschließlich lesend.** Die Integration abonniert, sie veröffentlicht nie. Das ist Absicht:
-> eine einzige Nachricht auf dem Sende-Topic würde das echte Panel umschalten.
+> **Lesend, mit einer Ausnahme auf Knopfdruck.** Von sich aus veröffentlicht die Integration
+> nichts; auf das **Sende**-Topic schreibt sie nie – dort würde eine Nachricht das Display
+> unmittelbar überschreiben. Nur der Knopf *Karte am Gerät aufrufen* sendet, und zwar auf dem
+> *Empfangs*-Topic (siehe unten).
 
 Voraussetzungen: die MQTT-Integration ist in Home Assistant eingerichtet, und im Modell steht ein
 `panelSendTopic`. Fehlt eines von beidem, sagt die Live-Ansicht genau das — statt leer zu bleiben.
@@ -106,6 +109,14 @@ Letzte zeigt, wäre beim Bearbeiten einer Karte nutzlos. Wer am Gerät einmal du
 blättert, hat danach für jede den echten Stand; der Editor legt beim Bearbeiten automatisch die
 passende Fassung daneben, mitsamt Zeitpunkt. War eine Karte noch nie dran, sagt die Ansicht das und
 zeigt solange, was gerade läuft.
+
+**Karte gezielt aufrufen.** Neben der Fläche steht *Karte am Gerät aufrufen*: ein Klick, und das
+Panel springt auf diese Karte – damit muss man nicht am Gerät stehen, um die Ansicht zu füllen.
+Gesendet wird dabei auf dem `panelRecvTopic` genau die Nachricht, die auch das Panel bei einem
+Tastendruck schickt (`event,buttonPress2,navigate.<key>,button`); das Backend rendert daraufhin die
+Karte. **Das Gerät wechselt sichtbar die Anzeige** – geschaltet wird nichts. Voraussetzung: die Karte
+hat ein Feld `key`, denn darüber findet das Backend sie (`search_card` in `config.py`). Ohne `key`
+sagt der Editor das an dieser Stelle.
 
 **Farben** kommen als 16-Bit-Wert des Displays zurück (5/6/5 Bit). Zurückgerechnet ergibt das
 leichte Abweichungen zum konfigurierten RGB — kein Fehler, sondern genau die Farbe, die das Display
@@ -203,7 +214,7 @@ Weg möglich ist, hängt an der Installationsart — der Einrichtungsdialog wäh
 | --- | --- | --- |
 | `none` (Standard) | nichts – man lädt AppDaemon selbst neu | – |
 | `restart_addon` | startet das AppDaemon-**Add-on** über den Supervisor neu | Home Assistant OS/Supervised; Slug unter `reload_addon` (Community-Add-on: `a0d7b954_appdaemon`) |
-| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`); AppDaemon lädt daraufhin genau diese App neu | HA muss die Datei sehen. Bei Core ohne Weiteres gegeben; bei getrennten Containern AppDaemons `apps/` zusätzlich in den HA-Container mounten. Pfad unter `reload_touch_path` |
+| `touch_module` | setzt die mtime von AppDaemons `apps.yaml` neu; AppDaemon lädt daraufhin genau diese App **mitsamt Konfiguration** neu. **Nicht das App-Modul antippen** – das startet die App neu, liest die per `!include` eingebundene YAML aber nicht neu ein, die Änderung bliebe unsichtbar | HA muss die Datei sehen. Bei Core ohne Weiteres gegeben; bei getrennten Containern AppDaemons `apps/` zusätzlich in den HA-Container mounten. Pfad unter `reload_touch_path` |
 | `restart_container` | startet den AppDaemon-**Container** über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; Containername unter `reload_container` |
 
 `touch_module` ist der feingranularste Weg – nur die betroffene App startet neu. `restart_addon` und

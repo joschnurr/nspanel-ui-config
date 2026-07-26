@@ -3,6 +3,40 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.12.0 – 2026-07-26
+
+### Karte gezielt am Gerät aufrufen
+
+Die Live-Ansicht hing davon ab, was das Panel zufällig zeigte – im Ruhezustand also immer der
+Screensaver. Neben der Displayfläche steht jetzt **„Karte am Gerät aufrufen"**: ein Klick, und das
+Panel springt auf die gerade bearbeitete Karte.
+
+Gesendet wird dabei auf dem `panelRecvTopic` genau die Nachricht, die auch das Panel bei einem
+Tastendruck schickt (`event,buttonPress2,navigate.<key>,button`). **Das Gerät wechselt sichtbar die
+Anzeige** – geschaltet wird nichts, und es passiert nur auf Klick. Auf das *Sende*-Topic schreibt die
+Integration weiterhin nie. Voraussetzung ist ein `key` an der Karte; fehlt er, sagt der Editor das an
+dieser Stelle.
+
+### Wichtig für `reload_mode: touch_module` – es muss die `apps.yaml` sein
+
+Beim Prüfen des Kartenaufrufs kam heraus: Tickt man **das App-Modul** (`apps/nspanel.py`) an, startet
+AppDaemon die App zwar sichtbar neu (*Modified Python files* → *Started*), **liest die per `!include`
+eingebundene Konfiguration dabei aber nicht neu ein**. Die frisch erzeugte YAML bleibt wirkungslos –
+und das merkt man nur daran, dass sich am Panel nichts ändert.
+
+Nachgemessen: nach dem Anticken der `.py` fand das Backend einen neu vergebenen `key` nicht, nach dem
+Anticken der `apps.yaml` sofort. Hinweistexte, Voreinstellungen und Doku nennen jetzt durchgängig die
+`apps.yaml`. Wer `restart_container` oder `restart_addon` nutzt, war davon nie betroffen.
+
+### Farbe des Symbols abgesichert
+
+`ha-icon` füllt sein SVG mit `var(--icon-primary-color, currentcolor)`. Ist die Variable von einem
+Theme gesetzt, gewinnt sie gegen die geerbte Farbe – die Vorschau setzt jetzt beides.
+
+Neu ist außerdem `tests/draw.test.mjs`: fünf Tests der Zeichenschicht gegen eine minimale
+DOM-Attrappe. Die bisherigen Tests prüften Geometrie und Inhalt, aber nicht das Zusammensetzen –
+genau dort saß der Fehler mit der Farbe am falschen Element.
+
 ## 0.11.0 – 2026-07-26
 
 Drei Rückmeldungen von der echten Anlage.

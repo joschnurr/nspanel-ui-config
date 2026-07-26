@@ -161,3 +161,22 @@ def test_das_sende_topic_kommt_aus_dem_modell() -> None:
 def test_leerzeichen_um_das_topic_werden_entfernt() -> None:
     modell = {"global": {"panelSendTopic": "  cmnd/NSPanel_1/CustomSend \n"}}
     assert live.send_topic_of(modell) == "cmnd/NSPanel_1/CustomSend"
+
+
+def test_die_navigationsnachricht_sieht_aus_wie_ein_tastendruck() -> None:
+    """So findet das Backend die Karte: button_press mit einem Ziel, das mit navigate. beginnt."""
+    import json
+
+    nutzlast = json.loads(live.navigate_payload("garage"))
+    assert nutzlast["CustomRecv"] == "event,buttonPress2,navigate.garage,button"
+    # Die Navigationsleiste des Panels selbst nutzt uuids – dieselbe Form muss durchgehen.
+    nutzlast = json.loads(live.navigate_payload("uuid.cUYCmkbrg5"))
+    assert nutzlast["CustomRecv"] == "event,buttonPress2,navigate.uuid.cUYCmkbrg5,button"
+
+
+def test_das_empfangs_topic_kommt_aus_dem_modell() -> None:
+    """Gesendet wird auf dem Topic, auf dem sonst das Panel seine Tastendrücke meldet."""
+    modell = {"global": {"panelRecvTopic": " NSPanel_1/tele/RESULT "}}
+    assert live.recv_topic_of(modell) == "NSPanel_1/tele/RESULT"
+    assert live.recv_topic_of({"global": {}}) is None
+    assert live.recv_topic_of(None) is None

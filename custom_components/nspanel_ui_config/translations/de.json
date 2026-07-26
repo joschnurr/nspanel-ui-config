@@ -17,7 +17,7 @@
           "output_path": "Wohin die erzeugte YAML geschrieben wird. Entscheidend ist, dass AppDaemon genau diese Datei lesen kann – bei einem Add-on über /share, bei getrennten Containern über einen gemeinsamen Mount.",
           "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden · „restart_addon“ = AppDaemon-Add-on über den Supervisor neu starten (Home Assistant OS/Supervised) · „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen (feingranular, braucht Dateizugriff) · „restart_container“ = Docker-Container über die Docker-API neu starten.",
           "reload_addon": "Steht in der URL der Add-on-Seite (…/hassio/addon/SLUG/info). Für das Community-Add-on „AppDaemon“ ist das a0d7b954_appdaemon.",
-          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Home Assistant muss sie sehen können.",
+          "reload_touch_path": "Die apps.yaml von AppDaemon. Sie muss es sein: das Antippen des App-Moduls (apps/nspanel.py) startet die App zwar neu, liest die per !include eingebundene Konfiguration aber NICHT neu ein – die Änderung bliebe unsichtbar. Home Assistant muss die Datei sehen können.",
           "reload_container": "Setzt voraus, dass /var/run/docker.sock in den Home-Assistant-Container gemountet ist.",
           "backup_count": "Vor jedem Überschreiben wird der bisherige Stand in ein Unterverzeichnis „backups“ neben der Ausgabedatei kopiert; ältere werden nach dieser Zahl abgeräumt. 0 schaltet die Sicherung ab – dann ist ein Fehlgriff im Editor nicht mehr rückholbar."
         }
@@ -44,7 +44,7 @@
           "output_path": "Wohin die erzeugte YAML geschrieben wird. Entscheidend ist, dass AppDaemon genau diese Datei lesen kann – bei einem Add-on über /share, bei getrennten Containern über einen gemeinsamen Mount.",
           "reload_mode": "AppDaemon merkt eine geänderte !include-Datei nicht von selbst. „none“ = manuell neu laden · „restart_addon“ = AppDaemon-Add-on über den Supervisor neu starten (Home Assistant OS/Supervised) · „touch_module“ = mtime einer von AppDaemon überwachten Datei neu setzen (feingranular, braucht Dateizugriff) · „restart_container“ = Docker-Container über die Docker-API neu starten.",
           "reload_addon": "Steht in der URL der Add-on-Seite (…/hassio/addon/SLUG/info). Für das Community-Add-on „AppDaemon“ ist das a0d7b954_appdaemon.",
-          "reload_touch_path": "Eine Datei, die AppDaemon überwacht – sein App-Modul (apps/nspanel.py) oder die apps.yaml. Home Assistant muss sie sehen können.",
+          "reload_touch_path": "Die apps.yaml von AppDaemon. Sie muss es sein: das Antippen des App-Moduls (apps/nspanel.py) startet die App zwar neu, liest die per !include eingebundene Konfiguration aber NICHT neu ein – die Änderung bliebe unsichtbar. Home Assistant muss die Datei sehen können.",
           "reload_container": "Setzt voraus, dass /var/run/docker.sock in den Home-Assistant-Container gemountet ist.",
           "backup_count": "Vor jedem Überschreiben wird der bisherige Stand in ein Unterverzeichnis „backups“ neben der Ausgabedatei kopiert; ältere werden nach dieser Zahl abgeräumt. 0 schaltet die Sicherung ab – dann ist ein Fehlgriff im Editor nicht mehr rückholbar."
         },

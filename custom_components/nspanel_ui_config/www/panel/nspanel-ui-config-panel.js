@@ -241,6 +241,8 @@ const STYLES = `
   .body button.modebtn.aktiv {
     background: var(--primary-color, #03a9f4); color: #fff; border-color: transparent;
   }
+  .showrow { display: flex; align-items: center; gap: 10px; padding: 0 12px 8px; flex-wrap: wrap; }
+  .showrow .hinweis { font-size: 12px; color: var(--secondary-text-color, #727272); }
   .screenwrap { padding: 0 12px 12px; overflow-x: auto; }
   .screenwrap .note { font-size: 12px; color: var(--secondary-text-color, #727272); margin: 0 0 8px; line-height: 1.45; }
   .screen {
@@ -1457,7 +1459,54 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     host.innerHTML = "";
     host.appendChild(this._liveNote(antwort, nachricht, eintraege.length));
+    const aufruf = this._showButton(gesucht, antwort);
+    if (aufruf) host.appendChild(aufruf);
     host.appendChild(screen);
+  }
+
+  /**
+   * Knopf, der das Panel auf die bearbeitete Karte bittet.
+   *
+   * **Das Gerät wechselt dabei sichtbar die Anzeige** – deshalb steht das auch dran, und deshalb
+   * passiert es nur auf Klick. Das Backend findet eine Karte über ihren `key`; hat sie keinen,
+   * lässt sie sich nicht gezielt aufrufen, und der Knopf sagt genau das.
+   */
+  _showButton(karte, antwort) {
+    if (!isPlain(karte) || String(karte.type || "").startsWith("screensaver")) return null;
+    const zeile = document.createElement("div");
+    zeile.className = "showrow";
+
+    const key = typeof karte.key === "string" ? karte.key.trim() : "";
+    if (!key) {
+      zeile.innerHTML =
+        `<span class="hinweis">Zum gezielten Aufrufen braucht diese Karte ein Feld ` +
+        `<code>key</code> – dann kann das Backend sie über <code>navigate.&lt;key&gt;</code> finden.</span>`;
+      return zeile;
+    }
+
+    const knopf = document.createElement("button");
+    knopf.textContent = "Karte am Gerät aufrufen";
+    knopf.title = "Das Panel wechselt sichtbar auf diese Karte – geschaltet wird nichts.";
+    const meldung = document.createElement("span");
+    meldung.className = "hinweis";
+    if (!antwort.matched) meldung.textContent = "danach steht sie hier";
+
+    knopf.addEventListener("click", async () => {
+      knopf.disabled = true;
+      meldung.textContent = "wird aufgerufen…";
+      try {
+        await this._hass.callApi("POST", "nspanel_ui_config/show", { key });
+        meldung.textContent = "aufgerufen – die Ansicht folgt in wenigen Sekunden";
+      } catch (err) {
+        meldung.textContent = `Fehlgeschlagen: ${this._errText(err)}`;
+      } finally {
+        knopf.disabled = false;
+      }
+    });
+
+    zeile.appendChild(knopf);
+    zeile.appendChild(meldung);
+    return zeile;
   }
 
   /** Erklärt, woher das Bild kommt – und worauf dabei zu achten ist. */
@@ -1770,10 +1819,17 @@ class NsPanelUiConfigPanel extends PanelBase {
    * verkehrt herum. Fehlt ein Symbol (etwa auf der Mitte von cardPower), färbt der Platz selbst.
    */
   _faerbe(ziel, inhalt, auftraege, marke) {
-    if (inhalt.color) ziel.style.color = inhalt.color;
+    // Neben `color` auch `--icon-primary-color`: `ha-icon` füllt sein SVG mit
+    // `var(--icon-primary-color, currentcolor)`. Ist die Variable von einem Theme gesetzt, gewinnt
+    // sie gegen die geerbte Farbe – dann bliebe das Symbol trotz gesetzter Farbe unverändert.
+    const setzen = (farbe) => {
+      ziel.style.color = farbe;
+      ziel.style.setProperty("--icon-primary-color", farbe);
+    };
+    if (inhalt.color) setzen(inhalt.color);
     this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
       const rgb = parseTemplateColor(text);
-      if (rgb) ziel.style.color = rgbToHex(rgb);
+      if (rgb) setzen(rgbToHex(rgb));
     });
   }
 

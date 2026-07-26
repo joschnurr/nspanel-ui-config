@@ -90,7 +90,7 @@ Konfiguration zeigt — ein Zustand, den der Editor nicht als Erfolg melden darf
 | Modus | Wirkung | Voraussetzung | typisch für |
 | --- | --- | --- | --- |
 | `none` (Standard) | nichts; man lädt AppDaemon selbst neu | – | alle |
-| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`) → AppDaemon lädt genau diese App neu | HA muss die Datei sehen | Core (dort ohne Weiteres), Container (mit zusätzlichem Mount von `apps/`) |
+| `touch_module` | setzt die mtime von AppDaemons `apps.yaml` neu → AppDaemon lädt genau diese App **mitsamt Konfiguration** neu (das App-Modul anzutippen genügt nicht, siehe unten) | HA muss die Datei sehen | Core (dort ohne Weiteres), Container (mit zusätzlichem Mount von `apps/`) |
 | `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; grob, alle Apps starten neu | Container |
 | `restart_addon` | startet das AppDaemon-Add-on über den Supervisor neu (`POST http://supervisor/addons/<slug>/restart`) | Supervisor vorhanden; grob, alle Apps starten neu | HA OS / Supervised |
 

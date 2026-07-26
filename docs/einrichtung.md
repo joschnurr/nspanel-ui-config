@@ -107,7 +107,7 @@ Integrations-Optionen:
 | HA Core | `touch_module` | keine – gleiches Dateisystem |
 
 `touch_module` lädt nur die eine betroffene App neu statt AppDaemon komplett; dafür muss Home
-Assistant die angetickte Datei sehen (`reload_touch_path`, z. B. `/appdaemon-apps/nspanel.py`).
+Assistant die angetickte Datei sehen (`reload_touch_path`, z. B. `/appdaemon-apps/apps.yaml` – **die apps.yaml, nicht das App-Modul**).
 
 ## Zurück zum vorherigen Stand
 

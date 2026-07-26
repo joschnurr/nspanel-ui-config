@@ -70,3 +70,5 @@ API_BACKUPS: Final = "/api/nspanel_ui_config/backups"
 API_BACKUP_RESTORE: Final = "/api/nspanel_ui_config/backups/restore"
 # Was das Backend zuletzt ans Display geschickt hat (Mitschnitt über MQTT, siehe live.py).
 API_LIVE: Final = "/api/nspanel_ui_config/live"
+# Bittet das Panel, eine bestimmte Karte anzuzeigen (die einzige Stelle, die MQTT sendet).
+API_SHOW: Final = "/api/nspanel_ui_config/show"

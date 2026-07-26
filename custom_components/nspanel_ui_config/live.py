@@ -5,9 +5,11 @@ aber nicht alles, *was* dort steht. Symbole ohne eigene Angabe leitet das Backen
 Zustand ab, Werte formatiert es selbst. Wer ein laufendes Panel hat, muss das nicht nachbauen: über
 MQTT geht die fertig gerenderte Zeile ohnehin ans Display. Die Integration hört mit und zeigt sie.
 
-**Ausschließlich lesend.** Hier wird abonniert, nie veröffentlicht. Das ist kein Zufall, sondern der
-Grund, warum das gefahrlos auch am produktiven Broker läuft: eine einzige Nachricht auf dem
-Sende-Topic würde das echte Panel umschalten.
+**Lesend, mit genau einer Ausnahme.** Abonniert wird das Sende-Topic; von sich aus veröffentlicht
+diese Integration nichts. Nur ``async_show_card`` sendet — auf ausdrückliche Anforderung aus dem
+Editor und auf dem *Empfangs*-Topic, um das Panel auf eine bestimmte Karte zu bitten (das Gerät
+wechselt dabei sichtbar die Anzeige, schaltet aber nichts). Auf das Sende-Topic schreibt niemals
+etwas: dort würde eine Nachricht das Display unmittelbar überschreiben.
 
 Was mitgeschnitten wird, steht in ``protocol.py``. Hier geht es nur darum, *wann* welche Nachricht
 gilt: das Backend schickt erst ``pageType~<karte>`` und dann den Inhalt, und ohne den vorherigen
@@ -16,6 +18,7 @@ gilt: das Backend schickt erst ``pageType~<karte>`` und dann den Inhalt, und ohn
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Callable
@@ -193,6 +196,59 @@ async def async_start(hass: Any, data: dict[str, Any]) -> Callable[[], None] | N
     data.pop("live_reason", None)
     _LOGGER.info("Live-Mitschnitt hört auf %s mit", topic)
     return unsubscribe
+
+
+def recv_topic_of(model: dict[str, Any] | None) -> str | None:
+    """Das Topic, auf dem das Panel seine Ereignisse meldet (``panelRecvTopic``)."""
+    if not isinstance(model, dict):
+        return None
+    global_settings = model.get("global")
+    if not isinstance(global_settings, dict):
+        return None
+    topic = global_settings.get("panelRecvTopic")
+    return topic.strip() if isinstance(topic, str) and topic.strip() else None
+
+
+def navigate_payload(key: str) -> str:
+    """Die Nachricht, mit der ein Panel den Sprung auf eine Karte meldet.
+
+    Nachgebaut wird ein Tastendruck am Gerät: ``controller.py`` behandelt in ``button_press`` den
+    Typ ``button`` mit einem Ziel, das mit ``navigate.`` beginnt, und rendert die gefundene Karte.
+    Der Schlüssel ist der ``key`` der Karte (oder ``uuid.<id>``, wie ihn die Navigationsleiste des
+    Panels selbst verwendet).
+    """
+    return json.dumps({"CustomRecv": f"event,buttonPress2,navigate.{key},button"})
+
+
+async def async_show_card(hass: Any, data: dict[str, Any], key: str) -> None:
+    """Bitte das Backend, diese Karte anzuzeigen.
+
+    **Das ist die einzige Stelle, an der diese Integration etwas veröffentlicht** — und sie tut es
+    nur auf ausdrückliche Anforderung aus dem Editor. Gesendet wird auf dem *Empfangs*-Topic, also
+    dort, wo sonst das Panel seine Tastendrücke meldet; das Backend rendert daraufhin die Karte,
+    **und das echte Gerät wechselt sichtbar die Anzeige**. Geschaltet wird dabei nichts: die
+    Nachricht ist eine Navigation, kein Befehl an eine Entity.
+
+    Ohne diesen Weg bliebe die Live-Ansicht auf das beschränkt, was das Panel zufällig gerade zeigt
+    — und das ist im Ruhezustand immer der Screensaver.
+    """
+    topic = recv_topic_of(data.get("model"))
+    if topic is None:
+        raise LiveError("Kein panelRecvTopic im Modell – erst importieren oder eintragen.")
+    if "mqtt" not in getattr(hass.config, "components", set()):
+        raise LiveError("Die MQTT-Integration ist in Home Assistant nicht eingerichtet.")
+
+    from homeassistant.components import mqtt  # noqa: PLC0415
+
+    try:
+        await mqtt.async_publish(hass, topic, navigate_payload(key), qos=0, retain=False)
+    except Exception as err:  # noqa: BLE001 – Broker weg, keine Rechte …
+        raise LiveError(f"Senden fehlgeschlagen: {err}") from err
+    _LOGGER.info("Panel gebeten, Karte '%s' anzuzeigen (Topic %s)", key, topic)
+
+
+class LiveError(RuntimeError):
+    """Der Panel-Aufruf war nicht möglich – mit einer Begründung, die man anzeigen kann."""
 
 
 async def async_restart(hass: Any, data: dict[str, Any]) -> None:

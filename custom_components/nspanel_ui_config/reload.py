@@ -11,10 +11,17 @@ auslöst. Genau das tut dieses Modul.
 Die zwei Wege haben unterschiedliche Voraussetzungen, deshalb bleibt der Modus konfigurierbar:
 
 ``touch_module``
-    Setzt die mtime einer Datei neu, die AppDaemon *bereits* überwacht — typischerweise sein
-    App-Modul ``apps/nspanel.py`` oder die ``apps.yaml`` selbst. Feingranular (nur die betroffene
-    App wird neu geladen), setzt aber voraus, dass HA diese Datei überhaupt sieht: AppDaemons
-    ``apps/``-Verzeichnis muss in den HA-Container gemountet sein (die Volumes sind getrennt).
+    Setzt die mtime der ``apps.yaml`` neu, die AppDaemon *bereits* überwacht. Feingranular (nur die
+    betroffene App wird neu geladen), setzt aber voraus, dass HA diese Datei überhaupt sieht:
+    AppDaemons ``apps/``-Verzeichnis muss in den HA-Container gemountet sein (die Volumes sind
+    getrennt).
+
+    **Es muss die apps.yaml sein, nicht das App-Modul.** Tickt man ``apps/nspanel.py`` an, startet
+    AppDaemon die App zwar sichtbar neu (*Modified Python files* → *Started*), liest die per
+    ``!include`` eingebundene Konfiguration dabei aber **nicht** neu ein — die frisch erzeugte YAML
+    bleibt wirkungslos, und das sieht man nur daran, dass sich am Panel nichts ändert. Nachgemessen
+    am 2026-07-26: nach dem Anticken der ``.py`` fand das Backend eine neu vergebene ``key`` nicht,
+    nach dem Anticken der ``apps.yaml`` sofort.
 
 ``restart_container``
     Startet den AppDaemon-Container über die Docker-API neu. Braucht keinen zusätzlichen Mount,
@@ -174,8 +181,9 @@ async def async_trigger_reload(hass: HomeAssistant, options: dict[str, Any]) -> 
         if not path:
             raise ReloadError(
                 "Kein Pfad zum Anticken konfiguriert – in den Optionen unter "
-                "'reload_touch_path' die von AppDaemon überwachte Datei angeben "
-                "(z. B. /appdaemon-apps/nspanel.py)"
+                "'reload_touch_path' AppDaemons apps.yaml angeben "
+                "(z. B. /appdaemon-apps/apps.yaml). Das App-Modul reicht nicht: es lädt den Code "
+                "neu, nicht die per !include eingebundene Konfiguration."
             )
         await hass.async_add_executor_job(touch_file, path)
         _LOGGER.debug("AppDaemon-Reload: %s angetickt", path)
