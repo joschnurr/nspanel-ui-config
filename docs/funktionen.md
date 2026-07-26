@@ -245,14 +245,24 @@ erst im PR auffallen.
 
 **Zwei Wege, die man nicht verwechseln darf** — beide nachgemessen:
 
-| Wo | Woher das Bild kommt | Braucht einen brands-Eintrag? |
+| Wo | Woher das Bild kommt | Zeigt es unser Icon? |
 | --- | --- | --- |
-| Home Assistant (*Geräte & Dienste*) | liest `brand/` direkt aus der Integration und serviert es unter `/api/brands/integration/<domain>/<bild>` – mit Vorrang vor dem CDN (ab HA 2026.3) | **nein** |
-| HACS-Übersicht | Brands-CDN | **ja** |
+| Home Assistant (*Geräte & Dienste*) | liest `brand/` direkt aus der Integration und serviert es unter `/api/brands/integration/<domain>/<bild>` – mit Vorrang vor dem CDN (ab HA 2026.3) | **ja** |
+| HACS-Übersicht | Brands-CDN, feste URL auf `brands.home-assistant.io` (Stand HACS 2.0.5) | **nein**, generischer Platzhalter |
 
-Ohne Eintrag im [home-assistant/brands](https://github.com/home-assistant/brands)-Repo zeigt HACS
-also den generischen Platzhalter, während Home Assistant selbst das richtige Icon anzeigt. Fehlt
-eine Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück – Dark-Assets sind nicht nötig.
+**Ein Eintrag im [brands-Repo](https://github.com/home-assistant/brands) hilft dagegen nicht mehr –
+er ist gar nicht mehr möglich.** Seit Home Assistant 2026.3 liefern Custom-Integrationen ihre Bilder
+selbst, und das Repo nimmt dafür keine Beiträge mehr an; ein PR wird vom Bot automatisch geschlossen
+([Ankündigung](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api), hier am
+2026-07-26 mit PR #10853 ausprobiert und genau so beschieden).
+
+Dass die HACS-Übersicht trotzdem den Platzhalter zeigt, liegt allein daran, dass HACS seine
+Bild-URLs noch fest gegen das CDN baut, statt den lokalen Proxy zu nutzen. Das ist dort bekannt
+(u. a. hacs/frontend#937, hacs/integration#5179) und kommt mit einer künftigen HACS-Version – von
+dieser Integration aus lässt sich daran nichts ändern.
+
+Fehlt eine Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück – Dark-Assets sind nicht
+nötig.
 
 **Dateigröße zählt.** Das brands-Repo achtet ausdrücklich darauf, und die Bilder landen in jeder
 Installation. Direkt aus einem Foto exportiert waren unsere mit 83 kB (256×256) und 285 kB (512×512)

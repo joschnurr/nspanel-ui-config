@@ -5,14 +5,21 @@ Bis 1.0 kann sich alles ändern.
 
 ## 0.10.3 – 2026-07-26
 
-### Brand-Bilder für das brands-Repo hergerichtet
+### Brand-Bilder aufgeräumt – und die Sache mit dem HACS-Symbol geklärt
 
-Die HACS-Übersicht holt ihr Bild vom Brands-CDN, nicht aus der Integration – ohne Eintrag im
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repo bleibt dort der generische
-Platzhalter. Für den Eintrag mussten die Bilder aber erst passen: das Repo verlangt **getrimmte**
-Bilder, unsere Icons waren oben und unten transparent aufgefüllt.
+Die Icons waren oben und unten transparent aufgefüllt, damit vom nicht-quadratischen Foto nichts
+verlorengeht. Sauberer ist ein **quadratischer Ausschnitt**: er füllt die Fläche, wie es sich für
+ein Icon gehört – und Home Assistant zeigt genau diese Datei an der Integration an.
 
-- `tools/make-brand-images.mjs` erzeugt alle vier Dateien aus derselben Quelle: Icons als mittiger
+**Zum Symbol in der HACS-Übersicht, das dort weiterhin fehlt:** Ein Eintrag im
+[brands-Repo](https://github.com/home-assistant/brands) hilft nicht – er ist seit Home Assistant
+2026.3 gar nicht mehr möglich, das Repo nimmt für Custom-Integrationen keine Beiträge mehr an
+([Ankündigung](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api)). Dass HACS
+trotzdem den Platzhalter zeigt, liegt daran, dass es seine Bild-URLs noch fest gegen das CDN baut
+statt über den lokalen Proxy. Dort ist es bekannt (hacs/frontend#937, hacs/integration#5179) und
+kommt mit einer künftigen HACS-Version; von hier aus lässt sich daran nichts ändern.
+
+- `tools/make-brand-images.mjs` erzeugt alle vier Dateien reproduzierbar aus derselben Quelle: Icons als mittiger
   **quadratischer Ausschnitt** (256×256, 512×512) – beschnitten wird nur der seitliche
   Geräterahmen –, Logos aus dem vollen Bild (304×256 und 607×512, die vom Repo erlaubten Bereiche
   für die kürzeste Seite).
