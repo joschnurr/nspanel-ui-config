@@ -74,6 +74,11 @@ sie ergibt genau die Aufteilung, die schon im Schema stand.
 - **Zustandsformate.** Ohne eigenes `value` steht der Zustand aus Home Assistant da; das Backend
   formatiert ihn teils anders.
 
+**Auf dem Raster steht bei Sensoren der Messwert, kein Symbol.** `cardGrid`/`cardGrid2` haben kein
+eigenes Wertfeld – deshalb setzt das Backend bei `sensor`-Entities ohne eigenes `icon` den Zustand an
+die Stelle des Symbols, gekürzt auf vier Zeichen (endet das auf einen Punkt, auf drei): `21.53` wird
+zu `21.5`, `100.0` zu `100`. Die Vorschau macht es genauso; ein selbst gesetztes `icon` gewinnt.
+
 Sonderformen sind berücksichtigt: `delete` und leere Einträge erscheinen als **freier Platz**,
 `iText.` als fester Text, `navigate.`/`service.` ohne Zustandssuche. Eine `entity_id`, die es in
 Home Assistant nicht gibt, wird mit ⚠ markiert – das ist fast immer ein Tippfehler.

@@ -294,6 +294,11 @@ const STYLES = `
   .screen .slot .warn { color: #ffb300; flex: none; font-size: 12px; }
   /* Abgemessene Plätze: jeder Bestandteil sitzt an seiner eigenen Stelle, kein Flex-Fluss. */
   .screen .slot.measured { display: block; padding: 0; }
+  /* Messwert an Symbolstelle: mittig, in der Größe des Symbols. */
+  .screen .slot .icontext {
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 500; white-space: nowrap;
+  }
   .screen .slot.measured .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .screen .slot.measured .val { max-width: none; color: #d7d9dd; }
   .screen .title.measured { border: none; }
@@ -572,7 +577,23 @@ function previewColor(value, state) {
  *  - Ohne `value` steht der Zustand aus Home Assistant da. Das Backend formatiert ihn teils anders
  *    (Einheiten, Übersetzungen) – deshalb ist auch das nur eine Näherung.
  */
-function previewContent(entity, states = {}) {
+/**
+ * Karten, die bei Sensoren **den Messwert anstelle des Symbols** zeigen.
+ *
+ * Eine Eigenheit des Backends, die man sonst erst am Gerät bemerkt (`pages.py`): auf einem Raster
+ * ist kein Platz für Symbol *und* Wert, also tritt bei `sensor`-Entities ohne eigenes `icon` der
+ * Zustand an die Stelle des Symbols — gekürzt auf vier Zeichen, und endet der Ausschnitt auf einen
+ * Punkt, auf drei.
+ */
+const GRID_TYPEN = ["cardGrid", "cardGrid1", "cardGrid2"];
+
+function gridSensorText(zustand) {
+  let text = String(zustand ?? "").slice(0, 4);
+  if (text.endsWith(".")) text = text.slice(0, -1);
+  return text;
+}
+
+function previewContent(entity, states = {}, cardType = null) {
   if (!isPlain(entity)) {
     return { frei: true, kind: "empty", name: "", value: "", icon: "", templates: [] };
   }
@@ -623,6 +644,20 @@ function previewContent(entity, states = {}) {
     iconAbgeleitet = true;
   }
 
+  // Auf dem Raster steht bei Sensoren ohne eigenes Symbol der Messwert an dessen Stelle. Ohne diese
+  // Nachbildung zeigte die Vorschau dort den Platzhalter-Kreis, während das Gerät die Zahl anzeigt.
+  let iconText = null;
+  if (
+    GRID_TYPEN.includes(cardType) &&
+    kind === "state" &&
+    id.startsWith("sensor.") &&
+    !(typeof entity.icon === "string" && entity.icon.trim())
+  ) {
+    iconText = zustand ? gridSensorText(zustand.state) : "";
+    icon = null;
+    iconAbgeleitet = false;
+  }
+
   let color = previewColor(entity.color, zustand && zustand.state);
   if (color === null && colorShape(entity.color) === "template") {
     templates.push({ feld: "color", text: entity.color });
@@ -635,6 +670,8 @@ function previewContent(entity, states = {}) {
     name: name === null ? "" : name,
     value: value === null ? "" : value,
     icon,
+    // Text, der auf dem Raster an die Stelle des Symbols tritt (Messwert eines Sensors).
+    iconText,
     iconAbgeleitet,
     iconSonderform,
     iconUnbekannt: icon !== null && !iconAbgeleitet && !iconIsKnown(icon),
@@ -658,6 +695,20 @@ function iconNameFromChar(zeichen) {
 }
 
 /**
+ * Ist das ein Symbol des Nextion-Fonts – oder Text?
+ *
+ * Symbole sind **ein** Zeichen aus dem Private-Use-Bereich. Alles andere, was im Icon-Feld
+ * ankommt, ist wörtlich gemeint: auf dem Raster schickt das Backend dort bei Sensoren den Messwert
+ * (`21.5`) statt eines Symbols.
+ */
+function istIconZeichen(wert) {
+  if (typeof wert !== "string" || [...wert].length !== 1) return false;
+  // Ab U+E000 beginnt der Private-Use-Bereich. Eine obere Grenze wäre falsch: das Mapping des
+  // Backends reicht bis U+FAEF und damit über das klassische PUA-Ende (U+F8FF) hinaus.
+  return wert.codePointAt(0) >= 0xe000;
+}
+
+/**
  * Ein Eintrag, wie ihn das Gerät gerade anzeigt, in der Form, die die Zeichenschicht erwartet.
  *
  * Hier ist **nichts abgeleitet**: Symbol, Farbe, Name und Wert stehen so in der Nachricht, die ans
@@ -668,7 +719,8 @@ function liveContent(eintrag) {
   if (!isPlain(eintrag)) {
     return { frei: true, kind: "empty", name: "", value: "", icon: null, templates: [] };
   }
-  const name = iconNameFromChar(eintrag.iconChar);
+  const symbol = istIconZeichen(eintrag.iconChar);
+  const name = symbol ? iconNameFromChar(eintrag.iconChar) : null;
   return {
     frei: Boolean(eintrag.leer),
     kind: eintrag.type || "state",
@@ -676,11 +728,13 @@ function liveContent(eintrag) {
     name: eintrag.name || "",
     value: eintrag.value || "",
     icon: name ? `mdi:${name}` : null,
+    // Kein Symbol, sondern Text im Icon-Feld – auf dem Raster der Messwert des Sensors.
+    iconText: !symbol && eintrag.iconChar ? String(eintrag.iconChar) : null,
     iconAbgeleitet: false,
     iconSonderform: false,
     // Ein Zeichen, das nicht im mitgelieferten Mapping steht, kommt aus einer neueren
     // Backend-Version. Das Display zeigt es trotzdem – nur wir kennen den Namen nicht.
-    iconUnbekannt: Boolean(eintrag.iconChar) && !name,
+    iconUnbekannt: symbol && !name,
     color: Array.isArray(eintrag.rgb) ? rgbToHex(eintrag.rgb) : null,
     zustandFehlt: false,
     templates: [],
@@ -1355,7 +1409,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     // Die Zeichenschicht bekommt den Inhalt als Funktion – dieselbe Fläche zeigt so wahlweise das
     // Modell oder das, was das Gerät gerade anzeigt (siehe _renderLivePreview).
     const inhaltFuer = (slot) =>
-      previewContent(slot.index === "flat" ? card : entities[slot.index], states);
+      previewContent(slot.index === "flat" ? card : entities[slot.index], states, info.shownType);
     layout.slots.forEach((slot) => {
       const element = this._slotElement(slot, card, inhaltFuer, auftraege, marke);
       if (element) screen.appendChild(element);
@@ -1835,6 +1889,14 @@ class NsPanelUiConfigPanel extends PanelBase {
 
   /** Das Symbol eines Platzes – inklusive der Sonderformen, die gar kein Symbol sind. */
   _slotIcon(inhalt, auftraege, marke) {
+    if (typeof inhalt.iconText === "string") {
+      // Kein Symbol, sondern der Messwert – so zeigt es das Gerät auf dem Raster.
+      const wert = document.createElement("span");
+      wert.className = "icon icontext";
+      wert.textContent = inhalt.iconText;
+      wert.title = "Auf dem Raster zeigt das Backend bei Sensoren den Wert statt eines Symbols";
+      return wert;
+    }
     if (inhalt.iconSonderform) {
       // `text:`/`ha:`/`<I>…</I>`: hier steht Text, kein Symbol. Was dabei herauskommt, zeigt das
       // Template-Rendering – bis dahin bleibt der Platz leer.
@@ -2685,6 +2747,8 @@ export {
   previewContent,
   iconFromRendered,
   iconNameFromChar,
+  istIconZeichen,
+  gridSensorText,
   liveContent,
   joinTemplates,
   splitTemplateResult,

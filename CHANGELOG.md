@@ -3,6 +3,23 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.12.1 – 2026-07-27
+
+### Auf dem Raster steht bei Sensoren der Messwert, kein Symbol
+
+Auf `cardGrid` fehlten in der Vorschau die Werte, und an ihrer Stelle stand der Platzhalter-Kreis.
+Der Grund ist eine Eigenheit des Backends, die man sonst erst am Gerät sieht (`pages.py`): auf einem
+Raster ist kein Platz für Symbol *und* Wert, also tritt bei `sensor`-Entities **ohne eigenes `icon`**
+der Zustand an die Stelle des Symbols – gekürzt auf vier Zeichen, und endet der Ausschnitt auf einen
+Punkt, auf drei (`21.53` → `21.5`, `100.0` → `100`).
+
+Die Vorschau bildet das jetzt nach, in beiden Modi: aus der Konfiguration über dieselbe Regel, in der
+Live-Ansicht daran, dass im Icon-Feld Text statt eines Symbolzeichens ankommt. Ein selbst gesetztes
+`icon` gewinnt weiterhin, und auf Karten mit eigenem Wertfeld (`cardEntities` …) ändert sich nichts.
+
+Nebenbei behoben: die Erkennung „Symbol oder Text?" hatte am klassischen PUA-Ende (U+F8FF) eine zu
+enge Grenze – das Mapping des Backends reicht bis U+FAEF. Icons daraus wären als Text durchgerutscht.
+
 ## 0.12.0 – 2026-07-26
 
 ### Karte gezielt am Gerät aufrufen

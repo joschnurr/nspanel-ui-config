@@ -28,6 +28,8 @@ const {
   previewContent,
   iconFromRendered,
   iconNameFromChar,
+  istIconZeichen,
+  gridSensorText,
   liveContent,
   joinTemplates,
   splitTemplateResult,
@@ -48,6 +50,15 @@ const KAPAZITAET = {
 // Der Screensaver steht bewusst nicht in der Tabelle oben: seine Plätze hängen nicht nur an der
 // Kapazität, sondern auch daran, wie viele Entities konfiguriert sind *und* wie das Display steht.
 // Er wird deshalb unten eigens geprüft.
+
+/** Ein Zeichen aus dem Symbolbereich, das im Mapping des Backends *nicht* vorkommt. */
+function freiesIconZeichen() {
+  for (let punkt = 0xfaf0; punkt < 0xfb50; punkt++) {
+    const zeichen = String.fromCodePoint(punkt);
+    if (!iconChars.ICON_CHARS.includes(zeichen)) return zeichen;
+  }
+  throw new Error("kein freies Zeichen gefunden");
+}
 
 // --- Geometrie --------------------------------------------------------------------------------
 
@@ -331,7 +342,7 @@ test("das Icon-Zeichen des Backends findet zu seinem Namen zurück", () => {
   assert.equal(iconNameFromChar(""), null);
   assert.equal(iconNameFromChar(undefined), null);
   // Ein Zeichen außerhalb des Mappings (neuere Backend-Version) ergibt keinen Namen.
-  assert.equal(iconNameFromChar("\ufb00"), null);
+  assert.equal(iconNameFromChar(freiesIconZeichen()), null);
 });
 
 test("beide Icon-Listen bleiben in Reihenfolge und Länge gekoppelt", () => {
@@ -368,7 +379,8 @@ test("gelöschte und fehlende Einträge bleiben auch live freie Plätze", () => 
 });
 
 test("ein Symbol aus einer neueren Backend-Version wird als unbekannt gekennzeichnet", () => {
-  const inhalt = liveContent({ type: "light", iconChar: "\ufb00", name: "x", value: "" });
+  const unbekannt = freiesIconZeichen();
+  const inhalt = liveContent({ type: "light", iconChar: unbekannt, name: "x", value: "" });
   assert.equal(inhalt.icon, null);
   assert.equal(inhalt.iconUnbekannt, true);
 });
@@ -386,4 +398,43 @@ test("Uhr und Datum erscheinen genau einmal", () => {
       assert.equal(daten, 1, `${typ}/${model}: ${daten} Datumsfelder`);
     }
   }
+});
+
+test("auf dem Raster tritt bei Sensoren der Messwert an die Stelle des Symbols", () => {
+  // Backend-Eigenheit (pages.py): auf cardGrid ist kein Platz für Symbol *und* Wert, also zeigt
+  // das Display bei sensor-Entities ohne eigenes icon die ersten vier Zeichen des Zustands.
+  const states = { "sensor.puffer": { state: "21.53", attributes: {} } };
+  const raster = previewContent({ entity: "sensor.puffer" }, states, "cardGrid");
+  assert.equal(raster.iconText, "21.5");
+  assert.equal(raster.icon, null);
+
+  // Auf anderen Karten bleibt es beim Symbol – dort gibt es ein eigenes Wertfeld.
+  assert.equal(previewContent({ entity: "sensor.puffer" }, states, "cardEntities").iconText, null);
+  // Ein selbst gesetztes Symbol gewinnt immer.
+  const eigenes = previewContent({ entity: "sensor.puffer", icon: "thermometer" }, states, "cardGrid");
+  assert.equal(eigenes.icon, "mdi:thermometer");
+  assert.equal(eigenes.iconText, null);
+});
+
+test("endet der Ausschnitt auf einem Punkt, fällt er weg", () => {
+  // Sonst stünde "100." auf dem Display – das kürzt das Backend selbst.
+  assert.equal(gridSensorText("100.0"), "100");
+  assert.equal(gridSensorText("21.53"), "21.5");
+  assert.equal(gridSensorText("8.1"), "8.1");
+  assert.equal(gridSensorText("on"), "on");
+  assert.equal(gridSensorText(undefined), "");
+});
+
+test("im Icon-Feld unterscheidet die Live-Ansicht Symbol und Text", () => {
+  const index = icons.ICON_NAMES.indexOf("thermometer");
+  assert.equal(istIconZeichen(iconChars.ICON_CHARS[index]), true);
+  // Der Messwert, den das Backend auf dem Raster statt eines Symbols schickt.
+  assert.equal(istIconZeichen("21.5"), false);
+  assert.equal(istIconZeichen(""), false);
+
+  const messwert = liveContent({ iconChar: "21.5", name: "Puffer" });
+  assert.equal(messwert.iconText, "21.5");
+  assert.equal(messwert.icon, null);
+  // Und kein falscher Alarm: das ist kein unbekanntes Symbol, sondern gewollter Text.
+  assert.equal(messwert.iconUnbekannt, false);
 });
