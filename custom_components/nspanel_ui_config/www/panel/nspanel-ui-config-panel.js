@@ -17,6 +17,9 @@
 // Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py). Sie steckt in
 // einem eigenen Modul, damit dieses hier lesbar bleibt – 6896 Namen sind ~110 kB.
 import { ICON_NAMES } from "./icon-names.js";
+// Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
+// Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
+import { previewSlots } from "./preview-layouts.js";
 
 const ELEMENT_NAME = "nspanel-ui-config-panel";
 
@@ -211,6 +214,66 @@ const STYLES = `
   footer li.error { color: var(--error-color, #db4437); }
   footer li.warning { color: var(--warning-color, #ffa600); }
   footer code { font-family: var(--code-font-family, monospace); opacity: .8; }
+
+  /* Vorschau: Nachbau der Displayfläche, 1:1 in Pixeln (480×320, us-p hochkant). Bewusst keine
+     Skalierung – so entspricht ein Pixel hier einem Pixel auf dem Gerät. */
+  details.preview { border: 1px solid var(--ns-border); border-radius: 6px; margin: 0 0 16px;
+    background: var(--card-background-color, #fff); }
+  details.preview > summary {
+    padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;
+    color: var(--secondary-text-color, #727272); list-style: none;
+  }
+  details.preview > summary::-webkit-details-marker { display: none; }
+  details.preview > summary .caret { display: inline-block; width: 12px; opacity: .6; font-size: 11px; }
+  details[open].preview > summary .caret { transform: rotate(90deg); }
+  .screenwrap { padding: 0 12px 12px; overflow-x: auto; }
+  .screenwrap .note { font-size: 12px; color: var(--secondary-text-color, #727272); margin: 0 0 8px; line-height: 1.45; }
+  .screen {
+    position: relative; background: #000; color: #fff; overflow: hidden;
+    border: 4px solid #23262b; border-radius: 8px;
+    font-family: Roboto, Arial, sans-serif;
+  }
+  .screen .slot {
+    position: absolute; box-sizing: border-box; overflow: hidden;
+    display: flex; align-items: center; gap: 6px; padding: 0 4px;
+  }
+  /* Freie Plätze sichtbar machen: die Karte hat sie, die Konfiguration füllt sie (noch) nicht. */
+  .screen .slot.frei { border: 1px dashed #3a3f47; border-radius: 4px; }
+  .screen .slot .icon { flex: none; --mdc-icon-size: 26px; color: #f5f5f5; }
+  .screen .slot .name { flex: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .screen .slot .val { flex: none; font-size: 15px; color: #d7d9dd; max-width: 45%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .screen .slot.tile { flex-direction: column; justify-content: center; gap: 2px; }
+  .screen .slot.tile .icon { --mdc-icon-size: 30px; }
+  .screen .slot.tile .name { flex: none; font-size: 12px; max-width: 100%; text-align: center; }
+  .screen .slot.tile .val { font-size: 12px; max-width: 100%; }
+  .screen .slot.icon-only { justify-content: center; }
+  .screen .slot.main { flex-direction: column; justify-content: center; }
+  .screen .slot.main .icon { --mdc-icon-size: 68px; }
+  .screen .slot.main .val { font-size: 22px; max-width: 100%; }
+  .screen .slot.forecast { flex-direction: column; justify-content: flex-start; gap: 1px; }
+  .screen .slot.forecast .name { flex: none; font-size: 12px; max-width: 100%; }
+  .screen .slot.forecast .icon { --mdc-icon-size: 34px; }
+  .screen .slot.forecast .val { font-size: 13px; max-width: 100%; }
+  .screen .slot.center { justify-content: center; }
+  .screen .clock { display: flex; align-items: flex-end; justify-content: flex-end; font-size: 44px; }
+  .screen .date { display: flex; align-items: flex-start; justify-content: flex-end; font-size: 15px; color: #d7d9dd; }
+  .screen .title {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: #fff; border-bottom: 1px solid #23262b;
+  }
+  .screen .nav {
+    display: flex; align-items: center; justify-content: space-between; padding: 0 14px;
+    border-top: 1px solid #23262b; color: #7f8590; font-size: 17px;
+  }
+  /* Flächen, die das Backend selbst gestaltet – die Vorschau zeigt nur, dass sie da sind. */
+  .screen .platzhalter {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    border: 1px dashed #3a3f47; border-radius: 6px; color: #7f8590; font-size: 13px;
+    padding: 4px 8px; line-height: 1.35;
+  }
+  .screen .slot.tpl { opacity: .75; }
+  .screen .slot .warn { color: #ffb300; flex: none; font-size: 12px; }
 
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.45);
@@ -431,6 +494,167 @@ function templateFieldMode(value, override) {
   return isTemplate(value) ? "template" : "value";
 }
 
+// --- Vorschau ---------------------------------------------------------------------------------
+
+/**
+ * Was für ein Eintrag steht im `entity`-Feld?
+ *
+ * Neben echten entity_ids kennt das Backend Sonderformen, die nie einen Zustand haben: `iText.`
+ * (fester Text), `navigate.` (Sprung auf eine andere Karte), `service.` (Dienstaufruf) und `delete`
+ * (Platz bewusst frei lassen). Die Vorschau darf für sie weder einen Zustand suchen noch einen
+ * fehlenden melden.
+ */
+function entityKind(id) {
+  const text = typeof id === "string" ? id.trim() : "";
+  if (!text) return "empty";
+  if (text === "delete") return "delete";
+  if (text.startsWith("iText.")) return "text";
+  if (text.startsWith("navigate.")) return "navigate";
+  if (text.startsWith("service.")) return "service";
+  return "state";
+}
+
+/**
+ * Farbe eines Eintrags als CSS-Wert – oder `null`, wenn sie erst gerendert werden muss.
+ *
+ * `{on, off}` wählt nach dem *aktuellen* Zustand aus; ist keiner bekannt, gilt `on`, weil das die
+ * Farbe ist, die man beim Konfigurieren im Blick hat.
+ */
+function previewColor(value, state) {
+  const shape = colorShape(value);
+  if (shape === "rgb") return rgbToHex(value);
+  if (shape === "onoff") {
+    const an = String(state) !== "off" && String(state) !== "closed";
+    const gewaehlt = an ? value.on || value.off : value.off || value.on;
+    return isRgb(gewaehlt) ? rgbToHex(gewaehlt) : null;
+  }
+  return null;
+}
+
+/**
+ * Alles, was für einen Platz der Vorschau ohne Template-Rendering feststeht.
+ *
+ * `templates` sammelt die Felder, die noch durch HAs Template-Engine müssen – das Panel rendert sie
+ * gebündelt nach und trägt das Ergebnis ein. So ist die Vorschau sofort da und wird dann genauer,
+ * statt auf einen API-Aufruf zu warten.
+ *
+ * Zwei Stellen, an denen die Vorschau bewusst *nicht* rät:
+ *  - Ohne konfiguriertes `icon` leitet das Backend das Symbol aus Domain und Zustand ab
+ *    (`icon_mapping.py`). Nachgebaut wird das nicht; ersatzweise steht hier das Symbol, das Home
+ *    Assistant selbst für die Entity führt, gekennzeichnet als `iconAbgeleitet`.
+ *  - Ohne `value` steht der Zustand aus Home Assistant da. Das Backend formatiert ihn teils anders
+ *    (Einheiten, Übersetzungen) – deshalb ist auch das nur eine Näherung.
+ */
+function previewContent(entity, states = {}) {
+  if (!isPlain(entity)) {
+    return { frei: true, kind: "empty", name: "", value: "", icon: "", templates: [] };
+  }
+  const id = typeof entity.entity === "string" ? entity.entity.trim() : "";
+  const kind = entityKind(id);
+  const zustand = kind === "state" ? states[id] : undefined;
+  const attrs = (zustand && zustand.attributes) || {};
+  const templates = [];
+
+  const fest = (feld, wert) => {
+    if (typeof wert === "string" && isTemplate(wert)) {
+      templates.push({ feld, text: wert });
+      return null;
+    }
+    return wert === undefined || wert === null || wert === "" ? null : String(wert);
+  };
+
+  let name = fest("name", entity.name);
+  if (name === null && !templates.some((t) => t.feld === "name")) {
+    if (kind === "text") name = "";
+    else if (kind === "state") name = attrs.friendly_name || id;
+    else name = id;
+  }
+
+  let value = fest("value", entity.value);
+  if (value === null && !templates.some((t) => t.feld === "value")) {
+    if (kind === "text") value = id.slice("iText.".length);
+    else if (zustand) {
+      value = attrs.unit_of_measurement
+        ? `${zustand.state} ${attrs.unit_of_measurement}`
+        : zustand.state;
+    } else value = "";
+  }
+
+  let icon = null;
+  let iconAbgeleitet = false;
+  let iconSonderform = false;
+  if (typeof entity.icon === "string" && entity.icon.trim() !== "") {
+    if (iconKind(entity.icon) === "special") {
+      // `text:`/`ha:`/`<I>` sind kein Icon-Name. Steckt Jinja drin, rendert das Panel es nach.
+      iconSonderform = true;
+      if (isTemplate(entity.icon)) templates.push({ feld: "icon", text: entity.icon });
+    } else {
+      icon = `mdi:${entity.icon.trim().replace(/^mdi:/, "")}`;
+    }
+  } else if (attrs.icon) {
+    icon = attrs.icon;
+    iconAbgeleitet = true;
+  }
+
+  let color = previewColor(entity.color, zustand && zustand.state);
+  if (color === null && colorShape(entity.color) === "template") {
+    templates.push({ feld: "color", text: entity.color });
+  }
+
+  return {
+    frei: kind === "empty" || kind === "delete",
+    kind,
+    id,
+    name: name === null ? "" : name,
+    value: value === null ? "" : value,
+    icon,
+    iconAbgeleitet,
+    iconSonderform,
+    iconUnbekannt: icon !== null && !iconAbgeleitet && !iconIsKnown(icon),
+    color,
+    // Fehlt eine echte entity_id in Home Assistant, ist das fast immer ein Tippfehler.
+    zustandFehlt: kind === "state" && !zustand,
+    templates,
+  };
+}
+
+/**
+ * Bündelt mehrere Templates in einen einzigen Aufruf von `/api/template`.
+ *
+ * Eine Karte kann leicht zwei Dutzend Templates tragen (Name, Wert, Icon und Farbe je Eintrag) –
+ * einzeln gerendert wären das ebenso viele Anfragen bei jeder Änderung. Getrennt wird mit dem
+ * ASCII-Steuerzeichen *Record Separator*, das in gerendertem Text praktisch nie vorkommt.
+ *
+ * Der Aufrufer muss den Fall abfangen, dass die Teilezahl nicht stimmt: ein Template, das den
+ * Trenner selbst ausgibt, würde die Zuordnung verschieben. Dann ist Einzelrendern richtig.
+ */
+const TEMPLATE_SEPARATOR = "\u001e";
+
+/**
+ * Was ist aus einem gerenderten `icon`-Template geworden – ein Symbol oder Text?
+ *
+ * Das Backend erlaubt in Icon-Feldern `<I>name</I>`, um mitten im Text ein Symbol zu setzen; steht
+ * am Ende ein reiner Icon-Name, ist es ebenfalls ein Symbol. Alles andere ist schlicht Text.
+ */
+function iconFromRendered(text) {
+  const roh = String(text ?? "").trim();
+  const treffer = /<I>([^<]+)<\/I>/i.exec(roh);
+  if (treffer) return { icon: treffer[1].trim().replace(/^mdi:/, ""), text: roh };
+  const name = roh.replace(/^mdi:/, "");
+  if (name && iconIsKnown(name)) return { icon: name, text: roh };
+  return { icon: null, text: roh };
+}
+
+function joinTemplates(texts) {
+  return texts.join(TEMPLATE_SEPARATOR);
+}
+
+function splitTemplateResult(rendered, count) {
+  const parts = String(rendered ?? "").split(TEMPLATE_SEPARATOR);
+  if (parts.length !== count) return null;
+  return parts.map((part) => part.trim());
+}
+
 /**
  * Statuszeile nach dem Generieren: `[Text, Ton]`.
  *
@@ -496,6 +720,11 @@ class NsPanelUiConfigPanel extends PanelBase {
     // Pro Feld die bewusste Wahl "Template" oder "fester Wert". WeakMap, damit gelöschte Karten und
     // Entities nichts festhalten; der Modus ist reine Ansichtssache und wird nie mitgespeichert.
     this._templateModes = new WeakMap();
+    // Vorschau: aufgeklappt bleibt über Kartenwechsel hinweg erhalten, die Marke schützt vor
+    // Template-Antworten, die zu einer längst ersetzten Zeichnung gehören.
+    this._previewOpen = true;
+    this._previewToken = 0;
+    this._previewTimer = null;
   }
 
   // HA setzt `hass` bei *jedem* State-Update. Hier darf deshalb nichts neu gerendert werden –
@@ -625,6 +854,8 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._dirty = true;
     this._findings = [];
     this._renderStatus();
+    // Das Formular bleibt stehen (Fokus!), die Vorschau zieht nach.
+    this._schedulePreview();
   }
 
   // --- Seitenleiste --------------------------------------------------------------------------
@@ -849,6 +1080,10 @@ class NsPanelUiConfigPanel extends PanelBase {
       <h2>${esc(title)}</h2>
       <p class="hint">${esc(options.hint || "")}</p>
       ${typeNote ? `<p class="typenote">${esc(typeNote)}</p>` : ""}
+      <details class="preview" id="preview"${this._previewOpen ? " open" : ""}>
+        <summary><span class="caret">▶</span> Vorschau – wie das Display die Einträge anordnet</summary>
+        <div class="screenwrap" id="preview-host"></div>
+      </details>
       <fieldset><legend>Karte</legend><div id="card-fields"></div>
         ${options.removable ? `<button class="danger" id="remove-card">Entfernen</button>` : ""}
       </fieldset>
@@ -859,6 +1094,13 @@ class NsPanelUiConfigPanel extends PanelBase {
         <button class="primary" id="add-entity">+ Entity</button></fieldset>` : ""}
       <div id="extra-host"></div>
     `;
+
+    const vorschau = main.querySelector("#preview");
+    vorschau.addEventListener("toggle", () => {
+      this._previewOpen = vorschau.open;
+      if (vorschau.open) this._renderPreview();
+    });
+    if (this._previewOpen) this._renderPreview();
 
     const fieldHost = main.querySelector("#card-fields");
     cardFields.forEach((name) => {
@@ -938,6 +1180,303 @@ class NsPanelUiConfigPanel extends PanelBase {
         layout ? ` ${esc(layout)}` : ""
       }${overNote}`,
     };
+  }
+
+  // --- Vorschau ------------------------------------------------------------------------------
+
+  /**
+   * Zeichnet die Displayfläche der ausgewählten Karte neu.
+   *
+   * Bewusst getrennt vom Formular: Feldänderungen bauen das Formular *nicht* neu auf (sonst
+   * verlöre das Eingabefeld den Fokus), die Vorschau aber schon – sie hängt deshalb an
+   * `_markDirty` und nicht an `_renderDetail`.
+   */
+  _renderPreview() {
+    const host = this._$("preview-host");
+    if (!host || !this._model || !this._schema) return;
+    const card = this._selected();
+    if (!isPlain(card)) {
+      host.innerHTML = "";
+      return;
+    }
+
+    const model = (this._model.global || {}).model || "eu";
+    const entities = Array.isArray(card.entities) ? card.entities : [];
+    const info = capacityInfo(this._schema, card.type, entities.length, model);
+    const layout = previewSlots({
+      cardType: info.shownType,
+      capacity: info.limit === null ? 0 : info.limit,
+      filled: entities.length,
+      model,
+    });
+
+    // Jede Neuzeichnung bekommt eine Marke: Antworten auf Template-Anfragen einer *älteren*
+    // Vorschau dürfen die neue nicht überschreiben.
+    const marke = (this._previewToken = (this._previewToken || 0) + 1);
+    const auftraege = [];
+    const states = (this._hass && this._hass.states) || {};
+
+    const screen = document.createElement("div");
+    screen.className = "screen";
+    screen.style.width = `${layout.screen.w}px`;
+    screen.style.height = `${layout.screen.h}px`;
+
+    if (layout.chrome) {
+      screen.appendChild(
+        this._chromeSlot("title", 0, 0, 100, 11, card.title === undefined ? "" : String(card.title))
+      );
+      const nav = this._chromeSlot("nav", 0, 89, 100, 11, "");
+      nav.innerHTML = `<span>◀</span><span>⌂</span><span>▶</span>`;
+      screen.appendChild(nav);
+    }
+
+    layout.slots.forEach((slot) => {
+      const element = this._slotElement(slot, card, entities, states, auftraege, marke);
+      if (element) screen.appendChild(element);
+    });
+
+    host.innerHTML = "";
+    const hinweis = document.createElement("p");
+    hinweis.className = "note";
+    // Welche Einträge das Layout gar nicht erst zeichnet (der Screensaver verdrängt im
+    // alternativen Layout einen) – das wäre sonst nirgends zu sehen.
+    const belegt = new Set(
+      layout.slots.map((slot) => slot.index).filter((index) => typeof index === "number")
+    );
+    const verdeckt = [];
+    for (let i = 0; i < Math.min(entities.length, info.limit === null ? 0 : info.limit); i++) {
+      if (!belegt.has(i)) verdeckt.push(i + 1);
+    }
+    hinweis.innerHTML = this._previewNote(info, model, entities.length, verdeckt);
+    host.appendChild(hinweis);
+    host.appendChild(screen);
+
+    if (auftraege.length) this._resolvePreviewTemplates(auftraege, marke);
+  }
+
+  /** Erklärt, was die Vorschau zeigt – und was sie nicht leisten kann. */
+  _previewNote(info, model, entityCount, verdeckt = []) {
+    const teile = [`Modell <code>${esc(model)}</code>, ${esc(info.shownType)}`];
+    if (info.switched) teile.push("vom Backend automatisch umgestellt");
+    const kopf = teile.join(" – ");
+    const ueber =
+      info.over > 0
+        ? ` <b>Die letzten ${info.over} von ${entityCount} Einträgen haben keinen Platz</b> und fehlen hier wie auf dem Gerät.`
+        : "";
+    // Kein Kapazitätsproblem, sondern ein Layout: der Eintrag liegt im Rahmen, das Display zeigt
+    // ihn trotzdem nicht (Screensaver, alternatives Layout).
+    const gedraengt = verdeckt.length
+      ? ` <b>Eintrag ${verdeckt.join(", ")} hat in diesem Layout keinen Platz</b> – er zählt zur ` +
+        `Kapazität, wird vom Display aber nicht gezeigt.`
+      : "";
+    return (
+      `${kopf}. Schematisch: Plätze, Reihenfolge, Farben und Werte stimmen, Größen und Schriftart ` +
+      `sind nachempfunden. Symbole ohne eigene Angabe leitet das Backend aus der Entity ab – ` +
+      `ersatzweise steht hier das Symbol aus Home Assistant (blasser dargestellt).${ueber}${gedraengt}`
+    );
+  }
+
+  _chromeSlot(kind, x, y, w, h, text) {
+    const element = document.createElement("div");
+    element.className = kind;
+    Object.assign(element.style, {
+      position: "absolute",
+      left: `${x}%`,
+      top: `${y}%`,
+      width: `${w}%`,
+      height: `${h}%`,
+      boxSizing: "border-box",
+    });
+    if (text) element.textContent = text;
+    return element;
+  }
+
+  /** Ein Platz der Vorschau – entweder eine Entity oder eine Fläche, die das Backend selbst füllt. */
+  _slotElement(slot, card, entities, states, auftraege, marke) {
+    const element = document.createElement("div");
+    Object.assign(element.style, {
+      position: "absolute",
+      left: `${slot.x}%`,
+      top: `${slot.y}%`,
+      width: `${slot.w}%`,
+      height: `${slot.h}%`,
+      boxSizing: "border-box",
+    });
+
+    // Flächen ohne Entity: QR-Code, Regler, Tastatur … – nachgebaut wird nur ihre Lage.
+    const platzhalter = {
+      qr: "QR-Code",
+      slider: "Lautstärke",
+      transport: "⏮  ⏯  ⏭",
+      "flat-main": {
+        thermo: "Thermostat-Bedienung",
+        keypad: "Zifferntastatur",
+        chart: "Diagramm",
+      },
+    }[slot.kind];
+    if (platzhalter !== undefined) {
+      element.className = "platzhalter";
+      element.textContent =
+        typeof platzhalter === "string" ? platzhalter : platzhalter[slot.widget] || "";
+      if (slot.kind === "flat-main") {
+        // Auf diesen Karten trägt die Karte selbst die Entity – ihr Name gehört sichtbar dazu.
+        const inhalt = previewContent(card, states);
+        element.textContent = `${element.textContent}${inhalt.name ? `\n${inhalt.name}` : ""}`;
+        element.style.whiteSpace = "pre-line";
+      }
+      return element;
+    }
+
+    if (slot.kind === "clock" || slot.kind === "date") {
+      element.className = slot.kind;
+      // Näherung: die echte Formatierung macht das Backend nach timeFormat/dateFormat (strftime).
+      const jetzt = new Date();
+      element.textContent =
+        slot.kind === "clock"
+          ? jetzt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+          : jetzt.toLocaleDateString(undefined, {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            });
+      return element;
+    }
+
+    const entity = slot.index === "flat" ? card : entities[slot.index];
+    const inhalt = previewContent(entity, states);
+    const art = { icon: "icon-only", value: "row", "flat-title": "row" }[slot.kind] || slot.kind;
+    element.className = `slot ${art}${inhalt.frei ? " frei" : ""}`;
+    if (inhalt.frei) {
+      // Freier Platz: `delete` ist Absicht, „nichts konfiguriert" nur noch nicht gefüllt.
+      element.title =
+        inhalt.kind === "delete" ? "entity: delete – Platz bleibt frei" : "Platz nicht belegt";
+      return element;
+    }
+
+    const zeigtName = art !== "icon-only" && art !== "center" && art !== "main";
+    const zeigtWert = art !== "icon-only";
+
+    if (art !== "center") element.appendChild(this._slotIcon(inhalt, auftraege, marke));
+    if (zeigtName) {
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = inhalt.name;
+      this._registerTemplate(inhalt, "name", auftraege, marke, (text) => {
+        name.textContent = text;
+      });
+      element.appendChild(name);
+    }
+    if (zeigtWert) {
+      const wert = document.createElement("span");
+      wert.className = "val";
+      wert.textContent = inhalt.value;
+      this._registerTemplate(inhalt, "value", auftraege, marke, (text) => {
+        wert.textContent = text;
+      });
+      element.appendChild(wert);
+    }
+    if (inhalt.color) element.style.color = inhalt.color;
+    this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
+      const rgb = parseTemplateColor(text);
+      if (rgb) element.style.color = rgbToHex(rgb);
+    });
+    if (inhalt.zustandFehlt) {
+      element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
+      const warnung = document.createElement("span");
+      warnung.className = "warn";
+      warnung.textContent = "⚠";
+      element.appendChild(warnung);
+    }
+    return element;
+  }
+
+  /** Das Symbol eines Platzes – inklusive der Sonderformen, die gar kein Symbol sind. */
+  _slotIcon(inhalt, auftraege, marke) {
+    if (inhalt.iconSonderform) {
+      // `text:`/`ha:`/`<I>…</I>`: hier steht Text, kein Symbol. Was dabei herauskommt, zeigt das
+      // Template-Rendering – bis dahin bleibt der Platz leer.
+      const span = document.createElement("span");
+      span.className = "val";
+      span.style.flex = "none";
+      this._registerTemplate(inhalt, "icon", auftraege, marke, (text) => {
+        const gelesen = iconFromRendered(text);
+        if (gelesen.icon) {
+          const symbol = document.createElement("ha-icon");
+          symbol.className = "icon";
+          symbol.setAttribute("icon", `mdi:${gelesen.icon}`);
+          span.replaceWith(symbol);
+        } else span.textContent = gelesen.text;
+      });
+      return span;
+    }
+    const symbol = document.createElement("ha-icon");
+    symbol.className = `icon${inhalt.iconAbgeleitet ? " abgeleitet" : ""}`;
+    symbol.setAttribute("icon", inhalt.icon || "mdi:checkbox-blank-circle-outline");
+    if (!inhalt.icon) {
+      symbol.style.opacity = ".35";
+      symbol.title = "Kein Symbol gesetzt – das Backend leitet es aus der Entity ab";
+    } else if (inhalt.iconAbgeleitet) {
+      symbol.style.opacity = ".6";
+      symbol.title = `Aus Home Assistant übernommen (${inhalt.icon}) – das Backend wählt eigenständig`;
+    } else if (inhalt.iconUnbekannt) {
+      symbol.title = `${inhalt.icon} steht nicht im Mapping des Backends – dort erschiene alert-circle-outline`;
+    }
+    return symbol;
+  }
+
+  /** Merkt ein noch zu renderndes Template für den nächsten Sammelaufruf vor. */
+  _registerTemplate(inhalt, feld, auftraege, marke, apply) {
+    const eintrag = (inhalt.templates || []).find((t) => t.feld === feld);
+    if (!eintrag) return;
+    // Bei value und icon rendert das Backend nur bis zum letzten `}` – der Rest bleibt wörtlich.
+    const suffixFeld = (this._schema.templateSuffixFields || []).includes(feld);
+    const [template, suffix] = suffixFeld ? splitTemplateSuffix(eintrag.text) : [eintrag.text, ""];
+    auftraege.push({
+      template,
+      marke,
+      apply: (text) => apply(text === null ? eintrag.text : `${text}${suffix}`),
+    });
+  }
+
+  /**
+   * Rendert alle Templates der Vorschau – in einem Aufruf, mit Einzelaufrufen als Rückfallebene.
+   *
+   * Eine volle Karte trägt schnell zwei Dutzend Templates; einzeln gerendert wären das ebenso viele
+   * Anfragen bei jeder Änderung. Stimmt die Teilezahl nicht (ein Template gibt den Trenner selbst
+   * aus) oder scheitert der Sammelaufruf an einem einzigen kaputten Template, wird einzeln
+   * gerendert: dann bleiben die übrigen Plätze richtig.
+   */
+  async _resolvePreviewTemplates(auftraege, marke) {
+    if (!this._hass) return;
+    const texte = auftraege.map((auftrag) => auftrag.template);
+    let ergebnisse = null;
+    try {
+      const gerendert = await this._hass.callApi("POST", "template", {
+        template: joinTemplates(texte),
+      });
+      ergebnisse = splitTemplateResult(gerendert, texte.length);
+    } catch (err) {
+      ergebnisse = null;
+    }
+    if (!ergebnisse) {
+      ergebnisse = await Promise.all(
+        texte.map(async (text) => {
+          try {
+            return String(await this._hass.callApi("POST", "template", { template: text })).trim();
+          } catch (err) {
+            return null; // Fehlerhaftes Template: der Platz zeigt weiter den Rohtext.
+          }
+        })
+      );
+    }
+    if (marke !== this._previewToken) return; // Die Vorschau wurde inzwischen neu gebaut.
+    auftraege.forEach((auftrag, index) => auftrag.apply(ergebnisse[index]));
+  }
+
+  /** Zeichnet die Vorschau entprellt neu – ein Tastendruck soll keine Anfragewelle auslösen. */
+  _schedulePreview() {
+    clearTimeout(this._previewTimer);
+    this._previewTimer = setTimeout(() => this._renderPreview(), 400);
   }
 
   /** Nach einem Typwechsel ändern sich die anzuzeigenden Felder – Formular komplett neu bauen. */
@@ -1698,4 +2237,10 @@ export {
   splitTemplateSuffix,
   parseTemplateColor,
   templateFieldMode,
+  entityKind,
+  previewColor,
+  previewContent,
+  iconFromRendered,
+  joinTemplates,
+  splitTemplateResult,
 };

@@ -1,0 +1,283 @@
+// Tests der Vorschau – Geometrie (preview-layouts.js) und Inhalt (previewContent & Co.).
+//
+// Beides ist bewusst DOM-frei gehalten, damit genau das prüfbar ist, woran die Vorschau falsch
+// werden könnte: zu viele oder zu wenige Plätze, eine verschobene Reihenfolge, ein erfundener Wert.
+// Das Zeichnen selbst (ha-icon, Positionierung) sieht man nur im Browser.
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+const panel = await import(
+  "../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js"
+);
+const layouts = await import(
+  "../custom_components/nspanel_ui_config/www/panel/preview-layouts.js"
+);
+
+const { previewSlots, entitySlots, SCREEN } = layouts;
+const {
+  entityKind,
+  previewColor,
+  previewContent,
+  iconFromRendered,
+  joinTemplates,
+  splitTemplateResult,
+} = panel;
+
+// Die Kapazitätstabelle aus schema.py – hier nur als *Eingabe* der Tests. Die Vorschau kennt sie
+// nicht; sie bekommt die Zahl übergeben, damit Schema und Darstellung nicht auseinanderlaufen können.
+const KAPAZITAET = {
+  cardEntities: { eu: 4, "us-l": 4, "us-p": 6 },
+  cardGrid: { eu: 6, "us-l": 6, "us-p": 6 },
+  cardGrid2: { eu: 8, "us-l": 8, "us-p": 9 },
+  cardQR: { eu: 2, "us-l": 2, "us-p": 2 },
+  cardMedia: { eu: 6, "us-l": 6, "us-p": 6 },
+  cardPower: { eu: 8, "us-l": 8, "us-p": 8 },
+  screensaver2: { eu: 15, "us-l": 15, "us-p": 15 },
+};
+
+// Der Screensaver steht bewusst nicht in der Tabelle oben: seine Plätze hängen nicht nur an der
+// Kapazität, sondern auch daran, wie viele Entities konfiguriert sind *und* wie das Display steht.
+// Er wird deshalb unten eigens geprüft.
+
+// --- Geometrie --------------------------------------------------------------------------------
+
+test("jede Karte bekommt genau so viele Plätze, wie das Schema angibt", () => {
+  for (const [cardType, jeModell] of Object.entries(KAPAZITAET)) {
+    for (const [model, capacity] of Object.entries(jeModell)) {
+      const ergebnis = previewSlots({ cardType, capacity, filled: capacity, model });
+      assert.equal(
+        entitySlots(ergebnis).length,
+        capacity,
+        `${cardType} auf ${model}: ${entitySlots(ergebnis).length} statt ${capacity} Plätze`
+      );
+    }
+  }
+});
+
+test("die Plätze tragen die Listenpositionen 0…n-1 in Reihenfolge", () => {
+  for (const [cardType, jeModell] of Object.entries(KAPAZITAET)) {
+    const capacity = jeModell.eu;
+    const slots = entitySlots(previewSlots({ cardType, capacity, filled: capacity, model: "eu" }));
+    const indizes = slots.map((slot) => slot.index).sort((a, b) => a - b);
+    assert.deepEqual(
+      indizes,
+      Array.from({ length: capacity }, (unused, i) => i),
+      `${cardType}: unerwartete Positionen ${JSON.stringify(indizes)}`
+    );
+  }
+});
+
+test("kein Platz ragt über die Displayfläche hinaus", () => {
+  for (const [cardType, jeModell] of Object.entries(KAPAZITAET)) {
+    for (const [model, capacity] of Object.entries(jeModell)) {
+      for (const slot of previewSlots({ cardType, capacity, filled: capacity, model }).slots) {
+        assert.ok(slot.x >= 0 && slot.y >= 0, `${cardType}/${model}: negative Position`);
+        assert.ok(
+          slot.x + slot.w <= 100.01 && slot.y + slot.h <= 100.01,
+          `${cardType}/${model}: Platz ragt hinaus (${slot.kind} ${slot.x}+${slot.w} / ${slot.y}+${slot.h})`
+        );
+        assert.ok(slot.w > 0 && slot.h > 0, `${cardType}/${model}: leere Fläche`);
+      }
+    }
+  }
+});
+
+test("weniger Entities als Plätze lassen die Plätze stehen – sie bleiben nur leer", () => {
+  const voll = entitySlots(previewSlots({ cardType: "cardGrid", capacity: 6, filled: 6 }));
+  const leer = entitySlots(previewSlots({ cardType: "cardGrid", capacity: 6, filled: 1 }));
+  assert.equal(leer.length, voll.length);
+});
+
+test("der Screensaver zeigt ohne sechste Entity ein Hauptsymbol und vier Vorhersagen", () => {
+  for (const model of ["eu", "us-l", "us-p"]) {
+    const slots = entitySlots(previewSlots({ cardType: "screensaver", capacity: 6, filled: 5, model }));
+    assert.deepEqual(
+      slots.map((slot) => slot.index),
+      [0, 1, 2, 3, 4],
+      `${model}: unerwartete Plätze`
+    );
+  }
+});
+
+test("die sechste Entity schaltet quer das alternative Layout ein – und verdrängt dabei die fünfte", () => {
+  // Im HMI: tForecast1 wird ausgeblendet und die übrigen Spalten rücken nach rechts
+  // (tForecast4 = tForecast3 …). Die vierte Vorhersage hat danach keinen Platz mehr.
+  for (const model of ["eu", "us-l"]) {
+    const slots = entitySlots(previewSlots({ cardType: "screensaver", capacity: 6, filled: 6, model }));
+    assert.deepEqual(
+      slots.map((slot) => slot.index).sort((a, b) => a - b),
+      [0, 1, 2, 3, 5],
+      `${model}: Eintrag 5 (Index 4) müsste verdrängt sein`
+    );
+  }
+});
+
+test("hochkant bleiben alle sechs sichtbar – dort entfällt die Verschiebung", () => {
+  // Die Verschiebung steckt im HMI hinter `if(p0.w!=320)`; bei 320 px Breite greift sie nicht,
+  // die beiden Textblöcke stehen stattdessen nebeneinander.
+  const slots = entitySlots(
+    previewSlots({ cardType: "screensaver", capacity: 6, filled: 6, model: "us-p" })
+  );
+  assert.deepEqual(slots.map((slot) => slot.index).sort((a, b) => a - b), [0, 1, 2, 3, 4, 5]);
+});
+
+test("Screensaver werden ohne Titel- und Navileiste gezeichnet, Karten mit", () => {
+  assert.equal(previewSlots({ cardType: "screensaver", capacity: 6 }).chrome, false);
+  assert.equal(previewSlots({ cardType: "screensaver2", capacity: 15 }).chrome, false);
+  assert.equal(previewSlots({ cardType: "cardEntities", capacity: 4 }).chrome, true);
+});
+
+test("us-p steht hochkant, eu und us-l liegen quer", () => {
+  assert.deepEqual(SCREEN["us-p"], { w: 320, h: 480 });
+  assert.deepEqual(SCREEN.eu, { w: 480, h: 320 });
+  assert.equal(previewSlots({ cardType: "cardGrid", capacity: 6, model: "us-p" }).screen.h, 480);
+});
+
+test("Karten ohne Entity-Liste zeigen die Fläche des Backends, nicht erfundene Plätze", () => {
+  for (const cardType of ["cardThermo", "cardAlarm", "cardUnlock", "cardChart"]) {
+    const ergebnis = previewSlots({ cardType, capacity: 0, filled: 0 });
+    assert.equal(entitySlots(ergebnis).length, 0, `${cardType} sollte keine Listenplätze haben`);
+    assert.equal(ergebnis.slots.length, 1);
+    assert.equal(ergebnis.slots[0].index, "flat");
+  }
+});
+
+test("ein unbekannter Kartentyp wird als Liste dargestellt, statt zu scheitern", () => {
+  const ergebnis = previewSlots({ cardType: "cardWasAuchImmer", capacity: 3, filled: 3 });
+  assert.equal(entitySlots(ergebnis).length, 3);
+});
+
+// --- Inhalt -----------------------------------------------------------------------------------
+
+test("entityKind trennt echte Entities von den Sonderformen des Backends", () => {
+  assert.equal(entityKind("light.kueche"), "state");
+  assert.equal(entityKind("iText.Guten Morgen"), "text");
+  assert.equal(entityKind("navigate.kueche"), "navigate");
+  assert.equal(entityKind("service.script.turn_on"), "service");
+  assert.equal(entityKind("delete"), "delete");
+  assert.equal(entityKind(""), "empty");
+  assert.equal(entityKind(undefined), "empty");
+});
+
+test("ohne eigene Angaben kommen Name, Wert und Symbol aus Home Assistant", () => {
+  const inhalt = previewContent(
+    { entity: "sensor.puffer" },
+    {
+      "sensor.puffer": {
+        state: "48.2",
+        attributes: { friendly_name: "Puffer oben", unit_of_measurement: "°C", icon: "mdi:thermometer" },
+      },
+    }
+  );
+  assert.equal(inhalt.name, "Puffer oben");
+  assert.equal(inhalt.value, "48.2 °C");
+  assert.equal(inhalt.icon, "mdi:thermometer");
+  // Wichtig: gekennzeichnet, denn das Backend leitet sein Symbol selbst ab (icon_mapping.py).
+  assert.equal(inhalt.iconAbgeleitet, true);
+});
+
+test("eigene Angaben schlagen Home Assistant", () => {
+  const inhalt = previewContent(
+    { entity: "sensor.puffer", name: "Puffer", value: "warm", icon: "fire" },
+    { "sensor.puffer": { state: "48.2", attributes: { friendly_name: "Puffer oben" } } }
+  );
+  assert.equal(inhalt.name, "Puffer");
+  assert.equal(inhalt.value, "warm");
+  assert.equal(inhalt.icon, "mdi:fire");
+  assert.equal(inhalt.iconAbgeleitet, false);
+});
+
+test("eine Entity, die es in Home Assistant nicht gibt, wird als solche gemeldet", () => {
+  const inhalt = previewContent({ entity: "light.tippfehler" }, {});
+  assert.equal(inhalt.zustandFehlt, true);
+  assert.equal(inhalt.name, "light.tippfehler");
+  assert.equal(inhalt.value, "");
+});
+
+test("Sonderformen haben keinen Zustand und melden deshalb auch keinen fehlenden", () => {
+  const text = previewContent({ entity: "iText.Guten Morgen" }, {});
+  assert.equal(text.value, "Guten Morgen");
+  assert.equal(text.zustandFehlt, false);
+
+  const nav = previewContent({ entity: "navigate.kueche", icon: "arrow-right" }, {});
+  assert.equal(nav.zustandFehlt, false);
+  assert.equal(nav.name, "navigate.kueche");
+});
+
+test("delete und leere Einträge markieren den Platz als frei", () => {
+  assert.equal(previewContent({ entity: "delete" }, {}).frei, true);
+  assert.equal(previewContent({ entity: "" }, {}).frei, true);
+  assert.equal(previewContent(undefined, {}).frei, true);
+  assert.equal(previewContent("kein objekt", {}).frei, true);
+  assert.equal(previewContent({ entity: "light.k" }, {}).frei, false);
+});
+
+test("Templates werden gesammelt statt geraten", () => {
+  const inhalt = previewContent(
+    {
+      entity: "sensor.x",
+      name: "{{ states('sensor.name') }}",
+      value: "{{ states('sensor.x') }} kWh",
+      color: "{{ [255, 0, 0] }}",
+    },
+    {}
+  );
+  assert.deepEqual(
+    inhalt.templates.map((t) => t.feld).sort(),
+    ["color", "name", "value"]
+  );
+  // Bis das Rendering da ist, steht nichts Falsches im Platz.
+  assert.equal(inhalt.value, "");
+  assert.equal(inhalt.color, null);
+});
+
+test("ein unbekannter Icon-Name wird gekennzeichnet, aber nicht verworfen", () => {
+  const inhalt = previewContent({ entity: "light.k", icon: "gibtesnicht-xyz" }, {});
+  assert.equal(inhalt.icon, "mdi:gibtesnicht-xyz");
+  assert.equal(inhalt.iconUnbekannt, true);
+  assert.equal(previewContent({ entity: "light.k", icon: "lightbulb" }, {}).iconUnbekannt, false);
+});
+
+test("icon-Sonderformen sind kein Symbol und werden nicht als Name geprüft", () => {
+  const inhalt = previewContent({ entity: "light.k", icon: "text:23°" }, {});
+  assert.equal(inhalt.iconSonderform, true);
+  assert.equal(inhalt.icon, null);
+  assert.equal(inhalt.iconUnbekannt, false);
+});
+
+test("previewColor wählt bei {on, off} nach dem Zustand", () => {
+  const farbe = { on: [255, 0, 0], off: [0, 0, 255] };
+  assert.equal(previewColor(farbe, "on"), "#ff0000");
+  assert.equal(previewColor(farbe, "off"), "#0000ff");
+  assert.equal(previewColor(farbe, "closed"), "#0000ff");
+  // Ohne bekannten Zustand die eingeschaltete Farbe – die hat man beim Konfigurieren im Blick.
+  assert.equal(previewColor(farbe, undefined), "#ff0000");
+  assert.equal(previewColor([0, 128, 255]), "#0080ff");
+  // Templates ergeben hier nichts: sie müssen erst gerendert werden.
+  assert.equal(previewColor("{{ x }}"), null);
+  assert.equal(previewColor(undefined), null);
+});
+
+test("iconFromRendered erkennt Symbol und Text auseinander", () => {
+  assert.equal(iconFromRendered("<I>thermometer</I>").icon, "thermometer");
+  assert.equal(iconFromRendered("mdi:lightbulb").icon, "lightbulb");
+  assert.equal(iconFromRendered("lightbulb").icon, "lightbulb");
+  const text = iconFromRendered("21,5 °C");
+  assert.equal(text.icon, null);
+  assert.equal(text.text, "21,5 °C");
+});
+
+test("Sammelaufruf und Zerlegung passen zusammen", () => {
+  const texte = ["{{ 1 }}", "{{ 2 }}", "fest"];
+  const gerendert = joinTemplates(["1", "2", "fest"]);
+  assert.deepEqual(splitTemplateResult(gerendert, texte.length), ["1", "2", "fest"]);
+});
+
+test("stimmt die Teilezahl nicht, wird null gemeldet statt falsch zugeordnet", () => {
+  // Genau der Fall, für den es den Rückfall auf Einzelaufrufe gibt: ein Template gibt den
+  // Trenner selbst aus – die Zuordnung wäre danach um eins verschoben.
+  const kaputt = joinTemplates(["a", "b", "c"]);
+  assert.equal(splitTemplateResult(kaputt, 2), null);
+  assert.equal(splitTemplateResult("", 2), null);
+});

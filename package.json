@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Nur fuer die Node-Tests: markiert die Panel-Assets als ES-Module (siehe .github/workflows/validate.yml).",
   "scripts": {
-    "test": "node --test tests/panel.test.mjs"
+    "test": "node --test tests/*.test.mjs"
   }
 }

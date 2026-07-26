@@ -35,8 +35,21 @@ etwas. Das Layout ändert sich dabei allerdings sichtbar: kleinere Kacheln, ande
 
 | Karte | Aufteilung der Plätze |
 | --- | --- |
-| `screensaver` | 1. = großes Hauptsymbol · 2.–5. = die vier Vorhersagespalten · eine 6. aktiviert das alternative Layout (die erste Vorhersagespalte weicht dann einem zweiten Textblock) |
+| `screensaver` | 1. = großes Hauptsymbol · 2.–5. = die vier Vorhersagespalten · eine 6. aktiviert das alternative Layout (siehe unten) |
 | `screensaver2` | 1. = Hauptbereich · 2.–4. = Zeile mit Symbol und Wert · 5.–10. = Kacheln mit Symbol, Name und Wert · 11.–15. = reine Symbole |
+
+**Das alternative Layout des `screensaver` verdrängt quer einen Eintrag.** Sobald eine 6. Entity
+gesetzt ist, trägt der Hauptbereich zwei Textblöcke (1. und 6. Entity). Was mit den
+Vorhersagespalten passiert, hängt an der Ausrichtung – im HMI steht die Verschiebung hinter
+`if(p0.w!=320)`:
+
+| Ausrichtung | Vorhersagespalten | Folge |
+| --- | --- | --- |
+| quer (`eu`, `us-l`) | die erste wird ausgeblendet, die übrigen rücken nach rechts (`tForecast4 = tForecast3` …) | die **5. Entity verliert ihren Platz** – konfiguriert, gesendet, nirgends sichtbar |
+| hochkant (`us-p`) | bleiben alle vier stehen (die Textblöcke stehen nebeneinander) | alle sechs sichtbar |
+
+Der Editor meldet das als Befund und zeigt es in der Vorschau: der verdrängte Eintrag wird dort gar
+nicht erst gezeichnet.
 
 Bei `cardPower` stehen die **ersten beiden** Entities in der Mitte, die restlichen sechs außen
 herum; `entity: delete` hält einen Außenplatz frei. Bei `cardMedia` hängt das Backend die

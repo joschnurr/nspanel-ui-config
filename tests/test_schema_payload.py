@@ -237,6 +237,40 @@ def test_grid_mit_sieben_entities_wird_nicht_bemaengelt() -> None:
     assert not schema.validate_model(model)
 
 
+def _screensaver_model(model: str, anzahl: int) -> dict:
+    return {
+        "global": {"model": model},
+        "screensaver": {
+            "type": "screensaver",
+            "entities": [{"entity": f"weather.x{i}"} for i in range(anzahl)],
+        },
+    }
+
+
+def test_sechs_screensaver_entities_verdraengen_quer_die_fuenfte() -> None:
+    """Der zweite stille Fall des Screensavers – die Kapazität allein verrät ihn nicht.
+
+    Sechs Entities passen laut ``CARD_CAPACITY``, aber quer schaltet das HMI aufs alternative
+    Layout, blendet die erste Vorhersagespalte aus und rückt die übrigen nach rechts. Die fünfte
+    Entity ist danach konfiguriert, wird gesendet und trotzdem nirgends angezeigt.
+    """
+    for panel in ("eu", "us-l"):
+        meldungen = [
+            f["message"]
+            for f in schema.validate_model(_screensaver_model(panel, 6))
+            if f["path"] == "screensaver.entities"
+        ]
+        assert meldungen, f"{panel}: alternatives Layout muss gemeldet werden"
+        assert "5. Entity" in meldungen[0]
+
+
+def test_hochkant_und_unter_sechs_bleibt_der_screensaver_unbeanstandet() -> None:
+    # us-p: die beiden Textblöcke stehen nebeneinander, die Verschiebung entfällt.
+    assert not schema.validate_model(_screensaver_model("us-p", 6))
+    # Fünf Entities lösen das alternative Layout gar nicht erst aus.
+    assert not schema.validate_model(_screensaver_model("eu", 5))
+
+
 def test_wirkungslose_keys_werden_gebuendelt_gemeldet() -> None:
     """Ein Hinweis je Karte, nicht je Zeile – sonst steht dieselbe Erklärung fünfmal untereinander."""
     model = {

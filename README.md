@@ -36,6 +36,10 @@ Der Editor macht genau das sichtbar, bevor es auf dem Panel fehlt.
 Assistant wählen. Jedes Feld ist beschriftet mit dem, was es bewirkt, und den Werten, die es
 annehmen darf.
 
+**Vorschau** – über jedem Formular eine Nachbildung der Displayfläche in Originalgröße: die
+Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Man sieht, wie die
+Karte wirkt, bevor sie auf dem Panel landet. → [docs/funktionen.md](docs/funktionen.md#vorschau)
+
 **Anzeigekapazität** – „5 von 4 Plätzen": der Editor weiß, wie viele Einträge jeder Kartentyp auf
 deinem Panel-Modell wirklich zeigt, und markiert überzählige.
 → [docs/kapazitaet.md](docs/kapazitaet.md)

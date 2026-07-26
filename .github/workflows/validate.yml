@@ -31,7 +31,9 @@ jobs:
           # 22 statt 20: gleiche Major-Version wie lokal getestet, und 20 ist auf den Runnern
           # inzwischen abgekündigt.
           node-version: "22"
-      - run: node --test tests/panel.test.mjs
+      # Glob statt `--test tests/`: das Verzeichnis-Argument gibt es erst ab Node 22.6, die Shell
+      # löst den Glob dagegen überall auf – und neue Testdateien laufen trotzdem automatisch mit.
+      - run: node --test tests/*.test.mjs
 
   hassfest:
     name: Hassfest

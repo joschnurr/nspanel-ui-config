@@ -93,8 +93,11 @@ CAPACITY_LAYOUT_NOTES: Final[dict[str, str]] = {
     "cardPower": "Die ersten beiden Entities stehen in der Mitte, die restlichen sechs außen herum. "
     "`entity: delete` hält einen Außenplatz frei.",
     "screensaver": "1. Entity = großes Hauptsymbol, 2.–5. = die vier Vorhersagespalten. "
-    "Eine 6. Entity schaltet das Display auf das alternative Layout um (die erste "
-    "Vorhersagespalte weicht dann einem zweiten Textblock).",
+    "Eine 6. Entity schaltet das Display auf das alternative Layout um: der Hauptbereich "
+    "trägt dann zwei Textblöcke (1. und 6. Entity). Quer (eu, us-l) blendet das HMI dafür "
+    "die erste Vorhersagespalte aus und rückt die übrigen nach rechts — die 5. Entity "
+    "verliert dadurch ihren Platz. Hochkant (us-p) stehen die Textblöcke nebeneinander, "
+    "dort bleiben alle sechs sichtbar.",
     "screensaver2": "1. Entity = Hauptbereich, 2.–4. = Zeile mit Symbol und Wert, "
     "5.–10. = Kacheln mit Symbol, Name und Wert, 11.–15. = reine Symbole.",
 }
@@ -768,7 +771,26 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
                     f"erscheint nichts mehr auf dem Display.",
                 }
             )
-        elif capacity is None and entities and card_type in CARDS_WITHOUT_ENTITY_LIST:
+        # Der Screensaver hat einen zweiten stillen Fall: mit sechs Entities schaltet das Display
+        # quer auf das alternative Layout und blendet dabei die erste Vorhersagespalte aus. Die
+        # fünfte Entity ist dann konfiguriert, wird gesendet — und trotzdem nirgends angezeigt.
+        if (
+            card_type == "screensaver"
+            and len(entities) >= 6
+            and panel_model in (None, "eu", "us-l")
+        ):
+            findings.append(
+                {
+                    "level": "warning",
+                    "path": f"{path}.entities",
+                    "message": "Ab der 6. Entity schaltet das Display auf das alternative Layout: "
+                    "die 1. und die 6. Entity bilden dann den Hauptbereich, die erste "
+                    "Vorhersagespalte entfällt und die übrigen rücken nach rechts. Die 5. Entity "
+                    "verliert dadurch ihren Platz (nur quer – auf us-p bleiben alle sichtbar).",
+                }
+            )
+
+        if capacity is None and entities and card_type in CARDS_WITHOUT_ENTITY_LIST:
             findings.append(
                 {
                     "level": "warning",

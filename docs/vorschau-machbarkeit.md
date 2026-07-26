@@ -1,6 +1,8 @@
 # Vorschau bzw. Simulation des Panels — Machbarkeit
 
-*Stand: 2026-07-26. Untersuchung, noch keine Umsetzung.*
+*Untersuchung von 2026-07-26. **Stufe 1 ist seither umgesetzt** (`www/panel/preview-layouts.js` +
+Zeichenschicht im Panel, siehe [funktionen.md](funktionen.md#vorschau)); Stufe 2 und Option C sind
+weiterhin offen. Der Text steht als Begründung der Richtung.*
 
 Die Frage: Kann der Editor zeigen, **wie die konfigurierte Karte auf dem Panel aussehen wird** —
 und lässt sich das Ganze vielleicht sogar in einem NSPanel-Emulator live simulieren?
@@ -102,3 +104,19 @@ Broker für die Testinstanz ist deshalb eine Sicherheitsgrenze, keine Bequemlich
 
 Option B, Stufe 1. Sie liefert früh sichtbaren Nutzen, kommt ohne zusätzliche Infrastruktur aus und
 ist die Grundlage für alles Weitere. Option C bleibt als Ausbaustufe offen, Option A scheidet aus.
+
+## Was die Umsetzung von Stufe 1 gezeigt hat
+
+- **Die Dumps braucht man nicht als Repo-Kopie.** Einzelne Seiten lassen sich direkt über
+  `raw.githubusercontent.com/joBr99/nspanel-lovelace-ui/main/HMI/…` ziehen; für den Screensaver war
+  das der schnellste Weg zu belastbaren Koordinaten. Er ist deshalb bereits layout-treu, die übrigen
+  Karten sind nachempfunden.
+- **Der Aufwand steckt nicht im Zeichnen, sondern in der Zuordnung.** Welche Nextion-Komponente
+  welchen Listeneintrag zeigt, steht nicht im Dump-Kopf, sondern in den `spstr`-Aufrufen des
+  Seitencodes (`spstr strCommand.txt,tForecast1.txt,"~",11` – Feldindex 11 des `weatherUpdate~`-
+  Strings). Ein `tools/extract_layouts.py` für Stufe 2 muss also beides lesen: die Attribute *und*
+  den Code. Dafür wäre die Zuordnung dann hergeleitet statt abgeschrieben.
+- **Dabei ist ein echter Befund abgefallen:** im alternativen Screensaver-Layout blendet das HMI
+  quer die erste Vorhersagespalte aus und rückt die übrigen nach rechts – die 5. Entity verliert
+  ihren Platz. Hochkant passiert das nicht (`if(p0.w!=320)`). Das steht in keiner Dokumentation und
+  war auch in `CAPACITY_LAYOUT_NOTES` zu grob beschrieben; beides ist korrigiert.

@@ -3,6 +3,40 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.10.0 – 2026-07-26
+
+### Vorschau der Displayfläche
+
+Bis hierher beantwortete der Editor, *ob* ein Eintrag noch auf die Karte passt – nicht, *wie* sie
+aussieht. Über jedem Kartenformular steht jetzt eine Nachbildung des Displays in Originalgröße
+(480×320, `us-p` hochkant 320×480).
+
+- **Plätze, Reihenfolge, Symbole, Farben und Werte kommen aus dem bearbeiteten Modell**, Templates
+  werden über Home Assistants `/api/template` gerendert – alle einer Karte in einem einzigen Aufruf,
+  mit Einzelaufrufen als Rückfallebene.
+- **Die Zahl der Plätze bleibt allein Sache des Schemas** (`CARD_CAPACITY`); die Vorschau bekommt sie
+  übergeben und kann ihr deshalb nicht widersprechen.
+- Freie Plätze (`entity: delete`, leer) sind als solche zu sehen, `iText.`/`navigate.`/`service.`
+  werden nicht nach einem Zustand durchsucht, und eine `entity_id`, die es in Home Assistant nicht
+  gibt, bekommt ein ⚠.
+- Ehrlich gekennzeichnet ist, was Näherung bleibt: Größen und Schriftart sind nachempfunden, und ein
+  Symbol, das nicht selbst gesetzt ist, leitet das Backend eigenständig ab – hier steht ersatzweise
+  das aus Home Assistant, blasser dargestellt.
+
+### Ein Befund aus dem HMI: das alternative Screensaver-Layout verdrängt einen Eintrag
+
+Beim Abmessen der echten Screensaver-Geometrie kam heraus, dass die 6. Entity mehr tut als
+umzusortieren: quer (`eu`, `us-l`) blendet das Display die erste Vorhersagespalte aus und rückt die
+übrigen nach rechts – **die 5. Entity ist danach konfiguriert, wird gesendet und nirgends
+angezeigt**. Hochkant (`us-p`) passiert das nicht. Die Validierung meldet es jetzt, die Layout-Notiz
+im Schema beschreibt es genau, und die Vorschau zeichnet den verdrängten Eintrag erst gar nicht.
+
+### Kleinigkeiten
+
+- `package.json` mit `"type": "module"`: die Node-Tests liefen sonst nur auf Node ≥ 22.7.
+- Brand-Icons um 83 % verkleinert (`tools/optimize-brand-png.mjs`) – Vorarbeit für einen PR ins
+  brands-Repo, das ausdrücklich auf Dateigröße achtet.
+
 ## 0.9.0 – 2026-07-26
 
 ### Alle Installationsarten statt nur Docker

@@ -18,6 +18,44 @@ Wo ein Feld je Kartentyp etwas anderes bedeutet, gewinnt die spezifische Fassung
 dem Screensaver dagegen „die Wetter-Entity". Jede Karte bekommt zusätzlich einen Einzeiler darüber,
 was sie überhaupt darstellt.
 
+## Vorschau
+
+Über jedem Kartenformular steht eine **Nachbildung der Displayfläche** – 480×320 Pixel (`us-p`
+hochkant 320×480), in Originalgröße, mit den Einträgen an den Plätzen, an denen sie später
+erscheinen. Sie beantwortet die Fragen, die die Kapazitätsangabe offenlässt: *wirkt* die Farbe auf
+schwarzem Grund, stimmt die Reihenfolge, liefert das Template den erwarteten Wert?
+
+Gezeichnet wird aus dem Modell, das gerade bearbeitet wird – jede Änderung schlägt nach kurzer
+Verzögerung durch, ohne dass das Formular neu aufgebaut wird (der Fokus bleibt also im Feld).
+
+**Was echt ist:** die Anzahl und Reihenfolge der Plätze (aus `CARD_CAPACITY`, nicht aus einer
+zweiten Tabelle im Frontend), die Symbole, die Farben – auch `{on, off}`, das nach dem aktuellen
+Zustand auswählt – und die Werte, inklusive gerenderter Templates. Für die rendert das Panel alle
+Templates einer Karte **in einem einzigen Aufruf** von `/api/template`, getrennt durch ein
+Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten Template
+scheitert, wird einzeln gerendert.
+
+**Was Näherung bleibt:**
+
+- **Größen und Schriftart.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort an
+  derselben Stelle umbricht, ist eine Aussage mit Restunschärfe. Die Geometrie ist bis auf den
+  Screensaver nachempfunden, nicht aus den HMI-Dumps übernommen (siehe
+  [vorschau-machbarkeit.md](vorschau-machbarkeit.md), Stufe 2).
+- **Symbole ohne eigene Angabe.** Die leitet das Backend aus Domain und Zustand ab
+  (`icon_mapping.py`); nachgebaut wird das nicht. Ersatzweise steht das Symbol da, das Home
+  Assistant selbst für die Entity führt – blasser dargestellt und im Tooltip als solches benannt.
+- **Zustandsformate.** Ohne eigenes `value` steht der Zustand aus Home Assistant da; das Backend
+  formatiert ihn teils anders.
+
+Sonderformen sind berücksichtigt: `delete` und leere Einträge erscheinen als **freier Platz**,
+`iText.` als fester Text, `navigate.`/`service.` ohne Zustandssuche. Eine `entity_id`, die es in
+Home Assistant nicht gibt, wird mit ⚠ markiert – das ist fast immer ein Tippfehler.
+
+**Der Screensaver ist layout-treu**, weil seine Aufteilung am wenigsten zu erraten ist: die
+Prozentwerte stammen aus den HMI-Dumps. Dort zeigt die Vorschau auch, was sonst niemand sieht – im
+alternativen Layout (ab der 6. Entity, quer) hat die 5. Entity keinen Platz mehr und wird gar nicht
+erst gezeichnet. Siehe [kapazitaet.md](kapazitaet.md).
+
 ## Template-Editor
 
 Felder, die das Backend als Jinja rendert, haben im Formular einen Umschalter **„als Template
