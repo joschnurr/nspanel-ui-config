@@ -43,13 +43,28 @@ def test_panel_dateien_sind_vorhanden() -> None:
     assert ICON_LIST.is_file(), "Icon-Namensliste fehlt"
 
 
-def test_panel_importiert_die_icon_liste_unter_dem_ausgelieferten_namen() -> None:
-    """Der Importpfad ist relativ zum statischen Verzeichnis — ein Tippfehler bricht das Panel."""
+def test_panel_importiert_die_nebenmodule_unter_dem_ausgelieferten_namen() -> None:
+    """Der Importpfad ist relativ zum statischen Verzeichnis — ein Tippfehler bricht das Panel.
+
+    Die Nebenmodule werden **dynamisch** geladen, damit die Versions-Query der Panel-URL
+    weitergereicht werden kann (sonst hängt der Browser nach einem Update an der alten Datei).
+    Geprüft wird deshalb das Template-Literal, nicht die statische Importzeile.
+    """
     quelle = PANEL_MODULE.read_text(encoding="utf-8")
-    treffer = re.findall(r'^import .*? from "(\./[^"]+)";', quelle, re.MULTILINE)
-    assert treffer, "Das Panel importiert nichts – Icon-Liste nicht eingebunden?"
+    treffer = re.findall(r'await import\(`(\./[^`$]+)\$\{MODUL_VERSION\}`\)', quelle)
+    assert treffer, "Das Panel lädt keine Nebenmodule – Icon-Liste nicht eingebunden?"
     for pfad in treffer:
-        assert (PANEL_DIR / pfad[2:]).is_file(), f"Importierte Datei fehlt: {pfad}"
+        assert (PANEL_DIR / pfad[2:]).is_file(), f"Geladene Datei fehlt: {pfad}"
+
+
+def test_nebenmodule_bekommen_die_versions_query_mit() -> None:
+    """Ohne sie liefe man nach jedem Update Gefahr, neues Panel mit alter Geometrie zu mischen."""
+    quelle = PANEL_MODULE.read_text(encoding="utf-8")
+    assert "const MODUL_VERSION = new URL(import.meta.url).search;" in quelle
+    # Kein statischer Import mehr, sonst rutscht ein Modul ohne Parameter durch.
+    assert not re.search(r'^import .*? from "\./', quelle, re.MULTILINE), (
+        "statischer Import gefunden – der bekäme keine Versions-Query"
+    )
 
 
 def test_icon_liste_ist_plausibel_gross() -> None:

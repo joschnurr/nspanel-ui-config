@@ -377,7 +377,12 @@ class NsPanelLiveView(_NsPanelView):
                     "topic": live.send_topic_of(data.get("model")),
                 }
             )
-        antwort = zustand.as_dict()
+        # Mit ``?card=<Titel>&type=<Kartentyp>`` kommt der zuletzt gesehene Stand *dieser* Karte.
+        # Ohne das wäre die Ansicht kaum brauchbar: ein Panel steht die meiste Zeit im Ruhezustand
+        # und sendet dann nur den Screensaver.
+        antwort = zustand.as_dict(
+            title=request.query.get("card"), card_type=request.query.get("type")
+        )
         antwort["available"] = True
         if antwort.get("message") is None:
             # Abonniert, aber noch nichts gehört: das Panel sendet erst, wenn sich etwas ändert

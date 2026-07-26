@@ -81,6 +81,73 @@ def test_ohne_mitschnitt_ist_die_antwort_leer_aber_gueltig() -> None:
     assert leer["fresh"] is False
 
 
+def _karte(titel: str) -> str:
+    return (
+        f"entityUpd~{titel}~button~navigate.prev~<~65535~~~button~navigate.next~>~65535~~"
+        "~light~light.a~A~17299~Licht~1"
+    )
+
+
+def test_jede_karte_wird_einzeln_gemerkt() -> None:
+    """Der Kern der Live-Ansicht: ein Panel steht meist im Ruhezustand.
+
+    Ohne Gedächtnis je Karte sähe man beim Bearbeiten immer nur den Screensaver – die Funktion wäre
+    praktisch nutzlos. Wer einmal durchblättert, hat danach jede Karte hier.
+    """
+    zustand = live.LiveState()
+    zustand.handle("pageType~cardEntities")
+    zustand.handle(_karte("Garage Pool"), jetzt=1000.0)
+    zustand.handle("pageType~cardGrid")
+    zustand.handle(_karte("Wohnzimmer"), jetzt=1010.0)
+    # Danach geht das Panel in den Ruhezustand.
+    zustand.handle("weatherUpdate~~~~65535~Wetter~8°C", jetzt=1020.0)
+
+    garage = zustand.as_dict(jetzt=1100.0, title="Garage Pool", card_type="cardEntities")
+    assert garage["matched"] is True
+    assert garage["message"]["title"] == "Garage Pool"
+    assert garage["ageSeconds"] == 100
+
+    wohnzimmer = zustand.as_dict(jetzt=1100.0, title="Wohnzimmer", card_type="cardGrid")
+    assert wohnzimmer["matched"] is True
+    assert wohnzimmer["message"]["title"] == "Wohnzimmer"
+
+
+def test_eine_nie_gezeigte_karte_wird_als_solche_gemeldet() -> None:
+    zustand = live.LiveState()
+    zustand.handle("pageType~cardEntities")
+    zustand.handle(_karte("Garage Pool"), jetzt=1000.0)
+
+    antwort = zustand.as_dict(jetzt=1000.0, title="Küche", card_type="cardGrid")
+    assert antwort["matched"] is False
+    # Statt gar nichts zu zeigen: was zuletzt lief – der Editor kann das erklären.
+    assert antwort["message"]["title"] == "Garage Pool"
+    assert antwort["showing"] == "Garage Pool"
+
+
+def test_der_screensaver_wird_ueber_seine_bauart_gefunden() -> None:
+    """Screensaver haben keinen Titel; gesucht wird deshalb über den Kartentyp."""
+    zustand = live.LiveState()
+    zustand.handle("pageType~screensaver2")
+    zustand.handle("weatherUpdate~~~~65535~Wetter~8°C", jetzt=500.0)
+
+    antwort = zustand.as_dict(jetzt=500.0, title="", card_type="screensaver2")
+    assert antwort["matched"] is True
+    assert antwort["message"]["cardType"] == "screensaver2"
+    # Auch die andere Bauart findet den Mitschnitt – welche läuft, entscheidet das Backend.
+    assert zustand.as_dict(jetzt=500.0, card_type="screensaver")["matched"] is True
+
+
+def test_die_liste_der_bekannten_karten_kommt_mit() -> None:
+    zustand = live.LiveState()
+    zustand.handle("pageType~cardEntities")
+    zustand.handle(_karte("Garage Pool"), jetzt=1000.0)
+    zustand.handle("pageType~cardGrid")
+    zustand.handle(_karte("Wohnzimmer"), jetzt=1005.0)
+
+    titel = {eintrag["title"] for eintrag in zustand.as_dict(jetzt=1005.0)["known"]}
+    assert titel == {"Garage Pool", "Wohnzimmer"}
+
+
 def test_das_sende_topic_kommt_aus_dem_modell() -> None:
     modell = {"global": {"panelSendTopic": "cmnd/NSPanel_1/CustomSend"}}
     assert live.send_topic_of(modell) == "cmnd/NSPanel_1/CustomSend"

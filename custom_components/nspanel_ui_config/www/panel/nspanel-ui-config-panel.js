@@ -14,15 +14,22 @@
 //   - Ein geleertes Feld *löscht* den Key, statt "" zu speichern. So bleibt in der erzeugten YAML
 //     nur stehen, was auch wirklich gesetzt wurde.
 
-// Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py). Sie steckt in
-// einem eigenen Modul, damit dieses hier lesbar bleibt – 6896 Namen sind ~110 kB.
-import { ICON_NAMES } from "./icon-names.js";
+// **Die Nebenmodule werden dynamisch geladen – mit derselben Version im Query wie dieses Modul.**
+// Home Assistant hängt an die Panel-URL `?v=<Manifest-Version>`; die Nebenmodule bekämen bei einem
+// statischen `import` gar keinen Parameter und blieben nach einem Update im Browser-Cache liegen.
+// Dann lädt der Browser das neue Panel und die alte Geometrie dazu – ein Fehler, der wie ein nicht
+// installiertes Update aussieht. `import.meta.url` trägt den Parameter, also reichen wir ihn weiter.
+// Außerhalb des Browsers (tests/preview.test.mjs) ist er leer, dort ändert sich nichts.
+const MODUL_VERSION = new URL(import.meta.url).search;
+
+// Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py).
+const { ICON_NAMES } = await import(`./icon-names.js${MODUL_VERSION}`);
 // Zu jedem Namen das Zeichen, mit dem das Backend dieses Icon überträgt. Gebraucht für die
 // Live-Vorschau: über MQTT kommt nur das Zeichen an, <ha-icon> will den Namen.
-import { ICON_CHARS } from "./icon-chars.js";
+const { ICON_CHARS } = await import(`./icon-chars.js${MODUL_VERSION}`);
 // Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
 // Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
-import { previewSlots } from "./preview-layouts.js";
+const { previewSlots } = await import(`./preview-layouts.js${MODUL_VERSION}`);
 
 const ELEMENT_NAME = "nspanel-ui-config-panel";
 
@@ -247,6 +254,7 @@ const STYLES = `
   }
   /* Freie Plätze sichtbar machen: die Karte hat sie, die Konfiguration füllt sie (noch) nicht. */
   .screen .slot.frei { border: 1px dashed #3a3f47; border-radius: 4px; }
+  /* Standardfarbe des Symbols; eine konfigurierte Farbe wird inline gesetzt und gewinnt. */
   .screen .slot .icon { flex: none; --mdc-icon-size: 26px; color: #f5f5f5; }
   .screen .slot .name { flex: 1; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .screen .slot .val { flex: none; font-size: 15px; color: #d7d9dd; max-width: 45%;
@@ -1385,9 +1393,19 @@ class NsPanelUiConfigPanel extends PanelBase {
    * **die Karte, die das Panel gerade anzeigt**, nicht die, die man gerade bearbeitet.
    */
   async _renderLivePreview(host) {
+    // Gezielt nach der Karte fragen, die gerade bearbeitet wird – das Panel selbst steht meist im
+    // Ruhezustand und sendet dann nur den Screensaver.
+    const { card: gesucht } = this._previewCard();
+    const frage = new URLSearchParams();
+    if (isPlain(gesucht)) {
+      if (gesucht.title) frage.set("card", String(gesucht.title));
+      if (gesucht.type) frage.set("type", String(gesucht.type));
+    }
+    const pfad = `nspanel_ui_config/live${frage.toString() ? `?${frage}` : ""}`;
+
     let antwort;
     try {
-      antwort = await this._hass.callApi("GET", "nspanel_ui_config/live");
+      antwort = await this._hass.callApi("GET", pfad);
     } catch (err) {
       this._stopLivePolling();
       host.innerHTML = `<p class="note">Live-Ansicht nicht abrufbar: ${esc(this._errText(err))}</p>`;
@@ -1452,27 +1470,38 @@ class NsPanelUiConfigPanel extends PanelBase {
         ? ""
         : alter < 60
         ? `vor ${Math.round(alter)} s`
-        : `vor ${Math.round(alter / 60)} min`;
-    const frisch = antwort.fresh === false ? ", seither nichts Neues" : "";
+        : alter < 5400
+        ? `vor ${Math.round(alter / 60)} min`
+        : `vor ${Math.round(alter / 3600)} h`;
 
-    const teile = [
-      `<b>Vom Gerät empfangen</b>${wann ? ` (${wann}${frisch})` : ""}: ` +
-        `${esc(nachricht.cardType || "unbekannte Karte")} mit ${anzahl} ${
-          anzahl === 1 ? "Eintrag" : "Einträgen"
-        }.`,
-    ];
+    const teile = [];
+    if (antwort.matched) {
+      // Der Normalfall, für den die Ansicht gedacht ist: der letzte echte Stand *dieser* Karte.
+      teile.push(
+        `<b>Diese Karte, wie sie zuletzt auf dem Gerät stand</b>${wann ? ` (${wann})` : ""}: ` +
+          `${anzahl} ${anzahl === 1 ? "Eintrag" : "Einträge"}.`
+      );
+    } else {
+      // Die bearbeitete Karte war noch nie dran – das Panel steht meist im Ruhezustand.
+      teile.push(
+        `<b>Diese Karte wurde noch nicht am Gerät angezeigt.</b> Am Panel einmal dorthin ` +
+          `blättern, dann steht sie hier – auch später noch, wenn das Panel wieder ruht. ` +
+          `Gezeigt wird solange <code>${esc(nachricht.cardType || "?")}</code>` +
+          `${nachricht.title ? ` („${esc(nachricht.title)}")` : ""}${wann ? `, ${wann}` : ""}.`
+      );
+    }
     if (!nachricht.strukturiert) {
       teile.push(
         "Diese Karte baut das Backend aus eigenen Feldern statt aus Einträgen – die Fläche bleibt " +
           "deshalb leer."
       );
     }
-    // Der wichtigste Hinweis: das Gerät zeigt seine Karte, nicht die hier bearbeitete.
-    const bearbeitet = this._selected();
-    if (isPlain(bearbeitet) && bearbeitet.type && nachricht.cardType !== bearbeitet.type) {
+    const bekannt = (antwort.known || []).filter((eintrag) => eintrag.cardType);
+    if (bekannt.length > 1) {
       teile.push(
-        `Am Panel läuft gerade <code>${esc(nachricht.cardType || "?")}</code>, bearbeitet wird ` +
-          `<code>${esc(bearbeitet.type)}</code> – zum Vergleichen die Karte am Gerät aufrufen.`
+        `Bisher mitgeschnitten: ${bekannt
+          .map((eintrag) => esc(eintrag.title || eintrag.cardType))
+          .join(", ")}.`
       );
     }
     teile.push(
@@ -1627,7 +1656,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     const zeigtName = art !== "icon-only" && art !== "center" && art !== "main";
     const zeigtWert = art !== "icon-only";
 
-    if (art !== "center") element.appendChild(this._slotIcon(inhalt, auftraege, marke));
+    // Das Symbol trägt die Farbe (siehe _faerbe) – es wird deshalb hier festgehalten.
+    const symbol = art !== "center" ? this._slotIcon(inhalt, auftraege, marke) : null;
+    if (symbol) element.appendChild(symbol);
     if (zeigtName) {
       const name = document.createElement("span");
       name.className = "name";
@@ -1646,11 +1677,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       });
       element.appendChild(wert);
     }
-    if (inhalt.color) element.style.color = inhalt.color;
-    this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
-      const rgb = parseTemplateColor(text);
-      if (rgb) element.style.color = rgbToHex(rgb);
-    });
+    this._faerbe(symbol || element, inhalt, auftraege, marke);
     if (inhalt.zustandFehlt) {
       element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
       const warnung = document.createElement("span");
@@ -1687,8 +1714,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     };
 
     const { icon, name, value } = slot.parts;
+    let symbol = null;
     if (icon) {
-      const symbol = this._slotIcon(inhalt, auftraege, marke);
+      symbol = this._slotIcon(inhalt, auftraege, marke);
       setze(symbol, icon);
       // Symbolflächen sind im HMI meist deutlich größer als das Symbol selbst.
       symbol.style.setProperty("--mdc-icon-size", `${Math.round(Math.min(icon.px[0], icon.px[1]) * 0.8)}px`);
@@ -1728,13 +1756,25 @@ class NsPanelUiConfigPanel extends PanelBase {
       element.title = `${inhalt.name}${inhalt.value ? `: ${inhalt.value}` : ""}`;
     }
 
-    if (inhalt.color) element.style.color = inhalt.color;
-    this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
-      const rgb = parseTemplateColor(text);
-      if (rgb) element.style.color = rgbToHex(rgb);
-    });
+    this._faerbe(symbol || element, inhalt, auftraege, marke);
     if (inhalt.zustandFehlt) element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
     return element;
+  }
+
+  /**
+   * Legt die konfigurierte Farbe auf das **Symbol**, nicht auf den ganzen Platz.
+   *
+   * So macht es das Gerät: das HMI schreibt die übertragene Farbe in die Schriftfarbe der
+   * Icon-Komponente (`covx tTmp.txt,tF1Icon.pco`), während Name und Wert ihre feste Farbe behalten.
+   * Färbte man den ganzen Platz, würden Name und Wert bunt und das Symbol bliebe weiß – genau
+   * verkehrt herum. Fehlt ein Symbol (etwa auf der Mitte von cardPower), färbt der Platz selbst.
+   */
+  _faerbe(ziel, inhalt, auftraege, marke) {
+    if (inhalt.color) ziel.style.color = inhalt.color;
+    this._registerTemplate(inhalt, "color", auftraege, marke, (text) => {
+      const rgb = parseTemplateColor(text);
+      if (rgb) ziel.style.color = rgbToHex(rgb);
+    });
   }
 
   /** Das Symbol eines Platzes – inklusive der Sonderformen, die gar kein Symbol sind. */

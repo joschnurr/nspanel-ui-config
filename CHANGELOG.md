@@ -3,6 +3,37 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.11.0 – 2026-07-26
+
+Drei Rückmeldungen von der echten Anlage.
+
+### Die Live-Ansicht merkt sich jetzt jede Karte einzeln
+
+**„Macht keinen Sinn, weil im Standby immer der Screensaver aktiv ist"** – zu Recht: eine Ansicht,
+die nur die *letzte* Nachricht zeigt, ist beim Bearbeiten einer Karte nutzlos, weil das Panel die
+meiste Zeit ruht.
+
+Der Mitschnitt legt den Stand deshalb **je Karte** ab (Schlüssel ist der Titel, beim Screensaver die
+Bauart). Wer am Gerät einmal durchblättert, hat danach für jede Karte den echten Stand; der Editor
+fragt beim Bearbeiten gezielt danach (`GET /live?card=…&type=…`) und zeigt sie mit Zeitpunkt an –
+auch Stunden später, wenn das Panel längst wieder im Ruhezustand ist. War eine Karte noch nie dran,
+sagt die Ansicht das und zeigt solange, was gerade läuft.
+
+### Die Farbe gehört auf das Symbol
+
+Die Vorschau färbte den ganzen Platz – dadurch wurden Name und Wert bunt, während das Symbol weiß
+blieb. Auf dem Gerät ist es genau umgekehrt: das HMI schreibt die übertragene Farbe in die
+Schriftfarbe der Icon-Komponente (`covx tTmp.txt,tF1Icon.pco`), die Textfelder behalten ihre feste
+Farbe. Jetzt trägt das Symbol die Farbe – auch die aus einem `color`-Template.
+
+### Nebenmodule bekommen die Versions-Query mit
+
+Home Assistant hängt an die Panel-URL `?v=<Version>`; die davon importierten Module
+(`preview-layouts.js`, `layouts.js`, die Icon-Listen) bekamen keinen Parameter und blieben nach
+einem Update im Browser-Cache liegen. Dann lief das neue Panel mit alter Geometrie – ein Fehler, der
+wie ein nicht installiertes Update aussieht (und die doppelte Uhrzeit aus 0.10.1 überdauern ließ).
+Die Module werden jetzt dynamisch mit derselben Query geladen, die `import.meta.url` trägt.
+
 ## 0.10.3 – 2026-07-26
 
 ### Brand-Bilder aufgeräumt – und die Sache mit dem HACS-Symbol geklärt

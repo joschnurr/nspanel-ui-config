@@ -30,7 +30,12 @@ Verzögerung durch, ohne dass das Formular neu aufgebaut wird (der Fokus bleibt 
 
 **Was echt ist:** die Anzahl und Reihenfolge der Plätze (aus `CARD_CAPACITY`, nicht aus einer
 zweiten Tabelle im Frontend), die Symbole, die Farben – auch `{on, off}`, das nach dem aktuellen
-Zustand auswählt – und die Werte, inklusive gerenderter Templates. Für die rendert das Panel alle
+Zustand auswählt – und die Werte, inklusive gerenderter Templates.
+
+**Die Farbe liegt auf dem Symbol**, nicht auf Name und Wert. So macht es das Gerät: das HMI schreibt
+die übertragene Farbe in die Schriftfarbe der Icon-Komponente (`covx tTmp.txt,tF1Icon.pco`), während
+die Textfelder ihre feste Farbe behalten. Ein `color`-Template färbt also das Symbol – wer den Text
+einfärben will, findet dafür im Backend keine Möglichkeit. Für die rendert das Panel alle
 Templates einer Karte **in einem einzigen Aufruf** von `/api/template`, getrennt durch ein
 Steuerzeichen; nur wenn die Teilezahl nicht aufgeht oder der Sammelaufruf an einem kaputten Template
 scheitert, wird einzeln gerendert.
@@ -95,13 +100,16 @@ sie gehört.
 Voraussetzungen: die MQTT-Integration ist in Home Assistant eingerichtet, und im Modell steht ein
 `panelSendTopic`. Fehlt eines von beidem, sagt die Live-Ansicht genau das — statt leer zu bleiben.
 
-**Zwei Dinge, die man wissen muss:**
+**Der Mitschnitt merkt sich jede Karte einzeln.** Das ist entscheidend, denn ein Panel steht die
+meiste Zeit im Ruhezustand und sendet dann nur den Screensaver — eine Ansicht, die immer nur das
+Letzte zeigt, wäre beim Bearbeiten einer Karte nutzlos. Wer am Gerät einmal durch die Karten
+blättert, hat danach für jede den echten Stand; der Editor legt beim Bearbeiten automatisch die
+passende Fassung daneben, mitsamt Zeitpunkt. War eine Karte noch nie dran, sagt die Ansicht das und
+zeigt solange, was gerade läuft.
 
-- Das Gerät zeigt **seine** Karte, nicht die gerade bearbeitete. Weichen sie ab, weist die Ansicht
-  darauf hin; zum Vergleichen ruft man die Karte am Panel auf.
-- Farben kommen als 16-Bit-Wert des Displays zurück (5/6/5 Bit). Zurückgerechnet ergibt das leichte
-  Abweichungen zum konfigurierten RGB — das ist kein Fehler, sondern genau die Farbe, die das
-  Display darstellt.
+**Farben** kommen als 16-Bit-Wert des Displays zurück (5/6/5 Bit). Zurückgerechnet ergibt das
+leichte Abweichungen zum konfigurierten RGB — kein Fehler, sondern genau die Farbe, die das Display
+darstellt.
 
 Symbole überträgt das Protokoll als Zeichen des Nextion-Fonts. `www/panel/icon-chars.js` (erzeugt
 von `tools/extract_icon_names.py`, in derselben Reihenfolge wie `icon-names.js`) führt sie zurück

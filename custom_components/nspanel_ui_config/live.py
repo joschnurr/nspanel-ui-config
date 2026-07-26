@@ -29,6 +29,21 @@ _LOGGER = logging.getLogger(__name__)
 FRISCH_SEKUNDEN = 300
 
 
+def card_key(message: dict[str, Any] | None) -> str:
+    """Unter welchem Schlüssel eine Nachricht abgelegt wird.
+
+    Der **Titel** identifiziert eine Karte am zuverlässigsten: er steht in der Nachricht und ist im
+    Editor dasselbe Feld. Screensaver haben keinen Titel — dort ist die Bauart der Schlüssel.
+    """
+    if not isinstance(message, dict):
+        return "?"
+    typ = message.get("cardType") or "?"
+    if isinstance(typ, str) and typ.startswith("screensaver"):
+        return typ
+    titel = message.get("title")
+    return f"{typ}|{titel}" if titel else str(typ)
+
+
 class LiveState:
     """Der zuletzt beobachtete Stand des Displays.
 
@@ -43,6 +58,11 @@ class LiveState:
         self.seen: float | None = None
         self.page_seen: float | None = None
         self.ignoriert = 0
+        # **Je Karte der letzte Stand.** Ohne das wäre die Live-Ansicht kaum brauchbar: ein Panel
+        # steht die meiste Zeit im Ruhezustand und sendet dann nur den Screensaver. Wer einmal
+        # durch die Karten blättert, hat sie hier — und der Editor kann beim Bearbeiten die
+        # zuletzt *echt gezeigte* Fassung genau dieser Karte danebenlegen.
+        self.per_card: dict[str, dict[str, Any]] = {}
 
     def handle(self, payload: str, jetzt: float | None = None) -> bool:
         """Verarbeite eine Nachricht. Rückgabe: hat sich der angezeigte Stand geändert?"""
@@ -66,19 +86,56 @@ class LiveState:
         # Der Screensaver meldet sich mit eigener Nachricht, ohne vorherigen pageType.
         if geparst.get("cardType"):
             self.card_type = geparst["cardType"]
+        self.per_card[card_key(geparst)] = {"message": geparst, "seen": jetzt}
         return True
 
-    def as_dict(self, jetzt: float | None = None) -> dict[str, Any]:
-        """Der Stand als JSON-taugliches Dict für die API."""
+    def for_card(self, title: Any = None, card_type: Any = None) -> dict[str, Any] | None:
+        """Der zuletzt gesehene Stand *dieser* Karte – oder ``None``, wenn sie nie dran war."""
+        schluessel = card_key({"title": title, "cardType": card_type})
+        eintrag = self.per_card.get(schluessel)
+        if eintrag is None and isinstance(card_type, str) and card_type.startswith("screensaver"):
+            # Beim Screensaver zählt die Bauart, nicht der (leere) Titel; welche gerade läuft,
+            # entscheidet das Backend anhand der Konfiguration.
+            for key, wert in self.per_card.items():
+                if key.startswith("screensaver"):
+                    return wert
+        return eintrag
+
+    def as_dict(self, jetzt: float | None = None, title: Any = None, card_type: Any = None) -> dict[str, Any]:
+        """Der Stand als JSON-taugliches Dict für die API.
+
+        Mit ``title``/``card_type`` wird bevorzugt die passende Karte geliefert; ``matched`` sagt,
+        ob das geklappt hat. Sonst kommt der zuletzt empfangene Stand — der Editor kann dann
+        erklären, dass das Panel gerade etwas anderes zeigt.
+        """
         jetzt = time.time() if jetzt is None else jetzt
-        alter = None if self.seen is None else max(0.0, jetzt - self.seen)
+        gewaehlt = self.for_card(title, card_type) if (title or card_type) else None
+        getroffen = gewaehlt is not None
+        if gewaehlt is None:
+            gewaehlt = {"message": self.message, "seen": self.seen}
+
+        alter = None if gewaehlt["seen"] is None else max(0.0, jetzt - gewaehlt["seen"])
+        nachricht = gewaehlt["message"]
         return {
             "topic": self.topic,
-            "cardType": self.card_type,
-            "message": self.message,
+            "cardType": (nachricht or {}).get("cardType") or self.card_type,
+            "message": nachricht,
             "ageSeconds": alter,
             "fresh": alter is not None and alter <= FRISCH_SEKUNDEN,
             "ignored": self.ignoriert,
+            "matched": getroffen,
+            # Was das Panel zuletzt überhaupt angezeigt hat – als Orientierung, wenn die gesuchte
+            # Karte noch nie dran war.
+            "showing": (self.message or {}).get("title") or self.card_type,
+            "known": [
+                {
+                    "key": key,
+                    "title": (wert["message"] or {}).get("title") or "",
+                    "cardType": (wert["message"] or {}).get("cardType"),
+                    "ageSeconds": max(0.0, jetzt - wert["seen"]),
+                }
+                for key, wert in sorted(self.per_card.items())
+            ],
         }
 
 
