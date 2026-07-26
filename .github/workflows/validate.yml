@@ -43,9 +43,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Diese zwei Pruefungen holen hacs.json bzw. manifest.json ueber die GitHub-API — ohne
-          # Token. Solange das Repo PRIVAT ist, bekommt die Action 404 und damit `None`, und beide
-          # schlagen unabhaengig vom Inhalt fehl ("expected a dictionary. Got None"). Ersatz ohne
-          # Netz: tests/test_manifests.py prueft beide Dateien gegen dieselben HACS-Schemata.
-          # >>> Beim Oeffentlich-Schalten des Repos diese ignore-Zeile entfernen. <<<
-          ignore: hacsjson integration_manifest
+          # Die Pruefungen hacsjson/integration_manifest holen hacs.json bzw. manifest.json ueber
+          # die GitHub-API ohne Token. Solange das Repo privat war, kam dort 404 zurueck und beide
+          # schlugen unabhaengig vom Inhalt fehl; sie standen deshalb auf ignore. Seit das Repo
+          # oeffentlich ist, laufen sie regulaer mit. tests/test_manifests.py prueft dieselben
+          # Regeln zusaetzlich lokal, also auch ohne Netz.
