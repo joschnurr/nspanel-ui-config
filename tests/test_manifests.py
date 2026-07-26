@@ -77,6 +77,21 @@ def test_domain_passt_zum_verzeichnisnamen() -> None:
     assert _lade(INTEGRATION / "manifest.json")["domain"] == INTEGRATION.name
 
 
+def test_manifest_keys_sind_sortiert() -> None:
+    """Hassfest verlangt: ``domain``, ``name``, dann alphabetisch – und wird sonst rot.
+
+    Eine Formalie, die man beim Ergänzen eines Feldes garantiert übersieht: ``after_dependencies``
+    landet intuitiv neben ``dependencies``, gehört aber davor. Hier fällt es ohne CI-Runde auf.
+    """
+    keys = list(_lade(INTEGRATION / "manifest.json"))
+    assert keys[:2] == ["domain", "name"], f"'domain', 'name' müssen zuerst stehen: {keys[:2]}"
+    rest = keys[2:]
+    assert rest == sorted(rest), (
+        "Nach domain/name müssen die Keys alphabetisch stehen. Erwartet:\n  "
+        + ", ".join(sorted(rest))
+    )
+
+
 def test_brand_assets_sind_vorhanden_und_nicht_leer() -> None:
     """Ab HA 2026.3 zeigt HA diese Bilder an der Integration; fehlen sie, kommt der Platzhalter."""
     for name in ("icon.png", "icon@2x.png", "logo.png"):
