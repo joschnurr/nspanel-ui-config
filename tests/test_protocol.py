@@ -49,6 +49,33 @@ def test_delete_eintraege_sind_als_leer_erkennbar() -> None:
     assert eintraege[1]["value"] == "21 °C"
 
 
+def test_maskierte_screensaver_eintraege_gelten_nicht_als_leer() -> None:
+    """Der Fall, der an der echten Anlage aufflog: die ganze Ruheanzeige wirkte leer.
+
+    Für den Screensaver rendert das Backend mit ``mask=["type", "entityId"]`` (pages.py) — beide
+    Felder kommen leer an, obwohl Symbol, Name und Wert gefüllt sind. Ob ein Platz belegt ist,
+    entscheidet deshalb sein *Inhalt*, nicht das type-Feld. In der Testinstanz fiel das nicht auf:
+    dort existierten die Entities nicht, und der Not-found-Zweig des Backends sendet ein ``type``.
+    """
+    payload = (
+        "weatherUpdate"
+        "~~~~31728~Wetter Seebach~20.9°C"
+        "~~~~17299~PV Heute~0.0 kWh"
+    )
+    eintraege = protocol.parse_message(payload, "screensaver2")["entities"]
+    assert [e["leer"] for e in eintraege] == [False, False]
+    assert eintraege[0]["name"] == "Wetter Seebach"
+    assert eintraege[0]["value"] == "20.9°C"
+    assert eintraege[0]["type"] == ""
+
+
+def test_wirklich_leere_bloecke_bleiben_leer() -> None:
+    payload = "weatherUpdate~~~~~~" + "~text~sensor.x~A~65535~Name~Wert"
+    eintraege = protocol.parse_message(payload, "screensaver")["entities"]
+    assert eintraege[0]["leer"] is True
+    assert eintraege[1]["leer"] is False
+
+
 def test_cardqr_schiebt_den_qr_text_vor_die_eintraege() -> None:
     payload = (
         "entityUpd~Guest Wifi~button~navigate.prev~<~65535~~~button~navigate.next~>~65535~~"

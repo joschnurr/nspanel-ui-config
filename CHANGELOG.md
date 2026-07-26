@@ -3,6 +3,27 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.10.2 – 2026-07-26
+
+Zwei Fehler, die erst an einer echten Anlage sichtbar wurden – beide in der Vorschau des
+Screensavers.
+
+### Die Live-Ansicht zeigte lauter leere Plätze
+
+Für den Screensaver rendert das Backend mit `mask=["type", "entityId"]` (`pages.py`): beide Felder
+kommen **leer** an, obwohl Symbol, Name und Wert gefüllt sind. Der Parser hielt einen Eintrag genau
+dann für frei, wenn `type` fehlte – und damit die vollständig belegte Ruheanzeige für komplett leer.
+
+Ob ein Platz belegt ist, entscheidet jetzt sein **Inhalt**; `delete` bleibt der explizit
+freigehaltene Platz. An der Testinstanz war das nicht zu sehen: dort existieren die Entities der
+Konfiguration nicht, und der Not-found-Zweig des Backends sendet sehr wohl ein `type`.
+
+### Uhrzeit und Datum standen doppelt auf dem Schirm
+
+Neben `tTime` und `tDate` kennt der Screensaver noch `tAMPM` (AM/PM-Zusatz, im 24-Stunden-Format
+leer) und `tTimeAdd` (die frei konfigurierbare Zusatzzeile aus `timeAdditionalTemplate`). Beide
+wurden mit Uhrzeit bzw. Datum gefüllt, sodass alles zweimal erschien. Sie bleiben jetzt außen vor.
+
 ## 0.10.1 – 2026-07-26
 
 ### Die Vorschau war auf der Startseite nicht zu finden

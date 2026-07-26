@@ -98,7 +98,12 @@ function kartenLayout(layout, capacity) {
 
 // Welche Sonderkomponente wie gezeichnet wird. Uhrzeit und Datum füllt das Backend aus eigenen
 // Befehlen (`time`/`date`), nicht aus der Entity-Liste — ohne sie fehlte die halbe Ruheanzeige.
-const SPECIAL_KINDS = { tTime: "clock", tDate: "date", tTimeAdd: "date", tAMPM: "clock" };
+//
+// **Bewusst nur diese zwei.** Der Dump enthält daneben `tAMPM` (der AM/PM-Zusatz, im
+// 24-Stunden-Format leer) und `tTimeAdd` (die frei konfigurierbare Zusatzzeile aus
+// `timeAdditionalTemplate`). Beide tragen *nicht* die Uhrzeit — sie mit ihr zu füllen ließ die
+// Vorschau die Uhr und das Datum doppelt zeigen.
+const SPECIAL_KINDS = { tTime: "clock", tDate: "date" };
 
 /**
  * Screensaver: Plätze aus dem Seitencode, plus die Umschaltung auf das alternative Layout.

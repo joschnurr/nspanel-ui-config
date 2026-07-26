@@ -372,3 +372,18 @@ test("ein Symbol aus einer neueren Backend-Version wird als unbekannt gekennzeic
   assert.equal(inhalt.icon, null);
   assert.equal(inhalt.iconUnbekannt, true);
 });
+
+test("Uhr und Datum erscheinen genau einmal", () => {
+  // Der Dump kennt außer tTime/tDate noch tAMPM (AM/PM-Zusatz) und tTimeAdd (frei
+  // konfigurierbare Zusatzzeile). Wurden die mit derselben Uhrzeit gefüllt, stand alles doppelt
+  // auf dem Bildschirm – an der echten Anlage sofort sichtbar.
+  for (const typ of ["screensaver", "screensaver2"]) {
+    for (const model of ["eu", "us-l", "us-p"]) {
+      const slots = previewSlots({ cardType: typ, capacity: 15, filled: 3, model }).slots;
+      const uhren = slots.filter((slot) => slot.kind === "clock").length;
+      const daten = slots.filter((slot) => slot.kind === "date").length;
+      assert.equal(uhren, 1, `${typ}/${model}: ${uhren} Uhren`);
+      assert.equal(daten, 1, `${typ}/${model}: ${daten} Datumsfelder`);
+    }
+  }
+});

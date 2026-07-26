@@ -89,7 +89,12 @@ def _eintrag(felder: list[str]) -> dict[str, Any]:
     # Alles jenseits der sechs Standardfelder (cardPower: speed) bleibt erhalten.
     if len(felder) > len(ENTITY_FIELDS):
         eintrag["extra"] = felder[len(ENTITY_FIELDS) :]
-    eintrag["leer"] = eintrag.get("type") in (None, "", "delete")
+    # **Ob ein Platz belegt ist, entscheidet sein Inhalt — nicht das type-Feld.** Beim Screensaver
+    # rendert das Backend mit ``mask=["type", "entityId"]`` (pages.py): beide Felder kommen dann
+    # leer an, obwohl Symbol, Name und Wert gefüllt sind. Wer nur auf ``type`` schaut, hält eine
+    # vollständig belegte Ruheanzeige für leer. ``delete`` bleibt der explizit freigehaltene Platz.
+    inhalt_leer = not any(eintrag.get(feld) for feld in ("icon", "name", "value"))
+    eintrag["leer"] = eintrag.get("type") == "delete" or inhalt_leer
     return eintrag
 
 
