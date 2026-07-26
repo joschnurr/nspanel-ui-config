@@ -21,6 +21,11 @@ jobs:
       - run: pytest -q
 
       # Die Panel-Hilfsfunktionen (Widget-Wahl, Key-Löschregel) laufen ohne DOM im Node-Runner.
+      # Der Test importiert `nspanel-ui-config-panel.js` direkt; die Datei ist ein ES-Modul, heißt
+      # aber `.js`. Damit Node sie nicht als CommonJS liest, steht `"type": "module"` in der
+      # package.json im Wurzelverzeichnis — ohne sie läuft der Test nur auf Node ≥ 22.7, wo die
+      # Modul-Erkennung standardmäßig an ist, und scheitert auf älteren 22ern mit
+      # „Cannot use import statement outside a module".
       - uses: actions/setup-node@v4
         with:
           # 22 statt 20: gleiche Major-Version wie lokal getestet, und 20 ist auf den Runnern
