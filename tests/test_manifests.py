@@ -15,6 +15,7 @@ die Prüfung nicht der Action überlassen zu können.
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -92,13 +93,38 @@ def test_manifest_keys_sind_sortiert() -> None:
     )
 
 
+def _png_masse(datei: Path) -> tuple[int, int]:
+    """Breite und Höhe aus dem IHDR – ohne Bildbibliothek, die es hier nirgends gibt."""
+    kopf = datei.read_bytes()[:24]
+    assert kopf[:8] == b"\x89PNG\r\n\x1a\n", f"{datei.name} ist kein PNG"
+    return struct.unpack(">II", kopf[16:24])
+
+
 def test_brand_assets_sind_vorhanden_und_nicht_leer() -> None:
     """Ab HA 2026.3 zeigt HA diese Bilder an der Integration; fehlen sie, kommt der Platzhalter."""
-    for name in ("icon.png", "icon@2x.png", "logo.png"):
+    for name in ("icon.png", "icon@2x.png", "logo.png", "logo@2x.png"):
         datei = INTEGRATION / "brand" / name
         assert datei.is_file(), f"brand/{name} fehlt"
         assert datei.stat().st_size > 1000, f"brand/{name} ist verdächtig klein"
         assert datei.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"brand/{name} ist kein PNG"
+
+
+def test_brand_assets_halten_die_masse_des_brands_repos_ein() -> None:
+    """Dieselben Dateien gehen ins home-assistant/brands-Repo – dort gelten feste Maße.
+
+    Icons müssen quadratisch sein (256 bzw. 512), beim Logo zählt die *kürzeste* Seite: 128–256 für
+    die normale, 256–512 für die hDPI-Fassung. Wird hier etwas verletzt, fällt es beim PR auf und
+    nicht vorher – deshalb der Test.
+    """
+    breite, hoehe = _png_masse(INTEGRATION / "brand" / "icon.png")
+    assert (breite, hoehe) == (256, 256), f"icon.png ist {breite}×{hoehe}"
+    breite, hoehe = _png_masse(INTEGRATION / "brand" / "icon@2x.png")
+    assert (breite, hoehe) == (512, 512), f"icon@2x.png ist {breite}×{hoehe}"
+
+    for name, unten, oben in (("logo.png", 128, 256), ("logo@2x.png", 256, 512)):
+        breite, hoehe = _png_masse(INTEGRATION / "brand" / name)
+        kurz = min(breite, hoehe)
+        assert unten <= kurz <= oben, f"{name}: kürzeste Seite {kurz}, erlaubt {unten}–{oben}"
 
 
 # --- Übersetzungen ------------------------------------------------------------------------------

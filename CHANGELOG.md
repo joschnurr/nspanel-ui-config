@@ -3,6 +3,22 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.10.3 – 2026-07-26
+
+### Brand-Bilder für das brands-Repo hergerichtet
+
+Die HACS-Übersicht holt ihr Bild vom Brands-CDN, nicht aus der Integration – ohne Eintrag im
+[home-assistant/brands](https://github.com/home-assistant/brands)-Repo bleibt dort der generische
+Platzhalter. Für den Eintrag mussten die Bilder aber erst passen: das Repo verlangt **getrimmte**
+Bilder, unsere Icons waren oben und unten transparent aufgefüllt.
+
+- `tools/make-brand-images.mjs` erzeugt alle vier Dateien aus derselben Quelle: Icons als mittiger
+  **quadratischer Ausschnitt** (256×256, 512×512) – beschnitten wird nur der seitliche
+  Geräterahmen –, Logos aus dem vollen Bild (304×256 und 607×512, die vom Repo erlaubten Bereiche
+  für die kürzeste Seite).
+- `logo@2x.png` ist neu; Home Assistant nutzt sie auf hochauflösenden Anzeigen.
+- `tests/test_manifests.py` prüft die Maße mit – sie fielen sonst erst im PR auf.
+
 ## 0.10.2 – 2026-07-26
 
 Zwei Fehler, die erst an einer echten Anlage sichtbar wurden – beide in der Vorschau des

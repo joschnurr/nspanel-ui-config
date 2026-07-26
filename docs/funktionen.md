@@ -228,9 +228,20 @@ wird von einem Administrator gesetzt. Beim Zurückspielen werden Pfadanteile im 
 ## Brand-Assets
 
 `custom_components/nspanel_ui_config/brand/` enthält die Bilder, die Home Assistant und HACS für die
-Integration anzeigen — `icon.png` (256×256), `icon@2x.png` (512×512) und `logo.png` (512×432). Die
-Icons sind oben/unten transparent aufgefüllt statt seitlich beschnitten, damit Panel-Rahmen und
-Beschriftung vollständig bleiben. Quelldatei: `docs/brand-source.jpg`.
+Integration anzeigen: `icon.png` (256×256), `icon@2x.png` (512×512), `logo.png` (304×256) und
+`logo@2x.png` (607×512). Erzeugt werden sie aus `docs/brand-source.jpg`:
+
+```bash
+npm install jpeg-js pngjs
+node tools/make-brand-images.mjs docs/brand-source.jpg custom_components/nspanel_ui_config/brand
+```
+
+**Die Icons sind mittig quadratisch beschnitten, nicht aufgefüllt.** Das brands-Repo verlangt
+ausdrücklich getrimmte Bilder („minimum amount of empty space on the edges"); eine frühere Fassung
+mit transparenten Rändern oben und unten wäre dort abgelehnt worden. Beschnitten wird nur der
+seitliche Geräterahmen — Display, Stift und Schriftzug bleiben vollständig. Das Logo behält das
+ganze Bild, es darf rechteckig sein. `tests/test_manifests.py` prüft die Maße mit, weil sie sonst
+erst im PR auffallen.
 
 **Zwei Wege, die man nicht verwechseln darf** — beide nachgemessen:
 
