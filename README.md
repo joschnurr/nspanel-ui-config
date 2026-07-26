@@ -104,6 +104,33 @@ Anschließend *Einstellungen → Geräte & Dienste → Integration hinzufügen �
 Im Dialog werden Ausgabepfad, Reload-Weg und optional eine zu importierende `apps.yaml` abgefragt.
 Der Editor erscheint danach als **NSPanel UI** in der Seitenleiste.
 
+### Bestehende `apps.yaml` umstellen
+
+Die Integration **ändert die `apps.yaml` nie** – sie schreibt eine eigene Datei, die die
+`apps.yaml` per `!include` einbindet. Aus
+
+```yaml
+nspanel-1:
+  module: nspanel
+  class: NsPanelLovelaceUIManager
+  config:
+    panelRecvTopic: "NSPanel_1/tele/RESULT"
+    …ein paar hundert Zeilen…
+```
+
+wird einmalig
+
+```yaml
+nspanel-1:
+  module: nspanel
+  class: NsPanelLovelaceUIManager
+  config: !include /nspanel-shared/nspanel_config.yaml
+```
+
+Danach bleibt die `apps.yaml` unverändert; geändert wird nur noch die eingebundene Datei.
+**Schritt-für-Schritt inklusive Reihenfolge, Bind-Mount und Rückweg:
+[docs/einrichtung.md](docs/einrichtung.md)**
+
 ## Datensicherheit
 
 Die Integration schreibt in eine Datei in deiner Konfiguration. Zwei Zusagen dazu:
@@ -130,6 +157,7 @@ NSPANEL_REAL_APPS_YAML=/pfad/zu/appdaemon/apps/apps.yaml pytest
 
 | | |
 | --- | --- |
+| [Einrichtung](docs/einrichtung.md) | bestehende `apps.yaml` umstellen, Bind-Mount, Reihenfolge, Rückweg |
 | [Funktionen im Detail](docs/funktionen.md) | Template-Editor, Icons, Farben, Reload-Wege, HTTP-API |
 | [Anzeigekapazität](docs/kapazitaet.md) | wie viele Entities je Karte und Modell wirklich sichtbar sind |
 | [Architektur](docs/architecture.md) | Transportweg, Datenmodell, Designentscheidungen |

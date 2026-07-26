@@ -22,6 +22,9 @@ auch nicht. Bei einer Core-Installation liegen beide sogar im selben Dateisystem
 - **Kein Bind-Mount unter HA OS.** Das AppDaemon-Add-on hat `share:rw`, sieht `/share` also unter
   demselben Pfad wie Home Assistant. Vorgabe dort: `/share/nspanel/nspanel_config.yaml`.
 - Wird der falsche Modus gewählt, sagt die Fehlermeldung das und nennt die passende Alternative.
+- Neue Anleitung [docs/einrichtung.md](docs/einrichtung.md): wie die bestehende `apps.yaml` auf den
+  `!include` umgestellt wird – inklusive der Reihenfolge (erst erzeugen, dann umstellen), des
+  Bind-Mounts für die Container-Variante und des Rückwegs.
 
 ## 0.8.0 – 2026-07-26
 
