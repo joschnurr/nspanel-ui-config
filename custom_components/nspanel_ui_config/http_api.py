@@ -6,6 +6,8 @@ Endpunkte (alle nur für Admins):
   POST /api/nspanel_ui_config/config    → Modell speichern (JSON)
   POST /api/nspanel_ui_config/import    → bestehende apps.yaml einlesen (Pfad oder Text)
   POST /api/nspanel_ui_config/generate  → YAML erzeugen, schreiben und AppDaemon neu laden
+  GET  /api/nspanel_ui_config/backups   → vorhandene Sicherungen der Ausgabedatei
+  POST /api/nspanel_ui_config/backups/restore → eine Sicherung zurückspielen
 """
 
 from __future__ import annotations
@@ -19,14 +21,19 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 
+from .backup import list_backups, restore_backup
 from .const import (
+    API_BACKUP_RESTORE,
+    API_BACKUPS,
     API_CONFIG,
     API_GENERATE,
     API_IMPORT,
     API_SCHEMA,
+    CONF_BACKUP_COUNT,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
     CONF_RELOAD_MODE,
+    DEFAULT_BACKUP_COUNT,
     DOMAIN,
 )
 from .generator import write_config_yaml
@@ -43,6 +50,17 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelConfigView(hass))
     hass.http.register_view(NsPanelImportView(hass))
     hass.http.register_view(NsPanelGenerateView(hass))
+    hass.http.register_view(NsPanelBackupsView(hass))
+    hass.http.register_view(NsPanelBackupRestoreView(hass))
+
+
+def _backup_count(options: dict[str, Any]) -> int:
+    """Eingestellte Anzahl Sicherungen; unbrauchbare Werte fallen auf den Standard zurück."""
+    value = options.get(CONF_BACKUP_COUNT, DEFAULT_BACKUP_COUNT)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return DEFAULT_BACKUP_COUNT
 
 
 def _first_entry_data(hass: HomeAssistant) -> dict[str, Any] | None:
@@ -224,10 +242,15 @@ class NsPanelGenerateView(_NsPanelView):
         output_path = data["options"].get(CONF_OUTPUT_PATH)
         model = data.get("model", {})
         try:
-            written = await self.hass.async_add_executor_job(write_config_yaml, model, output_path)
+            result = await self.hass.async_add_executor_job(
+                write_config_yaml, model, output_path, _backup_count(data["options"])
+            )
         except OSError as err:
+            # Schließt den Fall ein, dass sich der bisherige Stand nicht sichern ließ — dann wurde
+            # bewusst nicht überschrieben.
             _LOGGER.error("Schreiben der nspanel-YAML fehlgeschlagen: %s", err)
             return self.json_message(f"Schreiben fehlgeschlagen: {err}", HTTPStatus.INTERNAL_SERVER_ERROR)
+        written = result["path"]
 
         # Die Datei steht schon auf der Platte — ein gescheiterter Reload ist deshalb eine Warnung
         # in der Antwort und kein Fehlschlag des Generierens.
@@ -248,7 +271,77 @@ class NsPanelGenerateView(_NsPanelView):
             {
                 "ok": True,
                 "path": written,
+                "changed": result["changed"],
+                "backup": result["backup"],
                 "findings": validate_model(model),
                 "reload": reload_result,
             }
         )
+
+
+class NsPanelBackupsView(_NsPanelView):
+    """Listet die Sicherungen der Ausgabedatei, neueste zuerst."""
+
+    url = API_BACKUPS
+    name = "api:nspanel_ui_config:backups"
+
+    async def get(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        output_path = data["options"].get(CONF_OUTPUT_PATH)
+        if not output_path:
+            return self.json({"path": None, "keep": 0, "backups": []})
+
+        entries = await self.hass.async_add_executor_job(list_backups, output_path)
+        return self.json(
+            {
+                "path": output_path,
+                "keep": _backup_count(data["options"]),
+                "backups": entries,
+            }
+        )
+
+
+class NsPanelBackupRestoreView(_NsPanelView):
+    """Spielt eine Sicherung zurück (``{"name": "<dateiname>"}``).
+
+    Der aktuelle Stand wird davor selbst gesichert, siehe ``backup.restore_backup``. Nach dem
+    Zurückspielen ist die Datei auf der Platte älter als das Modell im Editor — das Panel weist
+    darauf hin, statt stillschweigend beides auseinanderlaufen zu lassen.
+    """
+
+    url = API_BACKUP_RESTORE
+    name = "api:nspanel_ui_config:backups:restore"
+
+    async def post(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        try:
+            payload = await request.json()
+        except ValueError:
+            return self.json_message("Ungültiges JSON", HTTPStatus.BAD_REQUEST)
+        if not isinstance(payload, dict) or not payload.get("name"):
+            return self.json_message("'name' fehlt", HTTPStatus.BAD_REQUEST)
+
+        output_path = data["options"].get(CONF_OUTPUT_PATH)
+        if not output_path:
+            return self.json_message("Kein Ausgabepfad konfiguriert", HTTPStatus.BAD_REQUEST)
+
+        try:
+            result = await self.hass.async_add_executor_job(
+                restore_backup, output_path, payload["name"], _backup_count(data["options"])
+            )
+        except ValueError as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        except FileNotFoundError as err:
+            return self.json_message(str(err), HTTPStatus.NOT_FOUND)
+        except OSError as err:
+            _LOGGER.error("Wiederherstellen fehlgeschlagen: %s", err)
+            return self.json_message(
+                f"Wiederherstellen fehlgeschlagen: {err}", HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+        _LOGGER.info("Sicherung '%s' nach %s zurückgespielt", payload["name"], output_path)
+        return self.json({"ok": True, **result})

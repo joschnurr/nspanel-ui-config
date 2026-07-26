@@ -23,7 +23,7 @@ Das Upstream-Projekt beschreibt eine Emulation über den **Nextion Editor** von 
 
 **Für uns nicht nutzbar**, und zwar nicht wegen des Aufwands, sondern grundsätzlich:
 
-- Der Nextion Editor ist **Windows-Software**; die Gbox ist ein Linux-Docker-Host.
+- Der Nextion Editor ist **Windows-Software**; Home Assistant läuft typischerweise auf Linux.
 - Der „Emulator" braucht trotz seines Namens **echte Hardware** — eine ESP32-Platine mit Tasmota und
   angepasstem Berry-Treiber, per USB am PC. Er ersetzt nur das *Display*, nicht das Gerät.
 - Er lässt sich nicht in ein HA-Panel einbetten. Ein Konfigurator, dessen Vorschau einen
@@ -83,11 +83,10 @@ das keine Rolle, für „passt dieser lange Name in die Kachel?" ist es eine Aus
 
 ## Option C — Das echte Backend als Datenquelle
 
-Weiter gedacht: Der Test-Stack (`stacks/homeassistant-test` mit eigenem AppDaemon und eigenem
-MQTT-Broker) betreibt bereits das **echte luibackend**. Es erzeugt die realen `entityUpd~…`-Strings,
-die sonst zum Display gehen. Greift man die über MQTT ab und rendert sie, entsteht eine Vorschau, in
-der **keine Backend-Logik nachgebaut ist** — Icon-IDs, Farbumrechnung nach RGB565 und Sonderfälle
-kämen dann vom Original.
+Weiter gedacht: Eine Testinstanz mit eigenem AppDaemon und eigenem MQTT-Broker betreibt das **echte
+luibackend**. Es erzeugt die realen `entityUpd~…`-Strings, die sonst zum Display gehen. Greift man
+die über MQTT ab und rendert sie, entsteht eine Vorschau, in der **keine Backend-Logik nachgebaut
+ist** — Icon-IDs, Farbumrechnung nach RGB565 und Sonderfälle kämen dann vom Original.
 
 Das ist die genaueste Variante, setzt aber Option B voraus (die Zeichenschicht wird so oder so
 gebraucht) und zusätzlich eine MQTT-Anbindung. Sinnvoll als späterer Ausbau, nicht als Einstieg.
@@ -95,9 +94,9 @@ gebraucht) und zusätzlich eine MQTT-Anbindung. Sinnvoll als späterer Ausbau, n
 Das Protokoll ist dafür vollständig dokumentiert: `HMI/README.md` im Upstream-Repo beschreibt jeden
 Parameter jeder Seite.
 
-**Sicherheitshinweis, der hier zählt:** die generierte Konfiguration trägt die echten MQTT-Topics
-(`NSPanel_1/cmnd/CustomSend`). Ein Test-AppDaemon am produktiven Broker würde damit das echte Panel
-fernsteuern. Der eigene Broker im Test-Stack ist deshalb eine Sicherheitsgrenze, keine Bequemlichkeit.
+**Sicherheitshinweis, der hier zählt:** die generierte Konfiguration trägt die echten MQTT-Topics des
+Panels. Ein Test-AppDaemon am produktiven Broker würde damit das echte Panel fernsteuern. Ein eigener
+Broker für die Testinstanz ist deshalb eine Sicherheitsgrenze, keine Bequemlichkeit.
 
 ## Empfehlung
 

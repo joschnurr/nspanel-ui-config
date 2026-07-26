@@ -14,11 +14,13 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 
 from .const import (
+    CONF_BACKUP_COUNT,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
     CONF_RELOAD_CONTAINER,
     CONF_RELOAD_MODE,
     CONF_RELOAD_TOUCH_PATH,
+    DEFAULT_BACKUP_COUNT,
     DEFAULT_OUTPUT_PATH,
     DEFAULT_RELOAD_CONTAINER,
     DEFAULT_RELOAD_MODE,
@@ -36,6 +38,9 @@ _STEP_USER_SCHEMA = vol.Schema(
         vol.Optional(CONF_RELOAD_TOUCH_PATH, default=""): str,
         vol.Optional(CONF_RELOAD_CONTAINER, default=DEFAULT_RELOAD_CONTAINER): str,
         vol.Optional(CONF_IMPORT_YAML_PATH, default=""): str,
+        vol.Optional(CONF_BACKUP_COUNT, default=DEFAULT_BACKUP_COUNT): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=100)
+        ),
     }
 )
 
@@ -64,6 +69,7 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_RELOAD_CONTAINER, DEFAULT_RELOAD_CONTAINER
                     ),
                     CONF_IMPORT_YAML_PATH: user_input.get(CONF_IMPORT_YAML_PATH, ""),
+                    CONF_BACKUP_COUNT: user_input.get(CONF_BACKUP_COUNT, DEFAULT_BACKUP_COUNT),
                 },
             )
 
@@ -76,7 +82,7 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class NsPanelUiConfigOptionsFlow(OptionsFlow):
-    """Nachträgliche Änderung von Ausgabepfad, Reload-Weg und Importpfad."""
+    """Nachträgliche Änderung von Ausgabepfad, Reload-Weg, Importpfad und Sicherungstiefe."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -111,6 +117,10 @@ class NsPanelUiConfigOptionsFlow(OptionsFlow):
                     CONF_IMPORT_YAML_PATH,
                     default=current.get(CONF_IMPORT_YAML_PATH, ""),
                 ): str,
+                vol.Optional(
+                    CONF_BACKUP_COUNT,
+                    default=current.get(CONF_BACKUP_COUNT, DEFAULT_BACKUP_COUNT),
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

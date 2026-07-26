@@ -1,287 +1,139 @@
-<img src="custom_components/nspanel_ui_config/brand/icon.png" alt="" width="120" align="right">
+<img src="custom_components/nspanel_ui_config/brand/icon.png" alt="" width="110" align="right">
 
 # NSPanel UI Config
 
-> **Frühe Entwicklungsphase (v0.7.x).** Dieses Repo ist zunächst **privat**. Ziel ist eine
-> öffentliche Veröffentlichung, sobald ein brauchbarer Funktionsumfang steht.
+**Das NSPanel in Home Assistant zusammenklicken – statt `apps.yaml` von Hand zu pflegen.**
 
-Eine **Home-Assistant-Integration (HACS)**, mit der sich die
-[nspanel-lovelace-ui](https://github.com/joBr99/nspanel-lovelace-ui)-Konfiguration (AppDaemon-Backend
-von joBr99) **visuell in Home Assistant** zusammenklicken lässt – statt die `apps.yaml` von Hand zu
-pflegen.
+[![Tests](https://github.com/joschnurr/nspanel-ui-config/actions/workflows/validate.yml/badge.svg)](https://github.com/joschnurr/nspanel-ui-config/actions/workflows/validate.yml)
+[![HACS: Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-blue.svg)](LICENSE)
 
-## Motivation
+Eine Home-Assistant-Integration, die einen visuellen Editor für
+[nspanel-lovelace-ui](https://github.com/joBr99/nspanel-lovelace-ui) (das AppDaemon-Backend von
+joBr99) mitbringt: Karten anlegen, Entities sortieren, Icons und Farben wählen, Templates mit
+Live-Vorschau schreiben. Heraus kommt gültige nspanel-YAML für das bestehende Backend.
 
-nspanel-lovelace-ui ist bewusst **rein YAML-basiert** – „no need to code, no UI". Für ein einzelnes
-Panel ist das handhabbar, wird aber mit vielen Karten, Entities, Icon- und Farb-Templates schnell
-unübersichtlich und fehleranfällig. Dieses Projekt schließt genau diese Lücke: eine grafische
-Oberfläche in HA, die daraus **gültige nspanel-YAML** erzeugt und dem bestehenden AppDaemon-Backend
-zur Verfügung stellt.
+> **Frühe Entwicklungsphase.** Nutzbar, aber im Fluss. Rückmeldungen sind willkommen.
 
-## Ansatz (bewusst *keine* Neuimplementierung des Renderings)
+---
+
+## Warum
+
+nspanel-lovelace-ui ist bewusst rein YAML-basiert – „no need to code, no UI". Für ein einzelnes
+Panel geht das gut; mit vielen Karten, Entities, Icon- und Farb-Templates wird es unübersichtlich.
+Und einiges lässt sich der Datei schlicht nicht ansehen:
+
+- Auf eine `cardEntities` passen **vier** Einträge – ein fünfter steht in der YAML und erscheint
+  nie auf dem Display. Ohne Fehlermeldung.
+- Ein vertippter Icon-Name wird still zu einem Warndreieck.
+- `unit:` sieht plausibel aus, wird vom Backend aber nirgends gelesen.
+
+Der Editor macht genau das sichtbar, bevor es auf dem Panel fehlt.
+
+## Was er kann
+
+**Karten und Entities** – anlegen, umsortieren, Kartentyp wechseln, Entities per Picker aus Home
+Assistant wählen. Jedes Feld ist beschriftet mit dem, was es bewirkt, und den Werten, die es
+annehmen darf.
+
+**Anzeigekapazität** – „5 von 4 Plätzen": der Editor weiß, wie viele Einträge jeder Kartentyp auf
+deinem Panel-Modell wirklich zeigt, und markiert überzählige.
+→ [docs/kapazitaet.md](docs/kapazitaet.md)
+
+**Icons** – Vorschau und Vorschläge aus den 6896 Namen, die das Backend tatsächlich kennt, mit
+Warnung bei Unbekanntem (ohne den Wert zu verwerfen).
+
+**Farben** – Farbwähler für `[r, g, b]` und für getrennte `on`/`off`-Zustände.
+
+**Templates** – Umschalter „als Template bearbeiten" mit Live-Vorschau über Home Assistants eigene
+Template-API. Dieselbe Engine, die später auch das Backend benutzt – also echte Werte und echte
+Fehlermeldungen. → [docs/funktionen.md](docs/funktionen.md#template-editor)
+
+**Sicherungen** – vor jedem Überschreiben wird der bisherige Stand weggeschrieben und lässt sich
+aus dem Editor zurückholen. → [Datensicherheit](#datensicherheit)
+
+**Import** – eine bestehende `apps.yaml` wird eingelesen und ist der Startpunkt. Nichts geht dabei
+verloren, auch keine Einstellung, die dieser Editor noch nicht kennt.
+
+## Wie es funktioniert
 
 Diese Integration ist eine reine **Konfigurations-Schicht**. Das ausgereifte Rendering-Backend von
-joBr99 (MQTT-Protokoll ans Nextion-Display, alle Kartentypen) bleibt **unverändert** und rendert
-weiter. Wir erzeugen lediglich seine Eingabe-Konfiguration.
+joBr99 (MQTT-Protokoll ans Nextion-Display, alle Kartentypen, Icon-Mapping) bleibt **unverändert**
+und rendert weiter – erzeugt wird nur seine Eingabedatei.
 
 ```
-┌─────────────────────────┐      schreibt       ┌──────────────────────────┐   liest    ┌───────────┐
-│  Home Assistant          │  ─────────────────▶ │  gemeinsame Include-Datei │ ─────────▶ │ AppDaemon │ ─MQTT─▶ NSPanel
-│  (diese Integration)     │  nspanel_config.yaml │  (Bind-Mount)            │            │ luibackend │
-│  · Panel / Web-Editor    │                     └──────────────────────────┘            └───────────┘
-│  · Import bestehender     │                                    ▲                              │
-│    apps.yaml (Vorlage)    │  ──────── Reload-Trigger ──────────┼──────────────────────────────┘
-└─────────────────────────┘        (AppDaemon-App neu laden)     │
+┌──────────────────────────┐    schreibt      ┌───────────────────────────┐   liest   ┌────────────┐
+│ Home Assistant           │ ───────────────▶ │ gemeinsame Include-Datei  │ ────────▶ │ AppDaemon  │ ─MQTT─▶ NSPanel
+│ (diese Integration)      │ nspanel_config   │ (Bind-Mount)              │           │ luibackend │
+│  · visueller Editor      │      .yaml       └───────────────────────────┘           └────────────┘
+│  · Import der apps.yaml  │                                 ▲                              │
+└──────────────────────────┘ ──── Reload-Trigger ────────────┴──────────────────────────────┘
 ```
 
-- **Import:** eine vorhandene `apps.yaml` wird beim Einrichten eingelesen und dient als Startpunkt.
-- **Editieren:** im HA-Panel (visueller Editor) – globale Settings, Screensaver, StatusIcons, Karten,
-  Entities, Icons, Farben (inkl. Templates).
-- **Ausgeben:** die Integration schreibt eine `nspanel_config.yaml`, die AppDaemons `apps.yaml` per
-  `!include` einbindet.
-- **Übernehmen:** AppDaemon lädt die App neu (Trigger konfigurierbar), das Panel aktualisiert sich.
-
-Warum kein natives HA-Rendering ohne AppDaemon? Das würde ein sehr großes, reifes Projekt
-duplizieren (Protokoll, alle Kartentypen, Icon-Mapping mit >200 kB Daten). Der Config-Schicht-Ansatz
-liefert früh Nutzen und bleibt kompatibel mit Updates des Upstream-Backends.
+Warum kein natives HA-Rendering ohne AppDaemon? Das würde ein großes, reifes Projekt duplizieren.
+Der Config-Schicht-Ansatz liefert früh Nutzen und bleibt kompatibel mit Updates des Backends.
+→ [docs/architecture.md](docs/architecture.md)
 
 ## Voraussetzungen
 
-- Home Assistant (2024.4+), Zugriff über HACS oder manuelle Installation.
-- Ein laufendes **nspanel-lovelace-ui**-Setup auf AppDaemon.
-- Eine **gemeinsame Datei** zwischen HA- und AppDaemon-Container (einmaliger Bind-Mount, siehe
-  [docs/architecture.md](docs/architecture.md#transport)). HA und AppDaemon laufen in getrennten
-  Docker-Volumes und teilen sich sonst keinen Pfad.
+- Home Assistant 2024.4 oder neuer
+- ein laufendes **nspanel-lovelace-ui**-Setup auf AppDaemon
+- eine **gemeinsame Datei** zwischen HA- und AppDaemon-Container. Beide laufen in getrennten
+  Volumes und teilen sich sonst keinen Pfad; ein einmaliger Bind-Mount genügt.
+  → [docs/architecture.md#transport](docs/architecture.md#transport)
 
-## Installation (früh, manuell)
+## Installation
 
-1. `custom_components/nspanel_ui_config/` nach `<config>/custom_components/` kopieren
-   (oder das Repo später als benutzerdefiniertes HACS-Repository hinzufügen).
-2. Home Assistant neu starten.
-3. *Einstellungen → Geräte & Dienste → Integration hinzufügen → „NSPanel UI Config"*.
-4. Im Setup-Dialog Pfad der Include-Datei und den AppDaemon-Reload-Weg angeben; optional bestehende
-   `apps.yaml` importieren.
+**Über HACS** (empfohlen): HACS → Integrationen → ⋮ → *Benutzerdefiniertes Repository* →
+`https://github.com/joschnurr/nspanel-ui-config`, Kategorie *Integration*. Danach installieren und
+Home Assistant neu starten.
 
-## Status / Roadmap
+**Manuell:** `custom_components/nspanel_ui_config/` nach `<config>/custom_components/` kopieren und
+Home Assistant neu starten.
 
-| Bereich | Status |
-| --- | --- |
-| Repo-/HACS-Skelett, Panel-Registrierung, Config-Flow | ✅ v0.1 |
-| Import bestehender `apps.yaml` → internes Modell | ✅ v0.2 |
-| YAML-Generator inkl. aller Kartentypen des Backends | ✅ v0.2 |
-| Verlustfreier Round-Trip (Import → Modell → YAML) | ✅ v0.2, testabgedeckt |
-| Visueller Editor als Custom-Panel (Karten-/Entity-Listen, Formulare aus dem Schema) | ✅ v0.3 |
-| AppDaemon-Reload-Automatik (`touch_module` / `restart_container`) | ✅ v0.4 |
-| Icon/Brand-Assets (HACS + HA-Integrationskarte) | ✅ v0.4 |
-| Icon-Picker (geprüft gegen das Backend-Mapping) und Farbwähler | ✅ v0.5 |
-| Template-Editor (Jinja) mit Live-Vorschau über HAs Template-API | ✅ v0.6 |
-| Erklärte Felder (Funktion + mögliche Werte) und Anzeigekapazität je Karte | ✅ v0.7 |
+Anschließend *Einstellungen → Geräte & Dienste → Integration hinzufügen → „NSPanel UI Config"*.
+Im Dialog werden Ausgabepfad, Reload-Weg und optional eine zu importierende `apps.yaml` abgefragt.
+Der Editor erscheint danach als **NSPanel UI** in der Seitenleiste.
 
-Details und Designentscheidungen: **[docs/architecture.md](docs/architecture.md)**.
+## Datensicherheit
 
-## Verlustfreier Round-Trip
+Die Integration schreibt in eine Datei in deiner Konfiguration. Zwei Zusagen dazu:
 
-Der Import zerlegt die Konfiguration in benannte Felder; alles, was die Integration (noch) nicht
-kennt, bleibt unverändert in einem `extra`-Bereich liegen und wird beim Generieren wieder
-herausgeschrieben. **Keine Einstellung geht verloren, nur weil dieser Konfigurator sie nicht
-versteht** – auch nicht bei Keys aus einer neueren Backend-Version.
+**Nichts geht beim Bearbeiten verloren.** Der Import zerlegt die Konfiguration in benannte Felder;
+alles, was der Editor (noch) nicht kennt, bleibt unverändert liegen und wird beim Generieren wieder
+herausgeschrieben – auch Keys aus einer neueren Backend-Version. Abgesichert durch Round-Trip-Tests
+gegen eine Fixture mit allen Kartentypen und den üblichen YAML-Fallen.
 
-Belegt durch [`tests/test_roundtrip.py`](tests/test_roundtrip.py) gegen eine Fixture, die alle
-Kartentypen und die üblichen YAML-Fallen abdeckt (`"on"`/`"off"` als Mapping-Keys, Jinja-Templates,
-RGB-Listen, `sleepBrightness` als Zeitplan). Gegen die eigene Konfiguration testen:
+**Nichts wird ungesichert überschrieben.** Vor jedem Schreibvorgang wandert der bisherige Stand
+nach `backups/` neben der Ausgabedatei. Lässt sich der alte Stand nicht sichern, wird auch nicht
+geschrieben. Über *Sicherungen…* im Editor lässt sich jeder Stand zurückholen – wobei der aktuelle
+Stand seinerseits gesichert wird. Wie viele aufgehoben werden, steht in den Optionen (Standard 10,
+`0` schaltet ab).
+
+Gegen die eigene Konfiguration testen:
 
 ```bash
 pip install pyyaml pytest
 NSPANEL_REAL_APPS_YAML=/pfad/zu/appdaemon/apps/apps.yaml pytest
 ```
 
-Einzige bewusste Abweichung: ein config-Block ganz ohne `cards` bekommt beim Generieren ein leeres
-`cards: []`, weil das Backend sonst auf seine eingebaute Demo-Karte zurückfällt.
+## Dokumentation
 
-## AppDaemon-Reload
-
-**AppDaemon bemerkt eine geänderte `!include`-Datei nicht von selbst** – nachgemessen an AppDaemon
-4.7.3: nach dem Neuschreiben erscheint keine Zeile im AppDaemon-Log. Sein YAML-Loader liest die
-Datei nur inline mit und überwacht ausschließlich die Dateien im `apps/`-Verzeichnis. Ohne Reload
-steht die neue YAML also auf der Platte, während das Panel weiter die alte Konfiguration zeigt.
-
-Nach dem Generieren löst die Integration deshalb den in den Optionen gewählten Reload aus:
-
-| `reload_mode` | Wirkung | Voraussetzung |
-| --- | --- | --- |
-| `none` (Standard) | nichts – man lädt AppDaemon selbst neu | – |
-| `touch_module` | setzt die mtime einer von AppDaemon überwachten Datei neu (`apps/nspanel.py` oder `apps.yaml`); AppDaemon lädt daraufhin genau diese App neu | HA muss die Datei sehen: AppDaemons `apps/` zusätzlich in den HA-Container mounten, Pfad unter `reload_touch_path` angeben |
-| `restart_container` | startet den AppDaemon-Container über die Docker-Engine-API neu | `/var/run/docker.sock` im HA-Container; Containername unter `reload_container` |
-
-Angetickt wird nur die mtime, der Inhalt bleibt unberührt; nicht existierende Dateien werden nicht
-angelegt. Scheitert der Reload, bleibt die geschriebene YAML gültig – die API antwortet mit `200`
-und `reload: {"ok": false, "detail": …}`, das Panel zeigt es als Fehler an.
-
-## HTTP-API
-
-Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
-
-| Methode | Pfad | Zweck |
-| --- | --- | --- |
-| `GET` | `/api/nspanel_ui_config/schema` | Feld-/Kartentyp-Schema, aus dem das Panel seine Formulare baut |
-| `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde |
-| `POST` | `/api/nspanel_ui_config/config` | Modell speichern |
-| `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name`, `save`) |
-| `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen, in den Ausgabepfad schreiben und AppDaemon neu laden (`{"reload": false}` überspringt den Reload) |
-
-Beim Import über `path` muss das Verzeichnis in HAs `allowlist_external_dirs` stehen (der Pfad kommt
-aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und wird von einem
-Administrator gesetzt.
-
-## Erklärte Felder statt nackter Feldnamen
-
-Die Feldnamen des Backends sagen für sich genommen wenig – `forecastSkip`, `assumed_state`,
-`sleepOverride`, `speed`. Jedes Eingabefeld im Editor trägt deshalb zwei Zeilen:
-
-- **was es bewirkt** (aus Sicht dessen, was auf dem Panel passiert), und
-- **welche Werte zulässig sind** – Wertebereiche, Aufzählungen, Schreibweisen.
-
-Beides steht in `schema.py` (`FIELD_DESCRIPTIONS` / `FIELD_VALUE_HINTS`) und kommt über
-`GET /api/nspanel_ui_config/schema` ins Panel; im JavaScript wird nichts davon dupliziert. Ein Test
-hält es vollständig: [`tests/test_schema_payload.py`](tests/test_schema_payload.py) schlägt fehl,
-sobald ein gerendertes Feld ohne Beschreibung *oder* ohne Angabe der möglichen Werte dasteht.
-
-Wo ein Feld je Kartentyp etwas anderes bedeutet, gewinnt die spezifische Fassung
-(`CARD_FIELD_DESCRIPTIONS`) – `entity` heißt auf `cardThermo` „die climate-Entity dieser Karte", auf
-dem Screensaver dagegen „die Wetter-Entity". Jede Karte bekommt zusätzlich einen Einzeiler darüber,
-was sie überhaupt darstellt.
-
-## Anzeigekapazität: wie viele Entities passen wirklich auf eine Karte?
-
-**Der stille Fehler schlechthin.** Weder Backend noch Generator kürzen die `entities`-Liste – zu viele
-Einträge werden mitgesendet und vom Display einfach ignoriert. Die YAML ist gültig, das Log
-schweigt, und auf dem Panel fehlt der letzte Eintrag. Eine `cardEntities` mit fünf Entities zeigt auf
-einem EU-Panel nur vier.
-
-Der Editor zeigt deshalb an jeder Entity-Liste „*n* von *m* Plätzen", markiert überzählige Einträge
-als **nicht sichtbar** und erklärt, wie sich die Plätze auf der Karte verteilen. Die Validierung
-meldet es zusätzlich als Befund.
-
-| Karte | eu | us-l | us-p |
-| --- | --- | --- | --- |
-| `cardEntities` | 4 | 4 | 6 |
-| `cardGrid` | 6 | 6 | 6 |
-| `cardGrid2` | 8 | 8 | 9 |
-| `cardQR` | 2 | 2 | 2 |
-| `cardMedia` (untere Reihe) | 6 | 6 | 6 |
-| `cardPower` (2 Mitte + 6 außen) | 8 | 8 | 8 |
-| `screensaver` | 6 | 6 | 6 |
-| `screensaver2` | 15 | 15 | 15 |
-
-`cardThermo`, `cardAlarm`, `cardChart` und `cardUnlock` werten keine Entity-Liste aus.
-
-Zwei Feinheiten, die der Editor mit abbildet:
-
-- **`cardGrid` wechselt von selbst.** Ab 7 Entities stellt das Backend die Karte intern auf
-  `cardGrid2` um (`pages.py`). Eine Warnung ab 7 wäre also falsch – erst ab 9 (eu) fehlt wirklich
-  etwas.
-- **Beim `screensaver` schaltet die 6. Entity das Layout um.** 1. Entity = Hauptsymbol, 2.–5. = die
-  vier Vorhersagespalten; eine sechste aktiviert das alternative Layout. `screensaver2` verteilt
-  stattdessen auf 1 + 3 + 6 + 5 Plätze.
-
-**Woher die Zahlen stammen:** aus der Display-Firmware selbst – den Textdumps der HMI-Seiten
-(`HMI/n2t-out-visual/`, für die US-Modelle unter `HMI/US/*/n2t-out-visual/`) und, für die beiden
-Screensaver, dem Nextion-Codegenerator `HMI/code_gen/pages/screensaver{,2}.py` im Upstream-Repo.
-Nachprüfbar mit einer lokalen Kopie davon:
-
-```bash
-python3 tools/check_card_capacity.py /pfad/zu/nspanel-lovelace-ui
-```
-
-Das Skript zählt die Slot-Komponenten je Seite und Modell nach und vergleicht sie mit `schema.py`.
-Nach einem Upstream-Update erneut laufen lassen – ein neues Display-Layout ändert genau hier die
-Wahrheit.
-
-### Wirkungslose Keys
-
-Manche Keys sehen plausibel aus, werden vom Backend aber nirgends gelesen – `unit:` etwa. Die
-Einheit kommt aus dem HA-Attribut `unit_of_measurement`; für eigenen Text ist `value` zuständig
-(`"{{ states('sensor.x') }} kWh"`). Die Validierung weist darauf hin und nennt die betroffenen
-Zeilen, **löscht aber nichts** – der verlustfreie Round-Trip gilt auch für Wirkungsloses.
-
-## Template-Editor
-
-Felder, die das Backend als Jinja rendert, haben im Formular einen Umschalter **„als Template
-bearbeiten"** – und darin eine **Live-Vorschau über HAs eigene Template-API**
-(`POST /api/template`). Das ist dieselbe Engine, die später auch das Backend benutzt
-(`ha_api.render_template`), man sieht hier also echte Werte und echte Jinja-Fehlermeldungen statt
-einer Nachbildung. Bei Farb-Feldern zeigt die Vorschau zusätzlich einen Farbfleck, sobald das
-Ergebnis als RGB lesbar ist.
-
-Template-fähig sind (nachgesehen an den `render_template`-Aufrufen des Backends, nicht geraten):
-`name`, `value`, `color`, `icon`, `state_template`, `defaultCard`, `qrCode`, `speed`,
-`dateAdditionalTemplate`, `timeAdditionalTemplate`.
-
-**Eine Eigenheit, die man kennen muss:** bei `value` und `icon` rendert das Backend nur bis zum
-**letzten** `}` und hängt den Rest wörtlich an – genau so entstehen Einheiten wie `{{ … }} °C`. Die
-Vorschau bildet das nach, sonst würde sie etwas anderes zeigen als später das Panel.
-
-Der gewählte Modus ist reine Ansichtssache und wird nie mitgespeichert. Der Umschalter ändert für
-sich genommen auch keinen Wert: erst wenn du im Textfeld etwas änderst, geht der neue Wert ins
-Modell.
-
-## Icon-Picker und Farbwähler
-
-**Ein falscher Icon-Name fällt sonst erst am Panel auf** – und dort nur als Warndreieck: das Backend
-kennt ausschließlich die Namen aus seinem eigenen Mapping und fällt bei allem anderen still auf
-`alert-circle-outline` zurück (`get_icon_id` in `icon_mapping.py`). Der Editor prüft Icon-Namen
-deshalb gegen genau diese Liste, zeigt eine Vorschau (`<ha-icon>`) und warnt bei unbekannten Namen –
-**ohne den Wert zu verwerfen**, denn das Backend kann in einer neueren Version mehr kennen.
-
-Die Namensliste liegt als `www/panel/icon-names.js` bei (6896 Namen, ~110 kB) und wird erzeugt aus
-dem Mapping des Backends:
-
-```bash
-python3 tools/extract_icon_names.py /pfad/zu/appdaemon/apps/luibackend/icon_mapping.py
-```
-
-Mitgeliefert statt zur Laufzeit gelesen, weil HA und AppDaemon in getrennten Containern laufen. Nach
-einem Upstream-Update das Skript erneut laufen lassen – der Diff zeigt die neuen Icons.
-
-Nicht als Icon-Name bewertet werden die Sonderformen des Backends: `text:` (roher Text), `ha:`
-(Template), `<I>…</I>` (Icon in einem Template) und Jinja allgemein.
-
-**Farben** akzeptiert das Backend in drei Formen, und der Editor bedient alle drei: `[r, g, b]`
-(Farbwähler plus Zahlenfeld), je Zustand `{on, off}` (zwei Wähler) und Jinja-Templates (Textfeld).
-Alles, was in keine dieser Formen passt, bleibt im JSON-Editor stehen, statt auf ein zu einfaches
-Widget abgeschnitten zu werden. Eine unvollständige Eingabe im Zahlenfeld wird **nicht** übernommen –
-sonst wäre der alte Wert weg.
-
-## Icon / Brand-Assets
-
-`custom_components/nspanel_ui_config/brand/` enthält die Bilder, die HACS und Home Assistant für die
-Integration anzeigen — `icon.png` (256×256), `icon@2x.png` (512×512) und `logo.png` (512×432). Die
-Icons sind oben/unten transparent aufgefüllt statt seitlich beschnitten, damit Panel-Rahmen und
-Beschriftung vollständig bleiben. Quelldatei: `docs/brand-source.jpg` (945×797).
-
-**Ab Home Assistant 2026.3 liest HA diese Bilder direkt aus der Integration** und serviert sie unter
-`/api/brands/integration/nspanel_ui_config/<bild>` — mit **Vorrang vor dem Brands-CDN**. Fehlt eine
-Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück; ein Eintrag im
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repo ist damit nur noch für ältere
-HA-Versionen nötig (dort inzwischen als *legacy folder* geführt). Ohne lokale Assets *oder*
-Brands-Eintrag zeigt HA den generischen Platzhalter des CDN.
-
-Das GitHub-**Social-Preview**-Bild lässt sich nicht per API setzen; das geht nur über *Settings →
-General → Social preview* im Web-UI (dafür eignet sich `docs/brand-source.jpg`).
-
-## Vorschau des Panels
-
-Untersucht, noch nicht umgesetzt: **[docs/vorschau-machbarkeit.md](docs/vorschau-machbarkeit.md)**.
-Kurzfassung — der im Upstream beschriebene Nextion-Editor-„Emulator" scheidet aus (Windows-Software,
-und er braucht trotz des Namens eine echte ESP32-Platine), eine **eigene Vorschau im Editor** ist
-dagegen gut machbar: die Slot-Geometrie aller HMI-Seiten liegt exakt vor, und Icons, Farben und
-Template-Auswertung sind im Panel bereits vorhanden.
+| | |
+| --- | --- |
+| [Funktionen im Detail](docs/funktionen.md) | Template-Editor, Icons, Farben, Reload-Wege, HTTP-API |
+| [Anzeigekapazität](docs/kapazitaet.md) | wie viele Entities je Karte und Modell wirklich sichtbar sind |
+| [Architektur](docs/architecture.md) | Transportweg, Datenmodell, Designentscheidungen |
+| [Panel-Vorschau](docs/vorschau-machbarkeit.md) | Machbarkeitsuntersuchung (noch nicht umgesetzt) |
+| [Änderungen](CHANGELOG.md) | Versionsverlauf |
 
 ## Referenzen
 
 - Backend: <https://github.com/joBr99/nspanel-lovelace-ui>
-- Doku/Config-Schema: <https://docs.nspanel.pky.eu/>
+- Doku des Backends: <https://docs.nspanel.pky.eu/>
 - Display-Protokoll und HMI-Seiten: `HMI/README.md` im Backend-Repo
+
+Dieses Projekt steht in keiner Verbindung zu joBr99 oder Sonoff/ITEAD.
 
 ## Lizenz
 

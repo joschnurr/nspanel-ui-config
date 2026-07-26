@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from .backup import DEFAULT_BACKUP_COUNT, create_backup
 from .schema import (
     CARD_ENTITIES_FIELD,
     ENTITY_KNOWN_FIELDS,
@@ -142,20 +143,47 @@ def dump_config_yaml(model: dict[str, Any]) -> str:
     return _HEADER + text
 
 
-def write_config_yaml(model: dict[str, Any], output_path: str) -> str:
-    """Schreibe die generierte YAML atomar an ``output_path`` und gib den Pfad zurück.
+def _current_text(output_path: str) -> str | None:
+    """Inhalt der bestehenden Ausgabedatei, oder ``None``, wenn es sie (noch) nicht gibt."""
+    try:
+        with open(output_path, encoding="utf-8") as handle:
+            return handle.read()
+    except (OSError, UnicodeDecodeError):
+        # Nicht lesbar oder keine Textdatei: dann eben kein Vergleich — gesichert wird trotzdem.
+        return None
 
-    Läuft im Executor (Blocking-I/O). Wirft ``OSError`` bei Schreibfehlern.
+
+def write_config_yaml(
+    model: dict[str, Any],
+    output_path: str,
+    backup_count: int = DEFAULT_BACKUP_COUNT,
+) -> dict[str, Any]:
+    """Sichere den bisherigen Stand und schreibe die generierte YAML atomar an ``output_path``.
+
+    Läuft im Executor (Blocking-I/O). Wirft ``OSError`` bei Schreib- *oder* Sicherungsfehlern:
+    lässt sich der bisherige Inhalt nicht sichern, wird er auch nicht überschrieben.
+
+    Rückgabe: ``{"path", "changed", "backup"}``. ``changed`` ist ``False``, wenn die Datei schon
+    genau diesen Inhalt hatte — dann wird weder geschrieben noch gesichert, sonst würde jeder Klick
+    auf „Generieren" eine weitere identische Kopie anhäufen und die echten Vorversionen aus der
+    Rotation drängen.
     """
     if not output_path:
         raise OSError("Kein Ausgabepfad konfiguriert")
 
     text = dump_config_yaml(model)
 
+    if _current_text(output_path) == text:
+        return {"path": output_path, "changed": False, "backup": None}
+
     directory = os.path.dirname(output_path) or "."
     os.makedirs(directory, exist_ok=True)
+
+    # Erst sichern, dann überschreiben. Ein OSError hier bricht bewusst ab.
+    backup_info = create_backup(output_path, backup_count)
+
     tmp_path = f"{output_path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as handle:
         handle.write(text)
     os.replace(tmp_path, output_path)
-    return output_path
+    return {"path": output_path, "changed": True, "backup": backup_info}

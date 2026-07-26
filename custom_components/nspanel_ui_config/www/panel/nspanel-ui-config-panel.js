@@ -133,6 +133,19 @@ const STYLES = `
     margin: 0 0 14px; line-height: 1.5;
   }
 
+  /* Sicherungen */
+  .backups { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .backup-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border: 1px solid var(--ns-border); border-radius: 6px;
+  }
+  .backup-row .backup-when { flex: 1; font-size: 14px; }
+  .backup-row .backup-size { font-size: 12px; color: var(--secondary-text-color, #727272); }
+  .backup-row .tag {
+    font-size: 10.5px; padding: 1px 6px; border-radius: 9px; margin-left: 6px;
+    background: var(--primary-color, #03a9f4); color: #fff;
+  }
+
   input[type="text"], input[type="number"], select, textarea {
     font: inherit; font-size: 14px; width: 100%; box-sizing: border-box;
     padding: 6px 8px; border-radius: 4px;
@@ -428,15 +441,39 @@ function templateFieldMode(value, override) {
 function generateStatus(result) {
   const path = result?.path;
   const reload = result?.reload || {};
+  // `changed: false` heißt, die Datei hatte schon genau diesen Inhalt – dann wurde bewusst weder
+  // geschrieben noch gesichert. Das muss man sehen, sonst wartet man auf eine Wirkung, die ausbleibt.
+  const geschrieben =
+    result?.changed === false
+      ? `Keine Änderung – ${path} war bereits aktuell`
+      : `YAML geschrieben nach ${path}`;
+  const gesichert = result?.backup?.name ? ` (vorheriger Stand gesichert als ${result.backup.name})` : "";
+
   if (reload.ok === false) {
     return [
-      `YAML geschrieben nach ${path}, aber AppDaemon nicht neu geladen: ${reload.detail}`,
+      `${geschrieben}${gesichert}, aber AppDaemon nicht neu geladen: ${reload.detail}`,
       "error",
     ];
   }
   const stillerModus = !reload.mode || reload.mode === "none" || reload.mode === "skipped";
-  if (stillerModus) return [`YAML geschrieben nach ${path}`, "ok"];
-  return [`YAML geschrieben nach ${path} – ${reload.detail}`, "ok"];
+  if (stillerModus) return [`${geschrieben}${gesichert}`, "ok"];
+  return [`${geschrieben}${gesichert} – ${reload.detail}`, "ok"];
+}
+
+/** Zeitstempel einer Sicherung (aus dem Dateinamen) als lesbare lokale Angabe. */
+function backupLabel(entry) {
+  const stamp = entry?.timestamp || "";
+  const match = stamp.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+  if (!match) return entry?.name || "";
+  const [, jahr, monat, tag, stunde, minute, sekunde] = match;
+  return `${tag}.${monat}.${jahr}, ${stunde}:${minute}:${sekunde}`;
+}
+
+/** Dateigröße kurz und lesbar. */
+function formatSize(bytes) {
+  if (typeof bytes !== "number" || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} kB`;
 }
 
 // --- Panel -----------------------------------------------------------------------------------
@@ -515,6 +552,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           <h1>NSPanel UI Konfiguration</h1>
           <span class="dirty" id="dirty"></span>
           <button id="btn-import">Importieren…</button>
+          <button id="btn-backups">Sicherungen…</button>
           <button id="btn-save">Speichern</button>
           <button id="btn-generate">YAML erzeugen</button>
         </header>
@@ -531,6 +569,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       <datalist id="entity-list"></datalist>
     `;
     this._$("btn-import").addEventListener("click", () => this._openImportDialog());
+    this._$("btn-backups").addEventListener("click", () => this._openBackupDialog());
     this._$("btn-save").addEventListener("click", () => this._save());
     this._$("btn-generate").addEventListener("click", () => this._generate());
   }
@@ -1447,6 +1486,107 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._renderStatus();
   }
 
+  /**
+   * Sicherungen ansehen und zurückspielen.
+   *
+   * Wichtig für das Verständnis: die Sicherungen gehören zur *Datei*, nicht zum Modell im Editor.
+   * Nach dem Zurückspielen steht auf der Platte etwas anderes als im Editor — darauf weist der
+   * Dialog hin, statt beides stillschweigend auseinanderlaufen zu lassen.
+   */
+  async _openBackupDialog() {
+    const host = this._$("dialog-host");
+    host.innerHTML = `
+      <div class="overlay">
+        <div class="dialog body">
+          <h3>Sicherungen der erzeugten YAML</h3>
+          <p class="hint">Vor jedem Überschreiben wird der bisherige Stand hier abgelegt. Beim
+            Zurückspielen wird der aktuelle Stand seinerseits gesichert – rückgängig machen bleibt
+            also möglich.</p>
+          <div id="backup-body"><p class="hint">Wird geladen…</p></div>
+          <div class="actions">
+            <button id="backup-close">Schließen</button>
+          </div>
+        </div>
+      </div>`;
+
+    const close = () => (host.innerHTML = "");
+    host.querySelector("#backup-close").addEventListener("click", close);
+    host.querySelector(".overlay").addEventListener("click", (event) => {
+      if (event.target.classList.contains("overlay")) close();
+    });
+    await this._renderBackupList();
+  }
+
+  async _renderBackupList() {
+    const body = this.shadowRoot.getElementById("backup-body");
+    if (!body) return;
+    let data;
+    try {
+      data = await this._hass.callApi("GET", "nspanel_ui_config/backups");
+    } catch (err) {
+      body.innerHTML = `<p class="status error">Sicherungen nicht lesbar: ${esc(
+        this._errText(err)
+      )}</p>`;
+      return;
+    }
+
+    const entries = data.backups || [];
+    const kopf = `<p class="hint">Ausgabedatei: <code>${esc(data.path || "–")}</code>${
+      data.keep ? ` · aufbewahrt werden ${data.keep}` : " · Sicherungen sind abgeschaltet"
+    }</p>`;
+
+    if (!entries.length) {
+      body.innerHTML = `${kopf}<p class="empty">Noch keine Sicherungen – sie entstehen, sobald
+        eine vorhandene Ausgabedatei überschrieben wird.</p>`;
+      return;
+    }
+
+    body.innerHTML = `${kopf}<div class="backups">${entries
+      .map(
+        (entry, index) => `
+        <div class="backup-row">
+          <span class="backup-when">${esc(backupLabel(entry))}${
+          index === 0 ? ' <span class="tag">neueste</span>' : ""
+        }</span>
+          <span class="backup-size">${esc(formatSize(entry.size))}</span>
+          <button data-name="${esc(entry.name)}">Zurückspielen</button>
+        </div>`
+      )
+      .join("")}</div>`;
+
+    body.querySelectorAll("button[data-name]").forEach((button) => {
+      button.addEventListener("click", () => this._restoreBackup(button.dataset.name));
+    });
+  }
+
+  async _restoreBackup(name) {
+    if (
+      !confirm(
+        `Sicherung "${name}" zurückspielen?\n\n` +
+          "Die erzeugte YAML wird damit auf diesen Stand zurückgesetzt. Der aktuelle Stand wird " +
+          "vorher selbst gesichert.\n\nDas Modell im Editor bleibt unverändert – wer es angleichen " +
+          "will, importiert die Datei anschließend."
+      )
+    ) {
+      return;
+    }
+    this._setStatus("Spiele Sicherung zurück…");
+    try {
+      const result = await this._hass.callApi("POST", "nspanel_ui_config/backups/restore", { name });
+      const ersetzt = result.backup_of_previous?.name;
+      this._setStatus(
+        `Sicherung ${name} zurückgespielt nach ${result.path}` +
+          (ersetzt ? ` (bisheriger Stand als ${ersetzt} gesichert)` : "") +
+          ". AppDaemon wurde dabei nicht neu geladen.",
+        "ok"
+      );
+      await this._renderBackupList();
+    } catch (err) {
+      this._setStatus(`Zurückspielen fehlgeschlagen: ${this._errText(err)}`, "error");
+    }
+    this._renderStatus();
+  }
+
   _openImportDialog() {
     const host = this._$("dialog-host");
     host.innerHTML = `
@@ -1537,7 +1677,9 @@ if (typeof customElements !== "undefined" && !customElements.get(ELEMENT_NAME)) 
 
 export {
   NsPanelUiConfigPanel,
+  backupLabel,
   capacityInfo,
+  formatSize,
   widgetFor,
   setField,
   cardLabel,

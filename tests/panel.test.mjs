@@ -11,7 +11,9 @@ const module = await import(
   "../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js"
 );
 const {
+  backupLabel,
   capacityInfo,
+  formatSize,
   widgetFor,
   setField,
   cardLabel,
@@ -326,4 +328,55 @@ test("capacityInfo behauptet nichts über Karten ohne Entity-Liste", () => {
   const fremd = capacityInfo(SCHEMA_STUB, "cardNeuAusUpstream", 3, "eu");
   assert.equal(fremd.limit, null);
   assert.equal(fremd.noList, false);
+});
+
+// --- Sicherungen -----------------------------------------------------------------------------
+
+test("generateStatus nennt die angelegte Sicherung", () => {
+  const [text, tone] = generateStatus({
+    path: "/nspanel-shared/nspanel_config.yaml",
+    changed: true,
+    backup: { name: "nspanel_config.yaml.2026-07-26_11-30-00-123.bak" },
+    reload: { mode: "none", ok: true },
+  });
+  assert.equal(tone, "ok");
+  assert.ok(text.includes("nspanel_config.yaml.2026-07-26_11-30-00-123.bak"), text);
+});
+
+test("generateStatus unterscheidet 'nichts geändert' vom Schreiben", () => {
+  // Sonst wartet man auf eine Wirkung, die gar nicht eintreten kann.
+  const [text, tone] = generateStatus({
+    path: "/x/nspanel_config.yaml",
+    changed: false,
+    backup: null,
+    reload: { mode: "none", ok: true },
+  });
+  assert.equal(tone, "ok");
+  assert.ok(/bereits aktuell/.test(text), text);
+});
+
+test("generateStatus bleibt bei fehlgeschlagenem Reload ein Fehler", () => {
+  const [text, tone] = generateStatus({
+    path: "/x/nspanel_config.yaml",
+    changed: true,
+    backup: { name: "b.bak" },
+    reload: { mode: "touch_module", ok: false, detail: "Datei fehlt" },
+  });
+  assert.equal(tone, "error");
+  assert.ok(text.includes("Datei fehlt"), text);
+});
+
+test("backupLabel macht aus dem Dateinamen eine lesbare Zeitangabe", () => {
+  assert.equal(
+    backupLabel({ timestamp: "2026-07-26_11-30-00-123", name: "x.bak" }),
+    "26.07.2026, 11:30:00"
+  );
+  // Unlesbarer Stempel: lieber der Dateiname als eine erfundene Zeit.
+  assert.equal(backupLabel({ timestamp: "", name: "komisch.bak" }), "komisch.bak");
+});
+
+test("formatSize bleibt kurz", () => {
+  assert.equal(formatSize(512), "512 B");
+  assert.equal(formatSize(2048), "2.0 kB");
+  assert.equal(formatSize(undefined), "");
 });

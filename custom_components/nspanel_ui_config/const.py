@@ -12,6 +12,8 @@ CONF_RELOAD_MODE: Final = "reload_mode"
 CONF_IMPORT_YAML_PATH: Final = "import_yaml_path"
 CONF_RELOAD_TOUCH_PATH: Final = "reload_touch_path"
 CONF_RELOAD_CONTAINER: Final = "reload_container"
+# Wie viele Sicherungen der Ausgabedatei aufgehoben werden (0 schaltet die Sicherung ab).
+CONF_BACKUP_COUNT: Final = "backup_count"
 
 # Reload-Strategien für das AppDaemon-Backend (siehe docs/architecture.md#reload-trigger und
 # reload.py — dort steht, warum ein geänderter !include allein nichts auslöst).
@@ -27,6 +29,7 @@ DOCKER_SOCKET: Final = "/var/run/docker.sock"
 DEFAULT_OUTPUT_PATH: Final = "/nspanel-shared/nspanel_config.yaml"
 DEFAULT_RELOAD_MODE: Final = RELOAD_MODE_NONE
 DEFAULT_RELOAD_CONTAINER: Final = "appdaemon"
+DEFAULT_BACKUP_COUNT: Final = 10
 
 # HA-Store (Persistenz des internen Config-Modells)
 STORAGE_KEY: Final = f"{DOMAIN}.model"
@@ -49,3 +52,5 @@ API_CONFIG: Final = "/api/nspanel_ui_config/config"
 API_GENERATE: Final = "/api/nspanel_ui_config/generate"
 API_IMPORT: Final = "/api/nspanel_ui_config/import"
 API_SCHEMA: Final = "/api/nspanel_ui_config/schema"
+API_BACKUPS: Final = "/api/nspanel_ui_config/backups"
+API_BACKUP_RESTORE: Final = "/api/nspanel_ui_config/backups/restore"

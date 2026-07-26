@@ -12,12 +12,13 @@ Ausführen: ``pytest`` im Repo-Wurzelverzeichnis. Für einen Test gegen die eige
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from nspanel_ui_config import generator, importer, schema  # via conftest.py registriert
+from nspanel_ui_config import backup, generator, importer, schema  # via conftest.py registriert
 
 FIXTURE = Path(__file__).parent / "fixtures" / "apps_full.yaml"
 REAL_APPS_YAML = os.environ.get("NSPANEL_REAL_APPS_YAML")
@@ -244,3 +245,83 @@ def test_roundtrip_gegen_echte_apps_yaml() -> None:
     for app_name in apps:
         block = _config_block(text, app_name)
         assert _roundtrip(block) == block, f"Round-Trip verliert Daten in App '{app_name}'"
+
+
+# --- Schreiben mit Sicherung -------------------------------------------------------------------
+#
+# write_config_yaml sichert den bisherigen Stand, bevor es überschreibt. Diese Tests brauchen den
+# echten YAML-Dumper und stehen deshalb hier statt in test_backup.py.
+
+
+def test_schreiben_sichert_den_vorherigen_stand() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "nspanel_config.yaml")
+        Path(ziel).write_text("von-hand: bearbeitet\n", encoding="utf-8")
+
+        model = importer.config_block_to_model({"model": "eu", "cards": []})
+        ergebnis = generator.write_config_yaml(model, ziel)
+
+        assert ergebnis["changed"] is True
+        assert ergebnis["backup"] is not None
+        # Der überschriebene Inhalt ist vollständig erhalten.
+        assert Path(ergebnis["backup"]["path"]).read_text(encoding="utf-8") == "von-hand: bearbeitet\n"
+        assert "model: eu" in Path(ziel).read_text(encoding="utf-8")
+
+
+def test_erster_schreibvorgang_braucht_keine_sicherung() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "unterordner", "nspanel_config.yaml")
+        model = importer.config_block_to_model({"model": "eu", "cards": []})
+        ergebnis = generator.write_config_yaml(model, ziel)
+
+        assert ergebnis["changed"] is True
+        assert ergebnis["backup"] is None
+        assert os.path.isfile(ziel)
+
+
+def test_unveraenderter_inhalt_schreibt_nicht_und_sichert_nicht() -> None:
+    """Sonst häufte jeder Klick auf „Generieren" eine weitere identische Kopie an — und die
+    echten Vorversionen fielen aus der Rotation."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "nspanel_config.yaml")
+        model = importer.config_block_to_model({"model": "eu", "cards": []})
+
+        generator.write_config_yaml(model, ziel)
+        vorher = os.stat(ziel).st_mtime_ns
+        zweites = generator.write_config_yaml(model, ziel)
+
+        assert zweites["changed"] is False
+        assert zweites["backup"] is None
+        assert os.stat(ziel).st_mtime_ns == vorher, "Datei wurde unnötig neu geschrieben"
+        assert backup.list_backups(ziel) == []
+
+
+def test_ohne_sicherungsmoeglichkeit_wird_nicht_ueberschrieben() -> None:
+    """Die wichtigste Zusage: lässt sich der alte Stand nicht sichern, bleibt er stehen."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "nspanel_config.yaml")
+        Path(ziel).write_text("kostbar: 1\n", encoding="utf-8")
+
+        # Das Sicherungsverzeichnis als *Datei* anlegen: os.makedirs scheitert dann.
+        Path(backup.backup_dir(ziel)).write_text("kein verzeichnis", encoding="utf-8")
+
+        model = importer.config_block_to_model({"model": "eu", "cards": []})
+        try:
+            generator.write_config_yaml(model, ziel)
+        except OSError:
+            assert Path(ziel).read_text(encoding="utf-8") == "kostbar: 1\n"
+            return
+        raise AssertionError("Ohne mögliche Sicherung darf nicht überschrieben werden")
+
+
+def test_sicherung_abschaltbar() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        ziel = os.path.join(tmp, "nspanel_config.yaml")
+        Path(ziel).write_text("alt: 1\n", encoding="utf-8")
+
+        model = importer.config_block_to_model({"model": "eu", "cards": []})
+        ergebnis = generator.write_config_yaml(model, ziel, backup_count=0)
+
+        assert ergebnis["changed"] is True
+        assert ergebnis["backup"] is None
+        assert not os.path.isdir(backup.backup_dir(ziel))
