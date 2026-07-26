@@ -217,8 +217,18 @@ def test_validate_model_meldet_echte_fehler() -> None:
     assert ("global.model", "warning") in messages
 
 
-def test_validate_model_ist_still_bei_gueltiger_config() -> None:
-    assert schema.validate_model(importer.parse_apps_yaml(_fixture_text())) == []
+def test_validate_model_meldet_bei_gueltiger_config_nur_das_wirkungslose_unit() -> None:
+    """Die Fixture ist gültig – bis auf das absichtlich enthaltene ``unit``.
+
+    ``unit`` steht dort seit jeher als Beispiel für einen Key, den diese Integration nicht kennt.
+    Inzwischen ist er *bekannt wirkungslos*: das Backend liest ihn nirgends, die Einheit kommt aus
+    ``unit_of_measurement``. Genau ein Hinweis ist also zu erwarten – und weiterhin kein Fehler.
+    """
+    findings = schema.validate_model(importer.parse_apps_yaml(_fixture_text()))
+    assert [finding for finding in findings if finding["level"] == "error"] == []
+    assert len(findings) == 1, f"Unerwartete Befunde: {findings}"
+    assert findings[0]["path"] == "screensaver.entities"
+    assert "'unit'" in findings[0]["message"]
 
 
 # --- Optional: gegen die echte apps.yaml -------------------------------------------------------
