@@ -155,7 +155,18 @@ def test_screensaver_status_icons_werden_als_entities_normalisiert() -> None:
     model = importer.parse_apps_yaml(_fixture_text())
     status_icon = model["screensaver"]["statusIcon1"]
     assert status_icon["entity"] == "sensor.buffer_top"
-    assert status_icon["extra"] == {"altFont": True}  # altFont kennt nur der Renderer
+    # altFont wirkt nur am Status-Symbol – dort ist es ein benanntes Feld, damit der Editor ein
+    # Ja/Nein-Feld anbieten kann, statt es im JSON-Kasten der unbekannten Keys zu verstecken.
+    assert status_icon["altFont"] is True
+    assert status_icon["extra"] == {}
+
+
+def test_altfont_bleibt_ausserhalb_der_status_symbole_ein_unbekannter_key() -> None:
+    """Der Renderer liest ihn nur dort — auf einer Entity-Zeile darf er nicht benannt werden."""
+    model = importer.parse_apps_yaml(_fixture_text())
+    nav = importer.normalize_entity({"entity": "navigate.x", "altFont": True})
+    assert nav["extra"] == {"altFont": True}
+    assert "altFont" not in model["screensaver"]["entities"][0]
 
 
 def test_backend_defaults_werden_nicht_eingemischt() -> None:

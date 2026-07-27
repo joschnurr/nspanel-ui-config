@@ -3,6 +3,30 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.14.0 – 2026-07-27
+
+### Die Status-Symbole sind jetzt wirklich einstellbar
+
+Im letzten Eintrag stand, die beiden Status-Symbole seien „bearbeitbar, nur nicht sichtbar". Das
+stimmte nicht: im Formular stand an ihrer Stelle ein Textfeld mit dem Inhalt `[object Object]`. Der
+Editor kannte für diese Felder zwar einen eigenen Widget-Namen (`entity_object`), hatte ihn aber
+nirgends gebaut – also fiel das Dict bis zum allgemeinen Textfeld durch, und dort wird aus einem
+Objekt eben jene Zeichenkette. Wer sie angeklickt und etwas hineingeschrieben hätte, hätte das Feld
+überschrieben.
+
+`statusIcon1`/`statusIcon2` klappen sich jetzt an Ort und Stelle auf und zeigen darin die Felder
+einer Entity-Zeile, mit Icon-Picker, Farbwähler und Template-Umschalter. Dasselbe gilt für
+`navItem1`/`navItem2` – dieselben zwei Zeilen Code, und die stehen auf **jeder** Karte, nicht nur auf
+der Ruheanzeige. Ist nichts gesetzt, steht dort *nicht gesetzt* und ein **anlegen**; das ✕ entfernt
+den Key wieder ganz, statt ein leeres Dict zurückzulassen.
+
+**`altFont` ist dabei ein eigenes Ja/Nein-Feld geworden.** Bisher galt der Key als unbekannt und
+landete beim Import im `extra`-Dict des Symbols – erhalten blieb er, einstellbar war er nur als JSON.
+Da ihn ausschließlich der Screensaver-Renderer liest, ist er auch nur *dort* benannt
+(`ENTITY_LIKE_EXTRA_FIELDS`): auf einer gewöhnlichen Entity-Zeile bleibt `altFont` weiterhin ein
+unbekannter Key, weil er dort nichts bewirkt. Bereits gespeicherte Konfigurationen, in denen er noch
+im `extra`-Dict steht, erzeugen unverändert dieselbe YAML.
+
 ## 0.13.0 – 2026-07-27
 
 ### Die Ruheanzeige zeigt ihre beiden Status-Symbole

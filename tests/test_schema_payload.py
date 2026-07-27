@@ -20,6 +20,7 @@ KEYS_USED_BY_PANEL = (
     "cardCommonFields",
     "cardTypeFields",
     "entityFields",
+    "entityLikeExtraFields",
     "entitiesField",
     "globalFieldOrder",
     "globalDefaults",
@@ -93,6 +94,24 @@ def test_flache_karten_bekommen_die_entity_felder() -> None:
         felder = schema.card_known_fields(card_type, has_flat_entity=True)
         assert "entity" in felder, f"{card_type} ohne 'entity'"
         assert "icon" in felder, f"{card_type} ohne 'icon'"
+
+
+def test_zusatzkeys_gehoeren_zu_entity_artigen_feldern_und_sind_erklaert() -> None:
+    """Die Zusatzkeys rendert der Editor im aufgeklappten Feld – ohne Hinweis kein Widget.
+
+    Und ein Tippfehler im Feldnamen bliebe still: der Key stünde weiter im ``extra``-Dict, das
+    Ja/Nein-Feld erschiene einfach nirgends.
+    """
+    entity_artig = set(PAYLOAD["entityLikeCardFields"])
+    for feld, zusatz in PAYLOAD["entityLikeExtraFields"].items():
+        assert feld in entity_artig, f"'{feld}' ist kein entity-artiges Karten-Feld"
+        for key in zusatz:
+            assert key in PAYLOAD["fieldHints"], f"{feld}.{key} ohne Widget-Hinweis"
+            assert key in PAYLOAD["fieldDescriptions"], f"{feld}.{key} ohne Beschreibung"
+            assert key in PAYLOAD["fieldValueHints"], f"{feld}.{key} ohne Angabe der Werte"
+            assert key not in PAYLOAD["entityFields"], (
+                f"{key} gilt nur für '{feld}' – als allgemeines Entity-Feld stünde es an jeder Zeile"
+            )
 
 
 def test_beschreibungen_verweisen_nur_auf_existierende_felder() -> None:

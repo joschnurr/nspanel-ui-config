@@ -24,6 +24,7 @@ from .schema import (
     STRUCTURED_KEYS,
     card_known_fields,
     empty_model,
+    entity_like_known_fields,
 )
 
 
@@ -96,16 +97,19 @@ def config_block_to_model(config: Any) -> dict[str, Any]:
     return model
 
 
-def normalize_entity(raw: Any) -> Any:
+def normalize_entity(raw: Any, known: tuple[str, ...] = ENTITY_KNOWN_FIELDS) -> Any:
     """Zerlege eine Entity-Zeile in bekannte Felder + ``extra``.
+
+    ``known`` weicht nur bei den entity-artigen Karten-Feldern ab: das Status-Symbol der
+    Ruheanzeige kennt zusätzlich ``altFont`` (siehe ``schema.entity_like_known_fields``).
 
     Nicht-Dicts (fehlerhafte Konfiguration) werden unverändert durchgereicht, damit der Import an
     kaputtem YAML nicht scheitert und der Editor den Fehler anzeigen kann.
     """
     if not isinstance(raw, dict):
         return raw
-    entity: dict[str, Any] = {key: raw[key] for key in ENTITY_KNOWN_FIELDS if key in raw}
-    entity["extra"] = {key: value for key, value in raw.items() if key not in ENTITY_KNOWN_FIELDS}
+    entity: dict[str, Any] = {key: raw[key] for key in known if key in raw}
+    entity["extra"] = {key: value for key, value in raw.items() if key not in known}
     return entity
 
 
@@ -124,5 +128,5 @@ def normalize_card(raw: Any, default_type: str | None = None) -> Any:
         card[CARD_ENTITIES_FIELD] = [normalize_entity(entity) for entity in raw[CARD_ENTITIES_FIELD]]
     for field in ENTITY_LIKE_CARD_FIELDS:
         if isinstance(card.get(field), dict):
-            card[field] = normalize_entity(card[field])
+            card[field] = normalize_entity(card[field], entity_like_known_fields(field))
     return card

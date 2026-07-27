@@ -25,6 +25,7 @@ from .schema import (
     ENTITY_LIKE_CARD_FIELDS,
     GLOBAL_FIELD_ORDER,
     card_known_fields,
+    entity_like_known_fields,
 )
 
 _HEADER = (
@@ -74,11 +75,15 @@ _ConfigDumper.add_representer(list, _represent_list)
 _ConfigDumper.add_representer(str, _represent_str)
 
 
-def denormalize_entity(entity: Any) -> Any:
-    """Setze eine Entity-Zeile aus benannten Feldern + ``extra`` wieder zusammen."""
+def denormalize_entity(entity: Any, known: tuple[str, ...] = ENTITY_KNOWN_FIELDS) -> Any:
+    """Setze eine Entity-Zeile aus benannten Feldern + ``extra`` wieder zusammen.
+
+    ``known`` weicht nur bei den entity-artigen Karten-Feldern ab — dort kommen deren Zusatzkeys
+    hinzu (``altFont`` am Status-Symbol). Ein Key, der hier fehlt, ginge beim Speichern verloren.
+    """
     if not isinstance(entity, dict):
         return entity
-    out: dict[str, Any] = {key: entity[key] for key in ENTITY_KNOWN_FIELDS if key in entity}
+    out: dict[str, Any] = {key: entity[key] for key in known if key in entity}
     out.update(entity.get("extra") or {})
     return out
 
@@ -95,7 +100,7 @@ def denormalize_card(card: Any) -> Any:
             continue
         value = card[key]
         if key in ENTITY_LIKE_CARD_FIELDS and isinstance(value, dict):
-            value = denormalize_entity(value)
+            value = denormalize_entity(value, entity_like_known_fields(key))
         out[key] = value
 
     out.update(card.get("extra") or {})

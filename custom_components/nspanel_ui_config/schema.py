@@ -158,6 +158,21 @@ ENTITY_LIKE_CARD_FIELDS: Final[tuple[str, ...]] = (
     "statusIcon2",
 )
 
+# Keys, die nur an *einem bestimmten* dieser Dicts etwas bewirken. ``altFont`` liest der
+# Screensaver-Renderer direkt aus dem Status-Symbol; auf einer gewöhnlichen Entity-Zeile bliebe es
+# wirkungslos — deshalb nicht in ENTITY_RENDERER_FIELDS, sondern hier je Feld.
+ENTITY_LIKE_EXTRA_FIELDS: Final[dict[str, tuple[str, ...]]] = {
+    "statusIcon1": ("altFont",),
+    "statusIcon2": ("altFont",),
+}
+
+
+def entity_like_known_fields(field: Any) -> tuple[str, ...]:
+    """Bekannte Keys eines entity-artigen Karten-Feldes: Entity-Felder plus dessen Zusatzkeys."""
+    if not isinstance(field, str):
+        return ENTITY_KNOWN_FIELDS
+    return ENTITY_KNOWN_FIELDS + ENTITY_LIKE_EXTRA_FIELDS.get(field, ())
+
 
 # --- Karten-Felder ---------------------------------------------------------------------------
 
@@ -284,6 +299,8 @@ FIELD_HINTS: Final[dict[str, str]] = {
     "navItem2": "entity_object",
     "statusIcon1": "entity_object",
     "statusIcon2": "entity_object",
+    # Zusatzkey *innerhalb* der Status-Symbole (ENTITY_LIKE_EXTRA_FIELDS), keine Kartenzeile.
+    "altFont": "boolean",
     "sleepTimeout": "number",
     "cooldown": "number",
     "temperatureUnit": "select",
@@ -438,9 +455,11 @@ FIELD_DESCRIPTIONS: Final[dict[str, str]] = {
     "versehentlichem Schalten.",
     "alternativeLayout": "Alternatives Screensaver-Layout. Es schaltet sich ohnehin selbst ein, "
     "sobald eine 6. Entity konfiguriert ist.",
-    "statusIcon1": "Kleines Symbol links neben dem Datum. Aufbau wie eine Entity; zusätzlich ist "
-    "hier altFont: true für eine größere Schrift möglich.",
+    "statusIcon1": "Kleines Symbol links neben dem Datum. Aufbau wie eine Entity; zusätzlich hat "
+    "es das Feld altFont.",
     "statusIcon2": "Kleines Symbol rechts neben dem Datum. Aufbau wie statusIcon1.",
+    "altFont": "Größere Schrift für dieses Status-Symbol. Nur die Status-Symbole der Ruheanzeige "
+    "werten den Key aus — auf einer gewöhnlichen Entity-Zeile bleibt er wirkungslos.",
     "defaultCard": "Karte, die nach dem Aufwachen erscheint, als navigate.<key>. Ohne Angabe die "
     "erste Karte. Wird als Template ausgewertet.",
     # --- Globale Settings ---
@@ -528,8 +547,9 @@ FIELD_VALUE_HINTS: Final[dict[str, str]] = {
     "weatherOverrideForecast4": "Aufbau wie eine Entity",
     "doubleTapToUnlock": "true oder false",
     "alternativeLayout": "true oder false",
-    "statusIcon1": "Aufbau wie eine Entity, zusätzlich altFont: true",
-    "statusIcon2": "Aufbau wie eine Entity, zusätzlich altFont: true",
+    "statusIcon1": "Aufbau wie eine Entity, zusätzlich altFont",
+    "statusIcon2": "Aufbau wie eine Entity, zusätzlich altFont",
+    "altFont": "true oder false",
     "defaultCard": "navigate.<key>, auch als Template",
     # --- Globale Settings ---
     "panelRecvTopic": "MQTT-Topic, z. B. NSPanel_1/tele/RESULT",
@@ -608,6 +628,10 @@ def schema_payload() -> dict[str, Any]:
         "cardTypeFields": {key: list(value) for key, value in CARD_TYPE_FIELDS.items()},
         "entityFields": list(ENTITY_KNOWN_FIELDS),
         "entityLikeCardFields": list(ENTITY_LIKE_CARD_FIELDS),
+        # Zusatzkeys je entity-artigem Feld — der Editor hängt sie unter die Entity-Felder.
+        "entityLikeExtraFields": {
+            key: list(value) for key, value in ENTITY_LIKE_EXTRA_FIELDS.items()
+        },
         "entitiesField": CARD_ENTITIES_FIELD,
         "globalFieldOrder": list(GLOBAL_FIELD_ORDER),
         "globalDefaults": GLOBAL_DEFAULTS,

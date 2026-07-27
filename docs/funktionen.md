@@ -199,6 +199,21 @@ Alles, was in keine dieser Formen passt, bleibt im JSON-Editor stehen, statt auf
 Widget abgeschnitten zu werden. Eine unvollständige Eingabe im Zahlenfeld wird **nicht** übernommen –
 sonst wäre der alte Wert weg.
 
+## Felder, die eine ganze Entity tragen
+
+Vier Karten-Keys sind kein einzelner Wert, sondern ein Dict im Aufbau einer Entity-Zeile: die beiden
+Navigationsschaltflächen jeder Karte (`navItem1`/`navItem2`) und die beiden **Status-Symbole** der
+Ruheanzeige (`statusIcon1`/`statusIcon2`). Der Editor klappt sie an Ort und Stelle auf und zeigt
+darin dieselben Felder wie eine Entity-Zeile – mit Icon-Picker, Farbwähler und Template-Umschalter.
+Ist der Key nicht gesetzt, steht dort *nicht gesetzt* und ein **anlegen**; das ✕ am Kopf entfernt ihn
+wieder ganz, statt ein leeres Dict zurückzulassen.
+
+Die Status-Symbole haben ein Feld, das es sonst nirgends gibt: **`altFont`** schaltet für dieses eine
+Symbol auf die größere Schrift. Nur der Screensaver-Renderer liest den Key – auf einer gewöhnlichen
+Entity-Zeile bliebe er wirkungslos und gilt dort weiterhin als unbekannt. Welches Feld welche
+Zusatzkeys hat, steht in `schema.py` (`ENTITY_LIKE_EXTRA_FIELDS`) und kommt über dieselbe
+Schema-Antwort ins Panel.
+
 ## Sicherungen
 
 Vor jedem Überschreiben der Ausgabedatei wandert der bisherige Stand nach `backups/` neben der

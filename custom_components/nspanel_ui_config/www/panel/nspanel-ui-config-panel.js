@@ -394,6 +394,18 @@ function widgetFor(hint, value) {
   return hint || "string";
 }
 
+/**
+ * Felder eines entity-artigen Karten-Feldes: die Entity-Felder plus dessen Zusatzkeys.
+ *
+ * Beides kommt aus `schema.py` (`entityFields`, `entityLikeExtraFields`) – ein Zusatzkey, der hier
+ * fehlte, wäre im Editor unsichtbar und beim Speichern trotzdem im `extra`-Dict gelandet.
+ */
+function entityObjectFields(schema, name) {
+  const basis = schema.entityFields || [];
+  const zusatz = (schema.entityLikeExtraFields || {})[name] || [];
+  return [...basis, ...zusatz];
+}
+
 /** Beschriftung einer Karte in der Seitenleiste. */
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
@@ -2254,6 +2266,17 @@ class NsPanelUiConfigPanel extends PanelBase {
       }
     };
 
+    // Entity-artige Dicts (navItem1/2, statusIcon1/2) bekommen ihre eigenen Felder. Ohne diesen
+    // Zweig fiele das Dict bis zum Textfeld am Ende durch und stünde dort als "[object Object]".
+    if (widget === "entity_object") {
+      row.appendChild(
+        this._entityObjectEditor(target, name, () =>
+          wrapper.replaceWith(this._field(target, name, options))
+        )
+      );
+      return wrapper;
+    }
+
     if (widget === "json") {
       const area = document.createElement("textarea");
       const lines = isPlain(value) ? JSON.stringify(value, null, 2).split("\n").length : 3;
@@ -2620,6 +2643,68 @@ class NsPanelUiConfigPanel extends PanelBase {
   }
 
   /**
+   * Editor für ein entity-artiges Karten-Feld: `navItem1`/`navItem2` auf jeder Karte,
+   * `statusIcon1`/`statusIcon2` auf der Ruheanzeige.
+   *
+   * Diese Keys tragen ein eigenständiges Dict im Aufbau einer Entity-Zeile — hier aufgeklappt statt
+   * als JSON, sonst müsste man die Schreibweise auswendig können. Welche Felder dazugehören, sagt
+   * das Schema (`entityFields` plus die Zusatzkeys aus `entityLikeExtraFields`, z. B. `altFont`).
+   *
+   * `rebuild` baut die ganze Feldzeile neu – nötig, wenn das Dict erst entsteht oder verschwindet.
+   */
+  _entityObjectEditor(target, name, rebuild) {
+    const value = target[name];
+
+    if (!isPlain(value)) {
+      const host = document.createElement("div");
+      host.innerHTML = `<span class="empty">– nicht gesetzt –</span>`;
+      const anlegen = document.createElement("button");
+      anlegen.type = "button";
+      anlegen.className = "linkbtn";
+      anlegen.textContent = "anlegen";
+      anlegen.addEventListener("click", () => {
+        setField(target, name, { entity: "", extra: {} });
+        this._markDirty();
+        rebuild();
+      });
+      host.appendChild(anlegen);
+      return host;
+    }
+
+    const details = document.createElement("details");
+    details.className = "entity";
+    details.open = true;
+    details.style.flex = "1";
+    details.style.minWidth = "0";
+    const label = value.entity || "(ohne entity)";
+    const zusatz = value.name ? ` – ${value.name}` : "";
+    details.innerHTML = `
+      <summary>
+        <span class="caret">▶</span>
+        <span class="title">${esc(label)}<small>${esc(zusatz)}</small></span>
+        <button class="icon danger" data-act="del" title="Feld ganz entfernen">✕</button>
+      </summary>
+      <div class="inner"></div>`;
+
+    details.querySelector("summary button").addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setField(target, name, undefined);
+      this._markDirty();
+      rebuild();
+    });
+
+    const inner = details.querySelector(".inner");
+    // Bewusst *ohne* `cardType`: die kartenspezifischen Beschreibungen gelten der Karte selbst –
+    // `entity` hieße auf dem Screensaver „die Wetter-Entity“, hier ist es die des Symbols.
+    entityObjectFields(this._schema, name).forEach((feldName) =>
+      inner.appendChild(this._field(value, feldName))
+    );
+    inner.appendChild(this._extraEditor(value));
+    return details;
+  }
+
+  /**
    * Editor für das `extra`-Dict einer Ebene. Sichtbar zu machen, was der Editor *nicht* versteht,
    * ist hier Absicht: der Nutzer soll sehen, dass diese Keys erhalten bleiben.
    */
@@ -2877,6 +2962,7 @@ export {
   formatSize,
   widgetFor,
   setField,
+  entityObjectFields,
   cardLabel,
   esc,
   isPlain,

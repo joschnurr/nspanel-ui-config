@@ -16,6 +16,7 @@ const {
   formatSize,
   widgetFor,
   setField,
+  entityObjectFields,
   cardLabel,
   esc,
   isPlain,
@@ -69,9 +70,27 @@ test("leere und fehlende Werte behalten den Schema-Hinweis", () => {
   assert.equal(widgetFor(undefined, undefined), "string");
 });
 
-test("entity_object nutzt den JSON-Editor", () => {
+test("entity_object bekommt seinen eigenen Editor, kein Textfeld", () => {
+  // Der Fall, der den Editor einmal „[object Object]“ zeigen ließ: ein Dict ohne eigenen Zweig
+  // fällt bis zum Textfeld durch. Auch der *nicht gesetzte* Wert muss dort landen, sonst gäbe es
+  // keine Stelle, an der man das Feld anlegen kann.
   assert.equal(widgetFor("entity_object", { entity: "light.a" }), "entity_object");
+  assert.equal(widgetFor("entity_object", undefined), "entity_object");
+  // Steht dort etwas anderes als ein Dict, bleibt der JSON-Editor – der Wert soll nicht verstümmelt
+  // werden, nur weil das Schema ein Objekt erwartet.
   assert.equal(widgetFor("entity_object", "light.a"), "json");
+});
+
+test("entityObjectFields hängt die Zusatzkeys an die Entity-Felder", () => {
+  const schema = {
+    entityFields: ["entity", "name", "icon"],
+    entityLikeExtraFields: { statusIcon1: ["altFont"], statusIcon2: ["altFont"] },
+  };
+  assert.deepEqual(entityObjectFields(schema, "statusIcon1"), ["entity", "name", "icon", "altFont"]);
+  // navItem kennt kein altFont – dort darf das Feld auch nicht auftauchen.
+  assert.deepEqual(entityObjectFields(schema, "navItem1"), ["entity", "name", "icon"]);
+  // Ein Schema ohne die Angabe (ältere Integration im Browser-Cache) darf nicht abstürzen.
+  assert.deepEqual(entityObjectFields({}, "statusIcon1"), []);
 });
 
 test("setField löscht den Key bei undefined statt leere Werte zu speichern", () => {
