@@ -534,6 +534,20 @@ function colorShape(value) {
   return "other";
 }
 
+/**
+ * Die 16-Bit-Farbe des Displays als CSS-Hex.
+ *
+ * Rot und Blau tragen 5 Bit, Grün 6 – dieselbe Umrechnung wie `rgb565_to_rgb` in `protocol.py`.
+ * Gebraucht für die Schriftfarben aus den HMI-Attributen (`layouts.js`).
+ */
+function rgb565ToHex(wert) {
+  if (typeof wert !== "number" || wert < 0 || wert > 0xffff) return null;
+  const rot = Math.round((((wert >> 11) & 0x1f) * 255) / 31);
+  const gruen = Math.round((((wert >> 5) & 0x3f) * 255) / 63);
+  const blau = Math.round(((wert & 0x1f) * 255) / 31);
+  return rgbToHex([rot, gruen, blau]);
+}
+
 const clamp255 = (part) => Math.max(0, Math.min(255, Math.round(Number(part) || 0)));
 
 function rgbToHex(rgb) {
@@ -950,6 +964,40 @@ function formatSize(bytes) {
   if (typeof bytes !== "number" || bytes < 0) return "";
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} kB`;
+}
+
+/**
+ * Wie groß die Schrift einer Font-ID des HMI ist.
+ *
+ * Die IDs stehen in den Dumps, ihre Pixelgrößen leider nicht — die stecken im Nextion-Projekt. Die
+ * Werte hier sind deshalb **kalibriert**, nicht gemessen: anhand der Komponentenhöhen, in denen ein
+ * Font vorkommt (Font 0 sitzt in 20–26 px hohen Feldern, Font 5 allein in der 112 px hohen Uhr),
+ * und im Abgleich mit den Beispielbildern der Upstream-Doku (docs.nspanel.pky.eu).
+ *
+ * Ohne diese Tabelle leitete die Vorschau die Schriftgröße aus der Feldhöhe ab — auf `cardGrid`
+ * ergab das für die Beschriftung dieselbe Größe wie für die Überschrift.
+ */
+const FONT_PX = { 0: 15, 1: 20, 2: 24, 3: 32, 4: 46, 5: 92 };
+
+/** Symbole füllen die Zeilenhöhe stärker aus als Ziffern – dieselbe Font-ID wirkt größer. */
+const ICON_FAKTOR = 1.2;
+
+function fontGroesse(attr, ersatzHoehe, faktor = 1) {
+  // `attr && …` ergäbe bei fehlendem Attribut `null` – und `null !== undefined`, die Vorgabe hätte
+  // also nie gegriffen und jede Schrift wäre auf den Mindestwert gefallen.
+  const px = attr ? FONT_PX[attr.f] : undefined;
+  const groesse = px === undefined ? Math.round(ersatzHoehe * 0.6) : px;
+  return Math.max(8, Math.round(groesse * faktor));
+}
+
+/** Horizontale Ausrichtung des HMI als CSS-Wert (`h`: l/c/r). */
+function ausrichtung(attr) {
+  return { l: "flex-start", c: "center", r: "flex-end" }[(attr && attr.h) || "l"] || "flex-start";
+}
+
+/** Vertikale Ausrichtung (`v`: t/c/b). */
+function vertikal(attr) {
+  return { t: "flex-start", c: "center", b: "flex-end" }[(attr && attr.v) || "c"] || "center";
 }
 
 // --- Panel -----------------------------------------------------------------------------------
@@ -1525,6 +1573,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     screen.className = "screen";
     screen.style.width = `${layout.screen.w}px`;
     screen.style.height = `${layout.screen.h}px`;
+    // Das Display ist nicht rein schwarz, sondern sehr dunkelgrau (Back. Color der HMI-Seite).
+    const grund = rgb565ToHex(layout.back);
+    if (grund) screen.style.background = grund;
 
     if (layout.chrome) {
       screen.appendChild(
@@ -1635,6 +1686,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     screen.className = "screen";
     screen.style.width = `${layout.screen.w}px`;
     screen.style.height = `${layout.screen.h}px`;
+    // Das Display ist nicht rein schwarz, sondern sehr dunkelgrau (Back. Color der HMI-Seite).
+    const grund = rgb565ToHex(layout.back);
+    if (grund) screen.style.background = grund;
 
     if (layout.chrome) {
       screen.appendChild(this._chromeSlot("title", 0, 0, 100, 11, this._liveTitle));
@@ -1865,6 +1919,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     if (slot.kind === "title" || slot.kind === "navbtn") {
       // Rahmen aus dem abgemessenen Layout: Kartentitel und die beiden Blättertasten.
       element.className = slot.kind === "title" ? "title measured" : "navbtn";
+      this._nachAttributen(element, slot, slot.kind === "navbtn" ? ICON_FAKTOR : 1);
       element.textContent =
         slot.kind === "title"
           ? this._previewTitle(card)
@@ -1876,6 +1931,7 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     if (slot.kind === "clock" || slot.kind === "date") {
       element.className = slot.kind;
+      this._nachAttributen(element, slot);
       // Näherung: die echte Formatierung macht das Backend nach timeFormat/dateFormat (strftime).
       const jetzt = new Date();
       element.textContent =
@@ -1964,16 +2020,30 @@ class NsPanelUiConfigPanel extends PanelBase {
       kind.style.boxSizing = "border-box";
     };
 
+    /** Ausrichtung, Schriftgröße und -farbe eines Textfeldes aus den HMI-Attributen. */
+    const richteAus = (knoten, teil, faktor = 1) => {
+      const attr = teil.attr;
+      knoten.style.display = "flex";
+      knoten.style.alignItems = vertikal(attr);
+      knoten.style.justifyContent = ausrichtung(attr);
+      knoten.style.fontSize = `${fontGroesse(attr, teil.px[1], faktor)}px`;
+      // Die Schriftfarbe der Komponente ist der Standard; eine konfigurierte Farbe überschreibt
+      // sie später (nur beim Symbol, siehe _faerbe).
+      const rgb = attr && typeof attr.c === "number" ? rgb565ToHex(attr.c) : null;
+      if (rgb) knoten.style.color = rgb;
+    };
+
     const { icon, name, value } = slot.parts;
     let symbol = null;
     if (icon) {
       symbol = this._slotIcon(inhalt, auftraege, marke);
       setze(symbol, icon);
-      // Symbolflächen sind im HMI meist deutlich größer als das Symbol selbst.
-      symbol.style.setProperty("--mdc-icon-size", `${Math.round(Math.min(icon.px[0], icon.px[1]) * 0.8)}px`);
-      symbol.style.display = "flex";
-      symbol.style.alignItems = "center";
-      symbol.style.justifyContent = "center";
+      richteAus(symbol, icon, ICON_FAKTOR);
+      // Das Symbol ist eine Glyphe dieses Fonts – seine Größe folgt derselben Tabelle.
+      symbol.style.setProperty(
+        "--mdc-icon-size",
+        `${fontGroesse(icon.attr, Math.min(icon.px[0], icon.px[1]), ICON_FAKTOR)}px`
+      );
       element.appendChild(symbol);
     }
     if (name) {
@@ -1981,9 +2051,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       text.className = "name";
       text.textContent = inhalt.name;
       setze(text, name);
-      text.style.fontSize = `${Math.min(Math.round(name.px[1] * 0.62), 20)}px`;
-      text.style.display = "flex";
-      text.style.alignItems = "center";
+      richteAus(text, name);
       this._registerTemplate(inhalt, "name", auftraege, marke, (gerendert) => {
         text.textContent = gerendert;
       });
@@ -1994,10 +2062,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       wert.className = "val";
       wert.textContent = inhalt.value;
       setze(wert, value);
-      wert.style.fontSize = `${Math.min(Math.round(value.px[1] * 0.55), 18)}px`;
-      wert.style.display = "flex";
-      wert.style.alignItems = "center";
-      wert.style.justifyContent = "center";
+      richteAus(wert, value);
       this._registerTemplate(inhalt, "value", auftraege, marke, (gerendert) => {
         wert.textContent = gerendert;
       });
@@ -2097,6 +2162,23 @@ class NsPanelUiConfigPanel extends PanelBase {
       const rgb = parseTemplateColor(text);
       if (rgb) setzen(rgbToHex(rgb));
     });
+  }
+
+  /**
+   * Größe, Ausrichtung und Schriftfarbe eines Slots aus seinen HMI-Attributen.
+   *
+   * Betrifft die Flächen, die keine Entity zeigen – Titel, Blättertasten, Uhr, Datum. Ohne das
+   * stünde die Uhr des Screensavers in derselben Größe da wie eine Kartenbeschriftung.
+   */
+  _nachAttributen(element, slot, faktor = 1) {
+    const attr = slot.attr;
+    if (!attr) return;
+    element.style.display = "flex";
+    element.style.alignItems = vertikal(attr);
+    element.style.justifyContent = ausrichtung(attr);
+    element.style.fontSize = `${fontGroesse(attr, slot.h * 3, faktor)}px`;
+    const farbe = typeof attr.c === "number" ? rgb565ToHex(attr.c) : null;
+    if (farbe) element.style.color = farbe;
   }
 
   /** Das Symbol eines Platzes – inklusive der Sonderformen, die gar kein Symbol sind. */
@@ -3076,6 +3158,9 @@ export {
   previewContent,
   iconFromRendered,
   iconNameFromChar,
+  rgb565ToHex,
+  fontGroesse,
+  ausrichtung,
   istIconZeichen,
   gridSensorText,
   liveContent,

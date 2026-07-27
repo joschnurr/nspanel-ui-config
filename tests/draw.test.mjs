@@ -19,7 +19,14 @@ const layouts = await import(
 const icons = await import("../custom_components/nspanel_ui_config/www/panel/icon-names.js");
 const iconChars = await import("../custom_components/nspanel_ui_config/www/panel/icon-chars.js");
 
-const { NsPanelUiConfigPanel, previewContent, liveStatusContent } = panelModul;
+const {
+  NsPanelUiConfigPanel,
+  previewContent,
+  liveStatusContent,
+  rgb565ToHex,
+  fontGroesse,
+  ausrichtung,
+} = panelModul;
 const { previewSlots, entitySlots } = layouts;
 
 /** Ein Element, das sich merken kann, was mit ihm geschah. */
@@ -99,7 +106,9 @@ test("die Farbe liegt auf dem Symbol, nicht auf Name oder Wert", () => {
   assert.equal(symbol.style.color, "#ffa500");
   assert.equal(element.style.color, undefined, "der Platz selbst darf nicht gefärbt sein");
   for (const teil of [...element.finde("name"), ...element.finde("val")]) {
-    assert.equal(teil.style.color, undefined, "Beschriftung und Wert behalten ihre feste Farbe");
+    // Sie tragen die Schriftfarbe aus dem HMI-Dump (weiß), nicht die konfigurierte Entity-Farbe.
+    assert.notEqual(teil.style.color, "#ffa500", "die Entity-Farbe gehört nur aufs Symbol");
+    assert.equal(teil.style.color, "#ffffff");
   }
 });
 
@@ -241,4 +250,49 @@ test("live steht im Status-Feld das Zeichen des Geräts samt Wert", () => {
   assert.equal(element.finde("icon")[0].attribute.icon, "mdi:fireplace");
   assert.equal(element.finde("val")[0].textContent, "57.4 °C");
   assert.equal(element.style.color, "#ffa500");
+});
+
+test("Schriftgröße und Ausrichtung kommen aus den HMI-Attributen", () => {
+  // Auf cardGrid steht die Beschriftung mittig unter dem Symbol (Font 0, zentriert) – vorher leitete
+  // die Vorschau die Größe aus der Feldhöhe ab und richtete alles links aus.
+  const ergebnis = previewSlots({ cardType: "cardGrid", capacity: 6, filled: 6, model: "eu" });
+  const slot = entitySlots(ergebnis)[0];
+  const element = panel()._measuredSlot(
+    fakeElement("div"),
+    slot,
+    previewContent({ entity: "light.k", icon: "lightbulb", name: "Bed Light" }, {}),
+    [],
+    1
+  );
+
+  const [name] = element.finde("name");
+  assert.equal(name.style.justifyContent, "center", "die Beschriftung gehört mittig");
+  assert.equal(name.style.fontSize, "15px", "Font 0 der HMI-Tabelle");
+
+  const [symbol] = element.finde("icon");
+  // Font 4 (46 px) mal dem Symbolfaktor – deutlich größer als die Beschriftung.
+  assert.equal(symbol.style["--mdc-icon-size"], "55px");
+});
+
+test("die Uhr des Screensavers ist der größte Font", () => {
+  const ergebnis = previewSlots({ cardType: "screensaver", capacity: 6, filled: 5, model: "eu" });
+  const uhr = ergebnis.slots.find((slot) => slot.kind === "clock");
+  assert.ok(uhr.attr, "die Uhr braucht ihre Attribute");
+  // Font 5 kommt in den Dumps genau einmal vor: in der 112 px hohen Uhrzeit.
+  assert.equal(fontGroesse(uhr.attr, 0), 92);
+});
+
+test("die 16-Bit-Farben des Displays werden richtig umgerechnet", () => {
+  assert.equal(rgb565ToHex(65535), "#ffffff");
+  assert.equal(rgb565ToHex(0), "#000000");
+  assert.equal(rgb565ToHex(-1), null);
+  assert.equal(rgb565ToHex("weiß"), null);
+});
+
+test("fehlende Attribute führen zu einer brauchbaren Vorgabe statt zu einem Absturz", () => {
+  assert.equal(ausrichtung(null), "flex-start");
+  assert.equal(ausrichtung({ h: "c" }), "center");
+  assert.equal(ausrichtung({ h: "r" }), "flex-end");
+  // Ohne Font-ID zählt die Feldhöhe – so wie vor der Tabelle.
+  assert.equal(fontGroesse(null, 30), 18);
 });

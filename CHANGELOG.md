@@ -3,6 +3,28 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.16.0 – 2026-07-27
+
+### Die Vorschau folgt jetzt auch den Schriften und Ausrichtungen des Geräts
+
+Bisher nutzte die Vorschau aus den HMI-Dumps nur Position und Größe der Komponenten. Dort steht aber
+mehr: **Font-ID, horizontale und vertikale Ausrichtung, Schriftfarbe und Hintergrundfarbe.** Das
+erklärt die Abweichungen, die im Vergleich mit der [Upstream-Doku](https://docs.nspanel.pky.eu/)
+auffielen – auf `cardGrid` etwa klebte die Beschriftung links, statt mittig unter dem Symbol zu
+stehen, und Symbol, Titel und Beschriftung hatten fast dieselbe Größe.
+
+- `tools/extract_layouts.py` liest die Attribute mit und legt sie neben die Rechtecke
+  (`slotAttrs`, `chromeAttrs`, `specialAttrs`; kurze Schlüssel `f`/`h`/`v`/`c`).
+- Die Zeichenschicht richtet Text danach aus, färbt ihn in der Schriftfarbe der Komponente und
+  bemisst ihn nach der Font-ID: auf `cardGrid` also Symbol 55 px, Titel 24 px, Beschriftung 15 px –
+  alles zentriert. Die Uhr des Screensavers nutzt den größten Font (92 px).
+- Der Bildschirm bekommt den echten Hintergrund des Geräts (`#191c19`) statt reinem Schwarz.
+- **Kalibriert, nicht gemessen:** die Pixelgrößen der Font-IDs stehen nicht im Dump. `FONT_PX` ist
+  aus den Feldhöhen und den Doku-Bildern abgeleitet – die einzige geschätzte Größe, die bleibt.
+- Ein Test deckte dabei einen echten Fehler auf: `attr && FONT_PX[attr.f]` ergibt bei fehlendem
+  Attribut `null`, und `null !== undefined` – die Ersatzgröße hätte nie gegriffen, jede Schrift wäre
+  auf den Mindestwert gefallen.
+
 ## 0.15.0 – 2026-07-27
 
 ### Der Editor schlägt die Sprungziele vor

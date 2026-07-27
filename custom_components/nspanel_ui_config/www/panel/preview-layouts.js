@@ -60,7 +60,7 @@ function huelle(boxen) {
  * angegeben, damit die Zeichenschicht nur noch Prozente setzen muss. Die Pixelmaße bleiben als
  * `px` erhalten — die Schriftgröße richtet sich nach der echten Höhe des Textfeldes.
  */
-function platz(teile, index, breite, hoehe) {
+function platz(teile, index, breite, hoehe, attrs = {}) {
   const boxen = Object.values(teile).map((r) => proz(r, breite, hoehe));
   if (!boxen.length) return null;
   const rahmen = huelle(boxen);
@@ -73,6 +73,9 @@ function platz(teile, index, breite, hoehe) {
       width: (box.w / rahmen.w) * 100,
       height: (box.h / rahmen.h) * 100,
       px: kasten.slice(2),
+      // Font-ID, Ausrichtung und Schriftfarbe der Komponente – ohne sie stünde jede Beschriftung
+      // links statt mittig und in Einheitsgröße (siehe layouts.js).
+      attr: (attrs || {})[rolle] || null,
     };
   }
   return { kind: "measured", index, ...rahmen, parts };
@@ -83,17 +86,30 @@ function kartenLayout(layout, capacity) {
   const [breite, hoehe] = layout.screen;
   const slots = [];
   const chrome = layout.chrome || {};
-  if (chrome.title) slots.push({ kind: "title", ...proz(chrome.title, breite, hoehe) });
+  const chromeAttrs = layout.chromeAttrs || {};
+  if (chrome.title) {
+    slots.push({
+      kind: "title",
+      ...proz(chrome.title, breite, hoehe),
+      attr: chromeAttrs.title || null,
+    });
+  }
   for (const taste of ["prev", "next"]) {
     if (chrome[taste]) {
-      slots.push({ kind: "navbtn", taste, ...proz(chrome[taste], breite, hoehe) });
+      slots.push({
+        kind: "navbtn",
+        taste,
+        ...proz(chrome[taste], breite, hoehe),
+        attr: chromeAttrs[taste] || null,
+      });
     }
   }
+  const slotAttrs = layout.slotAttrs || [];
   layout.slots.slice(0, capacity).forEach((teile, index) => {
-    const eintrag = platz(teile, index, breite, hoehe);
+    const eintrag = platz(teile, index, breite, hoehe, slotAttrs[index]);
     if (eintrag) slots.push(eintrag);
   });
-  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true };
+  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
 // Welche Sonderkomponente wie gezeichnet wird. Uhrzeit und Datum füllt das Backend aus eigenen
@@ -126,14 +142,19 @@ const SPECIAL_KINDS = {
 function screensaverLayout(layout, capacity, filled, model) {
   const [breite, hoehe] = layout.screen;
   const slots = [];
+  const specialAttrs = layout.specialAttrs || {};
   for (const [name, rechteck] of Object.entries(layout.special || {})) {
     const art = SPECIAL_KINDS[name];
-    if (art) slots.push({ ...art, ...proz(rechteck, breite, hoehe) });
+    if (art) {
+      slots.push({ ...art, ...proz(rechteck, breite, hoehe), attr: specialAttrs[name] || null });
+    }
   }
 
   const alternativ = filled >= 6 && layout.alt;
-  const zeichne = (teile, index) => {
-    const eintrag = platz(teile, index, breite, hoehe);
+  const slotAttrs = layout.slotAttrs || [];
+  const altAttrs = layout.altAttrs || {};
+  const zeichne = (teile, index, attrs) => {
+    const eintrag = platz(teile, index, breite, hoehe, attrs || slotAttrs[index]);
     if (eintrag) slots.push(eintrag);
   };
 
@@ -144,11 +165,13 @@ function screensaverLayout(layout, capacity, filled, model) {
       if (layout.alt && index === layout.slots.length - 1) return;
       zeichne(teile, index);
     });
-    return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true };
+    return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
   }
 
   const letzter = layout.slots.length - 1;
-  for (const [indexText, teile] of Object.entries(layout.alt)) zeichne(teile, Number(indexText));
+  for (const [indexText, teile] of Object.entries(layout.alt)) {
+    zeichne(teile, Number(indexText), altAttrs[indexText]);
+  }
   zeichne(layout.slots[letzter], letzter);
 
   const spalten = layout.slots.slice(1, letzter); // die Vorhersagespalten
@@ -159,7 +182,7 @@ function screensaverLayout(layout, capacity, filled, model) {
     if (index < 1) return;
     zeichne(teile, index);
   });
-  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true };
+  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
 // --- Notlösung für Karten ohne abgemessenes Layout ---------------------------------------------

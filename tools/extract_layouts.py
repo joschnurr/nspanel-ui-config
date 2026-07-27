@@ -95,6 +95,58 @@ def parse_components(text: str) -> dict[str, tuple[int, int, int, int]]:
     return komponenten
 
 
+# Kurze Schlüssel, weil die Tabelle für jede Komponente jeder Seite mitgeliefert wird:
+# f = Font-ID, h = horizontale Ausrichtung, v = vertikale, c = Schriftfarbe (RGB565).
+def parse_attributes(text: str) -> dict[str, dict[str, object]]:
+    """Name → Darstellungsattribute jeder Komponente.
+
+    Ohne sie bleibt die Vorschau eine grobe Nachbildung: die Ausrichtung entscheidet, ob eine
+    Beschriftung mittig unter dem Symbol steht oder links klebt, und die Font-ID, wie groß sie ist.
+    Beides steht im Dump und war bisher ungenutzt.
+
+    Buttons benennen dieselben Dinge anders (``Font Color (Unpressed)``) – die Muster decken beide
+    Schreibweisen ab.
+    """
+    ausrichtung = {"left": "l", "center": "c", "right": "r", "top": "t", "bottom": "b"}
+    attribute: dict[str, dict[str, object]] = {}
+    for block in re.split(r"\n(?=[A-Za-z]+ \S+\n)", text):
+        kopf = block.split("\n", 1)[0].strip()
+        if " " not in kopf:
+            continue
+        eintrag: dict[str, object] = {}
+        font = re.search(r"Font ID\s*:\s*(\d+)", block)
+        if font:
+            eintrag["f"] = int(font.group(1))
+        for schluessel, muster in (
+            ("h", r"Horizontal Alignment\s*:\s*(\w+)"),
+            ("v", r"Vertical Alignment\s*:\s*(\w+)"),
+        ):
+            treffer = re.search(muster, block)
+            if treffer:
+                eintrag[schluessel] = ausrichtung.get(treffer.group(1).lower(), treffer.group(1)[:1])
+        farbe = re.search(r"Font Color(?:\s*\(Unpressed\))?\s*:\s*(\d+)", block)
+        if farbe:
+            eintrag["c"] = int(farbe.group(1))
+        if eintrag:
+            attribute[kopf] = eintrag
+    return attribute
+
+
+def hintergrundfarbe(text: str) -> int | None:
+    """Die Hintergrundfarbe der Seite – im Dump die des Hintergrundbilds bzw. der Komponenten.
+
+    Das Display ist nicht rein schwarz, sondern sehr dunkelgrau; ohne diesen Wert wirkt die Vorschau
+    kontrastreicher als das Gerät.
+    """
+    treffer = re.findall(r"Back\. Color\s*:\s*(\d+)", text)
+    if not treffer:
+        return None
+    # Der häufigste Wert ist der Seitenhintergrund; einzelne Komponenten weichen bewusst ab.
+    from collections import Counter
+
+    return Counter(int(wert) for wert in treffer).most_common(1)[0][0]
+
+
 def _treffer(komponenten: dict, muster: str) -> dict[int, tuple[int, int, int, int]]:
     """Alle Komponenten, deren Name auf das Muster passt, nach der Nummer darin sortiert."""
     gefunden: dict[int, tuple[int, int, int, int]] = {}
@@ -258,13 +310,37 @@ SEITEN = {
 SCREENSAVER_SEITEN = ("screensaver", "screensaver2")
 
 
+def _attrs_zu(rechtecke: dict, komponenten: dict, attribute: dict) -> dict:
+    """Ordnet jedem Rechteck die Attribute seiner Komponente zu – über die Position.
+
+    Der Umweg über die Koordinaten spart es, die Namensmuster ein zweites Mal zu pflegen: ein
+    Rechteck stammt genau von der Komponente, die dort sitzt.
+    """
+    nach_rect = {tuple(rect): name for name, rect in komponenten.items()}
+    ergebnis = {}
+    for rolle, rect in rechtecke.items():
+        name = nach_rect.get(tuple(rect))
+        eintrag = attribute.get(name) if name else None
+        if eintrag:
+            ergebnis[rolle] = eintrag
+    return ergebnis
+
+
 def layout_fuer(dump: str, model: str, seite: str) -> dict:
     komponenten = parse_components(dump)
+    attribute = parse_attributes(dump)
+    hintergrund = hintergrundfarbe(dump)
+
     if seite in SCREENSAVER_SEITEN:
         slots, alt, special = slots_screensaver(dump, komponenten)
         layout = {"screen": list(SCREENS[model]), "chrome": {}, "slots": slots, "special": special}
+        layout["slotAttrs"] = [_attrs_zu(slot, komponenten, attribute) for slot in slots]
+        layout["specialAttrs"] = _attrs_zu(special, komponenten, attribute)
         if alt:
             layout["alt"] = alt
+            layout["altAttrs"] = {k: _attrs_zu(v, komponenten, attribute) for k, v in alt.items()}
+        if hintergrund is not None:
+            layout["back"] = hintergrund
         return layout
 
     chrome = {}
@@ -273,11 +349,17 @@ def layout_fuer(dump: str, model: str, seite: str) -> dict:
             if re.match(muster, name):
                 chrome[rolle] = list(rect)
                 break
-    return {
+    slots = SEITEN[seite](komponenten)
+    layout = {
         "screen": list(SCREENS[model]),
         "chrome": chrome,
-        "slots": SEITEN[seite](komponenten),
+        "chromeAttrs": _attrs_zu(chrome, komponenten, attribute),
+        "slots": slots,
+        "slotAttrs": [_attrs_zu(slot, komponenten, attribute) for slot in slots],
     }
+    if hintergrund is not None:
+        layout["back"] = hintergrund
+    return layout
 
 
 def main(argv: list[str]) -> int:
@@ -328,7 +410,10 @@ def main(argv: list[str]) -> int:
         "prüfen;\n"
         "// die Umrechnung in Prozent macht preview-layouts.js.\n"
         "//\n"
-        "// Aufbau: LAYOUTS[<kartentyp>][<modell>] = { screen: [w, h], chrome: {...}, slots: [...] }.\n"
+        "// Aufbau: LAYOUTS[<kartentyp>][<modell>] = { screen: [w, h], chrome: {...}, slots: [...],\n"
+        "//         slotAttrs: [...], back: <RGB565> }.\n"
+        "// Zu jedem Rechteck stehen in *Attrs die Darstellungsangaben der Komponente:\n"
+        "//   f = Font-ID · h/v = Ausrichtung (l/c/r bzw. t/c/b) · c = Schriftfarbe (RGB565).\n"
         "// Jeder Slot trägt die Rechtecke [x, y, w, h] seiner Bestandteile (icon/name/value); welche\n"
         "// es gibt, hängt von der Karte ab. Die Reihenfolge der Slots ist die der entities-Liste.\n"
         "//\n"

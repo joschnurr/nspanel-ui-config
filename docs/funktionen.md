@@ -61,6 +61,17 @@ Zuordnung wird stattdessen aus den `spstr`-Aufrufen des Seitencodes hergeleitet:
 (`entity = (index-1) // 6`, `rolle = (index-1) % 6`). Dass die Herleitung trägt, zeigt der Abgleich –
 sie ergibt genau die Aufteilung, die schon im Schema stand.
 
+**Schriftgrößen, Ausrichtung und Farben stammen ebenfalls aus dem Dump.** Jede Komponente nennt
+dort ihre Font-ID, ihre horizontale und vertikale Ausrichtung und ihre Schriftfarbe – deshalb steht
+die Beschriftung auf `cardGrid` mittig unter dem Symbol, ist der Kartentitel größer als sie, und die
+Uhr des Screensavers ist der größte Font überhaupt. Auch der Hintergrund ist nicht rein schwarz,
+sondern das dunkle Grau des Geräts (`Back. Color`).
+
+Die *Pixelgrößen* der Font-IDs stehen allerdings nicht im Dump – sie stecken im Nextion-Projekt.
+`FONT_PX` im Panel ist deshalb **kalibriert**: anhand der Feldhöhen, in denen ein Font vorkommt, und
+im Abgleich mit den Beispielbildern der [Upstream-Doku](https://docs.nspanel.pky.eu/). Das ist die
+einzige geschätzte Größe, die übrig bleibt.
+
 **Was Näherung bleibt:**
 
 - **Schriftart und Umbruch.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort
