@@ -4,6 +4,7 @@
 // Geprüft wird die Logik, an der Datenverlust hängen würde: die Widget-Wahl (ein Dict darf nie in
 // einem Textfeld landen) und die Regel „leeres Feld löscht den Key“.
 
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -463,4 +464,16 @@ test("formatSize bleibt kurz", () => {
   assert.equal(formatSize(512), "512 B");
   assert.equal(formatSize(2048), "2.0 kB");
   assert.equal(formatSize(undefined), "");
+});
+
+test("das Panel kennt die Fassung, die der Browser geladen hat", () => {
+  // Sie steht in der Kopfzeile, weil ES-Module pro Seitenaufruf nur einmal geladen werden: nach
+  // einem Update läuft in einer offenen Oberfläche weiter die alte Fassung. Ohne diese Anzeige
+  // sucht man den Fehler im Code statt im Browser-Cache.
+  const quelle = readFileSync(
+    new URL("../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js", import.meta.url),
+    "utf-8"
+  );
+  assert.match(quelle, /const PANEL_VERSION = new URLSearchParams\(MODUL_VERSION\)\.get\("v"\)/);
+  assert.match(quelle, /class="version"/);
 });

@@ -3,6 +3,18 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.16.2 – 2026-07-27
+
+### Die Kopfzeile zeigt, welche Fassung der Browser geladen hat
+
+Ein Update kann installiert und trotzdem unsichtbar sein: ES-Module lädt der Browser **pro
+Seitenaufruf einmal**. Bleibt die Home-Assistant-Oberfläche offen, läuft weiter die alte Fassung –
+der Server liefert längst die neue aus, die Anzeige ändert sich aber nicht. Genau das führte gerade
+dazu, dass die neuen Schriftgrößen nicht ankamen, obwohl Server und Dateien stimmten.
+
+Neben dem Titel steht deshalb jetzt die Version, die dieser Browser ausführt (aus der eigenen
+Modul-URL). Weicht sie von der installierten ab: Seite neu laden (Strg+Shift+R).
+
 ## 0.16.1 – 2026-07-27
 
 ### Die Schriftgröße je Eintrag (`font`) wirkt jetzt auch in der Vorschau

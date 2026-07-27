@@ -22,6 +22,16 @@
 // Außerhalb des Browsers (tests/preview.test.mjs) ist er leer, dort ändert sich nichts.
 const MODUL_VERSION = new URL(import.meta.url).search;
 
+/**
+ * Welche Fassung des Panels der Browser gerade ausführt.
+ *
+ * Steht sichtbar in der Kopfzeile, und das aus einem konkreten Anlass: ES-Module lädt der Browser
+ * pro Seitenaufruf **einmal**. Bleibt die Home-Assistant-Oberfläche offen, läuft nach einem Update
+ * weiter die alte Fassung – der Server liefert längst die neue aus, die Anzeige ändert sich aber
+ * nicht. Ohne diese Angabe sucht man den Fehler im Code statt im Browser-Cache.
+ */
+const PANEL_VERSION = new URLSearchParams(MODUL_VERSION).get("v") || "unbekannt";
+
 // Die Namensliste des Backend-Icon-Mappings (erzeugt von tools/extract_icon_names.py).
 const { ICON_NAMES } = await import(`./icon-names.js${MODUL_VERSION}`);
 // Zu jedem Namen das Zeichen, mit dem das Backend dieses Icon überträgt. Gebraucht für die
@@ -52,6 +62,7 @@ const STYLES = `
     box-shadow: var(--ha-card-box-shadow, 0 2px 4px rgba(0,0,0,.2));
   }
   header h1 { font-size: 18px; font-weight: 400; margin: 0; flex: 1; }
+  header h1 .version { font-size: 12px; opacity: .7; margin-left: 6px; }
   header .dirty { font-size: 13px; opacity: .9; }
 
   button {
@@ -1103,7 +1114,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       <style>${STYLES}</style>
       <div class="app">
         <header>
-          <h1>NSPanel UI Konfiguration</h1>
+          <h1>NSPanel UI Konfiguration <span class="version" title="Fassung, die dieser Browser geladen hat – nach einem Update die Seite neu laden (Strg+Shift+R)">v${esc(PANEL_VERSION)}</span></h1>
           <span class="dirty" id="dirty"></span>
           <button id="btn-import">Importieren…</button>
           <button id="btn-backups">Sicherungen…</button>
