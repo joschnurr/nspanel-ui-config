@@ -1711,6 +1711,17 @@ class NsPanelUiConfigPanel extends PanelBase {
       model,
     });
 
+    // **Nur die passende Karte zeichnen.** Vorher stand hier die zuletzt empfangene – nach einem
+    // Kartenwechsel also oft der Screensaver, der mit der bearbeiteten Karte nichts zu tun hat.
+    // Eine fremde Fläche ist schlechter als gar keine: sie sieht aus wie ein Ergebnis.
+    if (!antwort.matched) {
+      host.innerHTML = "";
+      host.appendChild(this._liveNote(antwort, nachricht, eintraege.length));
+      const knopf = this._showButton(gesucht, antwort);
+      if (knopf) host.appendChild(knopf);
+      return;
+    }
+
     this._liveTitle = nachricht.title || "";
     this._liveNavigation = nachricht.navigation || [];
     const marke = (this._previewToken = (this._previewToken || 0) + 1);
@@ -2533,6 +2544,33 @@ class NsPanelUiConfigPanel extends PanelBase {
       return wrapper;
     }
 
+    // Feste Auswahl: ein echtes Auswahlfeld statt eines Textfeldes mit Vorschlagsliste.
+    // **Warum der Wechsel:** ein `<input list=…>` filtert die Vorschläge nach dem, was schon im
+    // Feld steht – bei „screensaver2" sah man beim Aufklappen nur diesen einen Eintrag und hielt
+    // ihn für die einzige Möglichkeit. Ein Wert, den die Liste nicht kennt (etwa aus einer neueren
+    // Backend-Version), wird zusätzlich aufgenommen, damit er nicht still verlorengeht.
+    const auswahl = options.options || (widget === "select" ? this._schema.fieldOptions[name] : null);
+    if (auswahl && auswahl.length) {
+      const select = document.createElement("select");
+      const werte = [...auswahl];
+      const aktuell = value === undefined || value === null ? "" : String(value);
+      if (aktuell && !werte.includes(aktuell)) werte.push(aktuell);
+      select.innerHTML =
+        `<option value="">– nicht gesetzt –</option>` +
+        werte
+          .map(
+            (eintrag) =>
+              `<option value="${esc(eintrag)}"${eintrag === aktuell ? " selected" : ""}>${esc(
+                eintrag
+              )}${auswahl.includes(eintrag) ? "" : " (aus der Konfiguration)"}</option>`
+          )
+          .join("");
+      select.value = aktuell;
+      select.addEventListener("change", () => commit(select.value || undefined));
+      row.appendChild(select);
+      return wrapper;
+    }
+
     if (widget === "boolean") {
       const select = document.createElement("select");
       select.innerHTML = `
@@ -2573,19 +2611,6 @@ class NsPanelUiConfigPanel extends PanelBase {
     } else if (widget === "entity") {
       input.setAttribute("list", "entity-list");
       input.placeholder = "z. B. light.wohnzimmer";
-    } else if (widget === "select" || options.options) {
-      // Immer neu befüllen: `type` etwa hat je nach Kontext andere Auswahl (Karte vs. Screensaver),
-      // eine einmal erzeugte Liste würde sonst die falschen Werte behalten.
-      const listId = `opts-${name}`;
-      let list = this.shadowRoot.getElementById(listId);
-      if (!list) {
-        list = document.createElement("datalist");
-        list.id = listId;
-        this.shadowRoot.appendChild(list);
-      }
-      const choices = options.options || this._schema.fieldOptions[name] || [];
-      list.innerHTML = choices.map((choice) => `<option value="${esc(choice)}"></option>`).join("");
-      input.setAttribute("list", listId);
     }
 
     input.addEventListener("change", () => {

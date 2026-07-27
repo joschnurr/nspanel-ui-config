@@ -477,3 +477,26 @@ test("das Panel kennt die Fassung, die der Browser geladen hat", () => {
   assert.match(quelle, /const PANEL_VERSION = new URLSearchParams\(MODUL_VERSION\)\.get\("v"\)/);
   assert.match(quelle, /class="version"/);
 });
+
+test("Felder mit fester Auswahl bekommen ein echtes Auswahlfeld", () => {
+  // Ein `<input list=…>` filtert seine Vorschläge nach dem, was schon im Feld steht: bei
+  // „screensaver2" sah man beim Aufklappen nur diesen einen Wert. Ein `<select>` zeigt immer alles.
+  const quelle = readFileSync(
+    new URL("../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js", import.meta.url),
+    "utf-8"
+  );
+  assert.doesNotMatch(quelle, /createElement\("datalist"\)[\s\S]{0,400}opts-\$\{name\}/);
+  assert.match(quelle, /const auswahl = options\.options \|\| \(widget === "select"/);
+  // Ein Wert außerhalb der Liste muss erhalten bleiben – sonst ginge Konfiguration verloren.
+  assert.match(quelle, /if \(aktuell && !werte\.includes\(aktuell\)\) werte\.push\(aktuell\);/);
+});
+
+test("die Live-Ansicht zeigt keine fremde Karte", () => {
+  // Nach einem Kartenwechsel stand dort die zuletzt empfangene – meist der Screensaver. Eine
+  // fremde Fläche ist schlechter als gar keine: sie sieht aus wie ein Ergebnis.
+  const quelle = readFileSync(
+    new URL("../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js", import.meta.url),
+    "utf-8"
+  );
+  assert.match(quelle, /if \(!antwort\.matched\) \{[\s\S]{0,300}return;/);
+});

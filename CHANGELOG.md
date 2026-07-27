@@ -3,6 +3,26 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.17.0 – 2026-07-27
+
+### Die Live-Ansicht zeigt nur noch die Karte, um die es geht
+
+Wechselte man auf eine Karte, die das Gerät noch nicht angezeigt hatte, stand dort die zuletzt
+empfangene – meist der Screensaver. Das sah aus wie ein Ergebnis, war aber eine fremde Karte.
+Jetzt bleibt die Fläche leer, bis der passende Mitschnitt da ist; der Hinweis erklärt es, und der
+Knopf *Karte am Gerät aufrufen* holt sie.
+
+### Auswahlfelder zeigen wieder alle Möglichkeiten
+
+Felder mit fester Auswahl (Screensaver-Typ, `locale`, `font`, …) waren Textfelder mit
+Vorschlagsliste. Der Browser filtert eine solche Liste nach dem, was schon im Feld steht: bei
+`screensaver2` erschien beim Aufklappen nur dieser eine Wert, und die zweite Bauart blieb
+unsichtbar. Jetzt ist es ein echtes Auswahlfeld.
+
+Ein Wert, den die Liste nicht kennt (etwa aus einer neueren Backend-Version), wird als zusätzlicher
+Eintrag aufgenommen und dabei als „aus der Konfiguration" gekennzeichnet – verlorengehen kann so
+nichts.
+
 ## 0.16.3 – 2026-07-27
 
 ### Die Blättertasten zeigen das konfigurierte Ziel
