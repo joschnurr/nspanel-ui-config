@@ -214,6 +214,25 @@ Entity-Zeile bliebe er wirkungslos und gilt dort weiterhin als unbekannt. Welche
 Zusatzkeys hat, steht in `schema.py` (`ENTITY_LIKE_EXTRA_FIELDS`) und kommt über dieselbe
 Schema-Antwort ins Panel.
 
+### Sprungziele werden vorgeschlagen
+
+Wohin ein Navigationsplatz springt, steht als `navigate.<key>` – und den `key` müsste man sonst aus
+einer anderen Karte im Kopf haben. Der Editor schlägt deshalb alle vor: ein Klick ins Feld listet
+jede Karte, die einen `key` hat, mit ihrem Titel; versteckte sind als solche gekennzeichnet, denn sie
+sind der eigentliche Grund für ein navItem – ohne Sprungziel erreicht man sie gar nicht
+([Doku: Subpages](https://docs.nspanel.pky.eu/subpages/)). Ein doppelt vergebener `key` erscheint nur
+einmal: das Backend findet dazu ohnehin nur die erste Karte.
+
+Dieselbe Liste bekommen `defaultCard` (Karte nach dem Aufwachen) und `destination` (Ziel nach der
+PIN-Eingabe) – dieselbe Wertform, dieselbe Frage. Welche Felder das sind, steht in `schema.py` unter
+`NAVIGATION_FIELDS`.
+
+Beim `entity` eines navItems bleiben die **Entities zusätzlich wählbar**: laut Doku darf dort statt
+eines Sprungziels auch eine gewöhnliche `entity_id` stehen, der Platz schaltet dann etwa ein Licht.
+Sie erscheinen ab dem zweiten getippten Zeichen und auf 50 Treffer begrenzt, damit nicht die halbe
+Installation im DOM steht. `delete` wird ebenfalls angeboten – damit lässt das Backend den Platz
+bewusst frei.
+
 ## Sicherungen
 
 Vor jedem Überschreiben der Ausgabedatei wandert der bisherige Stand nach `backups/` neben der

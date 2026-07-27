@@ -3,6 +3,28 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.15.0 – 2026-07-27
+
+### Der Editor schlägt die Sprungziele vor
+
+Ein Navigationsplatz zeigt mit `navigate.<key>` auf eine andere Karte – und dieser `key` steht an
+einer ganz anderen Stelle der Konfiguration. Bisher musste man ihn im Kopf haben und fehlerfrei
+abtippen; ein Vertipper fiel erst am Gerät auf, wo die Schaltfläche dann ins Leere ging.
+
+Ein Klick ins Feld listet jetzt **jede Karte mit einem `key`**, mit ihrem Titel als Beschriftung.
+Versteckte Karten sind als solche markiert – sie sind der eigentliche Grund für ein navItem, denn
+ohne Sprungziel erreicht man sie überhaupt nicht. Ein doppelt vergebener `key` erscheint nur einmal,
+weil das Backend dazu ohnehin nur die erste Karte findet.
+
+Dieselbe Liste bekommen `defaultCard` und `destination`: gleiche Wertform, gleiche Frage.
+
+Beim `entity` eines navItems bleiben die Entities daneben wählbar. Die
+[Doku](https://docs.nspanel.pky.eu/subpages/) zeigt beides – `entity: navigate.home` mit
+`icon: mdi:home` als Rückweg auf eine Unterseite, aber ebenso `entity: light.bad_lights`, wo der
+Navigationsplatz schlicht ein Licht schaltet. Entities kommen ab dem zweiten Zeichen und auf 50
+Treffer begrenzt dazu, damit nicht die halbe Installation im DOM steht; `delete` für den bewusst
+freien Platz steht ebenfalls in der Liste.
+
 ## 0.14.0 – 2026-07-27
 
 ### Die Status-Symbole sind jetzt wirklich einstellbar

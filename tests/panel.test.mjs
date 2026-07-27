@@ -17,6 +17,8 @@ const {
   widgetFor,
   setField,
   entityObjectFields,
+  navTargets,
+  navSuggestions,
   cardLabel,
   esc,
   isPlain,
@@ -91,6 +93,69 @@ test("entityObjectFields hängt die Zusatzkeys an die Entity-Felder", () => {
   assert.deepEqual(entityObjectFields(schema, "navItem1"), ["entity", "name", "icon"]);
   // Ein Schema ohne die Angabe (ältere Integration im Browser-Cache) darf nicht abstürzen.
   assert.deepEqual(entityObjectFields({}, "statusIcon1"), []);
+});
+
+test("navTargets sammelt die Sprungziele aus sichtbaren und versteckten Karten", () => {
+  const model = {
+    cards: [
+      { type: "cardEntities", title: "Wohnzimmer", key: "wohnzimmer" },
+      { type: "cardGrid", title: "Küche" }, // ohne key – kein Ziel, das Backend fände sie nicht
+      "kaputt",
+    ],
+    hiddenCards: [{ type: "cardGrid", title: "Heizung", key: "heizung" }],
+  };
+  assert.deepEqual(navTargets(model), [
+    { value: "navigate.wohnzimmer", label: "Wohnzimmer" },
+    { value: "navigate.heizung", label: "Heizung · versteckt" },
+  ]);
+});
+
+test("navTargets nennt einen doppelten Key nur einmal", () => {
+  // Das Backend findet zu einem Key nur die erste Karte – die zweite wäre ein totes Ziel.
+  const model = {
+    cards: [
+      { type: "cardGrid", title: "Erste", key: "bad" },
+      { type: "cardGrid", title: "Zweite", key: "bad" },
+    ],
+  };
+  assert.deepEqual(navTargets(model), [{ value: "navigate.bad", label: "Erste" }]);
+  // Ohne Modell bleibt die Liste leer, statt zu werfen.
+  assert.deepEqual(navTargets(undefined), []);
+  assert.deepEqual(navTargets({}), []);
+});
+
+test("navTargets fällt auf den Kartentyp zurück, wenn der Titel fehlt", () => {
+  const model = { cards: [{ type: "cardQR", key: "gast" }] };
+  assert.deepEqual(navTargets(model), [{ value: "navigate.gast", label: "cardQR" }]);
+});
+
+test("navSuggestions zeigt die Ziele sofort und Entities erst beim Tippen", () => {
+  const ziele = [
+    { value: "navigate.wohnzimmer", label: "Wohnzimmer" },
+    { value: "navigate.bad", label: "Bad · versteckt" },
+  ];
+  const ids = ["light.bad_lights", "switch.pool", "light.wohnzimmer_decke"];
+
+  // Leeres Feld: alle Ziele, keine Entities – sonst stünde die halbe Installation im DOM.
+  assert.deepEqual(navSuggestions(ziele, ids, ""), ziele);
+  assert.deepEqual(navSuggestions(ziele, ids, "n"), ziele);
+
+  // Ab zwei Zeichen kommen passende Entities dazu, gefiltert wie die Ziele.
+  const treffer = navSuggestions(ziele, ids, "bad");
+  assert.deepEqual(treffer, [
+    { value: "navigate.bad", label: "Bad · versteckt" },
+    { value: "light.bad_lights", label: "" },
+  ]);
+
+  // Auch der Titel trägt die Suche, nicht nur der navigate-Wert.
+  assert.deepEqual(navSuggestions(ziele, [], "wohnz")[0].value, "navigate.wohnzimmer");
+});
+
+test("navSuggestions deckelt die Entity-Vorschläge", () => {
+  const ids = Array.from({ length: 200 }, (_, i) => `light.lampe_${String(i).padStart(3, "0")}`);
+  const treffer = navSuggestions([], ids, "lampe");
+  assert.equal(treffer.length, 50);
+  assert.equal(treffer[0].value, "light.lampe_000");
 });
 
 test("setField löscht den Key bei undefined statt leere Werte zu speichern", () => {

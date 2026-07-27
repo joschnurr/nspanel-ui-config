@@ -406,6 +406,55 @@ function entityObjectFields(schema, name) {
   return [...basis, ...zusatz];
 }
 
+/**
+ * Alle Sprungziele des Modells: je Karte mit `key` ein `navigate.<key>`.
+ *
+ * Versteckte Karten sind ausdrücklich dabei – sie sind der Hauptgrund für ein navItem, weil man sie
+ * sonst gar nicht erreicht (docs.nspanel.pky.eu/subpages). Ein doppelt vergebener `key` erscheint
+ * nur einmal: das Backend findet ohnehin nur die erste Karte, die zweite wäre ein totes Ziel.
+ */
+function navTargets(model) {
+  const ziele = [];
+  const gesehen = new Set();
+  const sammeln = (karten, versteckt) => {
+    (Array.isArray(karten) ? karten : []).forEach((karte) => {
+      if (!isPlain(karte)) return;
+      const key = typeof karte.key === "string" ? karte.key.trim() : "";
+      if (!key || gesehen.has(key)) return;
+      gesehen.add(key);
+      const titel = karte.title || karte.type || "(ohne Titel)";
+      ziele.push({ value: `navigate.${key}`, label: versteckt ? `${titel} · versteckt` : titel });
+    });
+  };
+  sammeln(model && model.cards, false);
+  sammeln(model && model.hiddenCards, true);
+  return ziele;
+}
+
+/**
+ * Vorschlagsliste für ein Navigationsfeld: die Sprungziele, dazu passende entity_ids.
+ *
+ * Die Ziele stehen immer da – ein Klick ins leere Feld soll zeigen, wohin man überhaupt springen
+ * kann. Entities kommen erst ab zwei Zeichen und gedeckelt dazu: sonst stünden tausende Optionen im
+ * DOM, nur damit der Browser sie gleich wieder wegfiltert.
+ */
+function navSuggestions(ziele, entityIds, text) {
+  const suche = String(text ?? "").trim().toLowerCase();
+  const treffer = (ziele || []).filter(
+    (ziel) =>
+      !suche ||
+      ziel.value.toLowerCase().includes(suche) ||
+      String(ziel.label || "").toLowerCase().includes(suche)
+  );
+  if (suche.length < 2) return treffer;
+  const entities = (entityIds || [])
+    .filter((id) => typeof id === "string" && id.toLowerCase().includes(suche))
+    .sort()
+    .slice(0, 50)
+    .map((id) => ({ value: id, label: "" }));
+  return [...treffer, ...entities];
+}
+
 /** Beschriftung einer Karte in der Seitenleiste. */
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
@@ -2352,7 +2401,26 @@ class NsPanelUiConfigPanel extends PanelBase {
     input.type = widget === "number" ? "number" : "text";
     input.value = value === undefined || value === null ? "" : String(value);
 
-    if (widget === "entity") {
+    const navZiele = this._navZiele(name, options);
+    if (navZiele) {
+      // Eigene Liste je Feld statt einer gemeinsamen: die Ziele hängen am Modell und ändern sich,
+      // sobald eine Karte dazukommt, umbenannt wird oder ihren `key` verliert.
+      const listId = `nav-${Math.random().toString(36).slice(2)}`;
+      const list = document.createElement("datalist");
+      list.id = listId;
+      this.shadowRoot.appendChild(list);
+      input.setAttribute("list", listId);
+      const mitEntities = widget === "entity";
+      input.placeholder = mitEntities ? "navigate.<key> oder eine entity_id" : "navigate.<key>";
+      const fuellen = () => {
+        const ids = mitEntities && this._hass ? Object.keys(this._hass.states || {}) : [];
+        list.innerHTML = navSuggestions(navZiele, ids, input.value)
+          .map((eintrag) => `<option value="${esc(eintrag.value)}">${esc(eintrag.label)}</option>`)
+          .join("");
+      };
+      input.addEventListener("input", fuellen);
+      fuellen();
+    } else if (widget === "entity") {
       input.setAttribute("list", "entity-list");
       input.placeholder = "z. B. light.wohnzimmer";
     } else if (widget === "select" || options.options) {
@@ -2643,6 +2711,21 @@ class NsPanelUiConfigPanel extends PanelBase {
   }
 
   /**
+   * Sprungziele für dieses Feld – oder `null`, wenn es keins ist.
+   *
+   * Welche Felder ein `navigate.<key>` tragen, sagt das Schema (`navigationFields`). Bei den
+   * entity-artigen gilt das nicht für das Feld selbst, sondern für dessen `entity`-Unterfeld;
+   * dorthin reicht `_entityObjectEditor` die Liste als `options.navTargets` durch.
+   */
+  _navZiele(name, options) {
+    if (options.navTargets) return options.navTargets;
+    const felder = this._schema.navigationFields || [];
+    const entityArtig = this._schema.entityLikeCardFields || [];
+    if (!felder.includes(name) || entityArtig.includes(name)) return null;
+    return navTargets(this._model);
+  }
+
+  /**
    * Editor für ein entity-artiges Karten-Feld: `navItem1`/`navItem2` auf jeder Karte,
    * `statusIcon1`/`statusIcon2` auf der Ruheanzeige.
    *
@@ -2695,10 +2778,17 @@ class NsPanelUiConfigPanel extends PanelBase {
     });
 
     const inner = details.querySelector(".inner");
+    // Trägt dieses Feld ein Sprungziel (navItem1/navItem2), bekommt sein `entity` die Keys der
+    // Karten vorgeschlagen – dazu `delete`, mit dem das Backend den Platz bewusst frei lässt.
+    const navZiele = (this._schema.navigationFields || []).includes(name)
+      ? [...navTargets(this._model), { value: "delete", label: "Platz frei lassen" }]
+      : null;
     // Bewusst *ohne* `cardType`: die kartenspezifischen Beschreibungen gelten der Karte selbst –
     // `entity` hieße auf dem Screensaver „die Wetter-Entity“, hier ist es die des Symbols.
     entityObjectFields(this._schema, name).forEach((feldName) =>
-      inner.appendChild(this._field(value, feldName))
+      inner.appendChild(
+        this._field(value, feldName, navZiele && feldName === "entity" ? { navTargets: navZiele } : {})
+      )
     );
     inner.appendChild(this._extraEditor(value));
     return details;
@@ -2963,6 +3053,8 @@ export {
   widgetFor,
   setField,
   entityObjectFields,
+  navTargets,
+  navSuggestions,
   cardLabel,
   esc,
   isPlain,

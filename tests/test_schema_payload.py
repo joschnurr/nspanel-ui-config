@@ -38,6 +38,7 @@ KEYS_USED_BY_PANEL = (
     "singleEntityCardTypes",
     "templateFields",
     "templateSuffixFields",
+    "navigationFields",
 )
 
 
@@ -132,6 +133,17 @@ def test_template_felder_sind_dem_editor_bekannt() -> None:
     # Die beiden Felder, um die es dem Nutzer am häufigsten geht.
     for feld in ("color", "value"):
         assert feld in PAYLOAD["templateFields"], f"{feld} muss template-fähig sein"
+
+
+def test_navigationsfelder_sind_dem_editor_bekannt() -> None:
+    """Ein Tippfehler hier bliebe still: das Feld bekäme einfach keine Vorschläge."""
+    bekannt = set(PAYLOAD["fieldHints"])
+    unbekannt = sorted(set(PAYLOAD["navigationFields"]) - bekannt)
+    assert not unbekannt, f"navigationFields nennt Felder ohne Widget-Hinweis: {unbekannt}"
+    # Die entity-artigen darunter tragen das Ziel in ihrem `entity`-Unterfeld, nicht direkt —
+    # der Editor unterscheidet das anhand von entityLikeCardFields.
+    entity_artig = set(PAYLOAD["navigationFields"]) & set(PAYLOAD["entityLikeCardFields"])
+    assert entity_artig == {"navItem1", "navItem2"}
 
 
 def test_suffix_felder_sind_eine_teilmenge_der_template_felder() -> None:

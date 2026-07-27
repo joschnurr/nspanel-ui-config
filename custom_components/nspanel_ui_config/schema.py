@@ -375,6 +375,19 @@ TEMPLATE_FIELDS: Final[tuple[str, ...]] = (
 # Editor muss das in der Vorschau nachbilden, sonst zeigt sie etwas anderes als das Panel.
 TEMPLATE_SUFFIX_FIELDS: Final[tuple[str, ...]] = ("value", "icon")
 
+# Felder, in denen ein Sprungziel steht (``navigate.<key>``). Der Editor schlägt dort die Keys der
+# konfigurierten Karten vor, statt sie aus dem Gedächtnis zu verlangen.
+#
+# Bei den entity-artigen Feldern (``navItem1``/``navItem2``) gilt das für deren ``entity``-Unterfeld
+# — dort ist laut Doku (docs.nspanel.pky.eu/subpages) auch eine gewöhnliche entity_id erlaubt, ein
+# Navigationsplatz kann also ebenso gut ein Licht schalten. Bei den übrigen für das Feld selbst.
+NAVIGATION_FIELDS: Final[tuple[str, ...]] = (
+    "navItem1",
+    "navItem2",
+    "defaultCard",
+    "destination",
+)
+
 
 # Auswahllisten für Felder mit Hinweis ``select``. Der Editor lässt trotzdem freie Eingabe zu —
 # das Backend kennt womöglich mehr Werte als wir.
@@ -652,6 +665,8 @@ def schema_payload() -> dict[str, Any]:
         # Felder, für die der Editor den Template-Modus anbietet (siehe TEMPLATE_FIELDS).
         "templateFields": list(TEMPLATE_FIELDS),
         "templateSuffixFields": list(TEMPLATE_SUFFIX_FIELDS),
+        # Felder, für die der Editor die Keys der konfigurierten Karten vorschlägt.
+        "navigationFields": list(NAVIGATION_FIELDS),
         # Karten, die ihre eine Entity flach auf der Karte tragen (siehe card_known_fields).
         "flatEntityCardTypes": list(FLAT_ENTITY_CARD_TYPES),
         # Davon die, die *nur* diese eine Entity haben — für sie blendet der Editor die
