@@ -500,3 +500,15 @@ test("die Live-Ansicht zeigt keine fremde Karte", () => {
   );
   assert.match(quelle, /if \(!antwort\.matched\) \{[\s\S]{0,300}return;/);
 });
+
+test("der Aufruf-Knopf fehlt auch dann nicht, wenn noch nichts empfangen wurde", () => {
+  // Nach einem Neustart von Home Assistant ist der Mitschnitt leer – er liegt im Speicher. Ohne
+  // den Knopf müsste man ans Gerät gehen, um die Live-Ansicht überhaupt füllen zu können.
+  const quelle = readFileSync(
+    new URL("../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js", import.meta.url),
+    "utf-8"
+  );
+  const zweig = quelle.slice(quelle.indexOf("if (!nachricht) {"));
+  const bisReturn = zweig.slice(0, zweig.indexOf("return;"));
+  assert.match(bisReturn, /this\._showButton\(gesucht, antwort/, "Knopf fehlt im leeren Zustand");
+});

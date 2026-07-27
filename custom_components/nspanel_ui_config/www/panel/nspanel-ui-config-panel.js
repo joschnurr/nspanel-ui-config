@@ -1693,11 +1693,16 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     const nachricht = antwort && antwort.message;
     if (!nachricht) {
+      // **Auch hier der Aufruf-Knopf.** Genau jetzt braucht man ihn am dringendsten: nach einem
+      // Neustart von Home Assistant ist der Mitschnitt leer (er liegt im Speicher), und ohne den
+      // Knopf müsste man ans Gerät gehen, um ihn wieder zu füllen.
       const grund = (antwort && antwort.reason) || "Noch nichts empfangen.";
       const topic = antwort && antwort.topic;
       host.innerHTML = `<p class="note">${esc(grund)}${
         topic ? `<br>Topic: <code>${esc(topic)}</code>` : ""
       }</p>`;
+      const knopf = this._showButton(gesucht, antwort || {});
+      if (knopf) host.appendChild(knopf);
       return;
     }
 

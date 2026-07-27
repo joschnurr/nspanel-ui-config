@@ -3,6 +3,15 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.17.1 – 2026-07-27
+
+### Der Aufruf-Knopf fehlte ausgerechnet im leeren Zustand
+
+Hatte die Integration noch gar nichts mitgeschnitten, zeigte die Live-Ansicht nur den Grund – ohne
+den Knopf *Karte am Gerät aufrufen*. Das trifft nach **jedem Neustart von Home Assistant** zu, denn
+der Mitschnitt liegt im Speicher. Man hätte ans Gerät gehen müssen, um die Ansicht wieder zu füllen.
+Der Knopf steht jetzt auch dort.
+
 ## 0.17.0 – 2026-07-27
 
 ### Die Live-Ansicht zeigt nur noch die Karte, um die es geht
