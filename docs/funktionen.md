@@ -87,6 +87,12 @@ Beim Screensaver zeigt die Vorschau zusätzlich, was sonst niemand sieht: im alt
 der 6. Entity, quer) hat die 5. Entity keinen Platz mehr und wird gar nicht erst gezeichnet. Siehe
 [kapazitaet.md](kapazitaet.md).
 
+Auch die beiden **Status-Symbole** (`statusIcon1`/`statusIcon2`, links und rechts oben) sind dabei.
+Sie stehen nicht in der Entity-Liste, sondern als eigene Felder am Screensaver, und sie dürfen mehr
+als ein Symbol tragen: schreibt man `<I>mdi:fireplace</I> ha:{{ … }} °C`, ersetzt das Backend nur
+den `<I>…</I>`-Teil durch das Zeichen und rendert den Rest — auf dem Display steht dann Symbol *und*
+Messwert nebeneinander. Genau so zeichnet es die Vorschau, samt der übertragenen Farbe für beides.
+
 ### Live-Ansicht: was das Gerät wirklich anzeigt
 
 Über der Displayfläche steht ein Umschalter: **aus der Konfiguration** (das oben Beschriebene) oder
@@ -114,6 +120,12 @@ Letzte zeigt, wäre beim Bearbeiten einer Karte nutzlos. Wer am Gerät einmal du
 blättert, hat danach für jede den echten Stand; der Editor legt beim Bearbeiten automatisch die
 passende Fassung daneben, mitsamt Zeitpunkt. War eine Karte noch nie dran, sagt die Ansicht das und
 zeigt solange, was gerade läuft.
+
+Die **Status-Symbole gehören keiner Karte**: sie kommen in einer eigenen Nachricht
+(`statusUpdate~…`) und gelten für die Ruheanzeige, egal welche Karte gerade dran ist. Der Mitschnitt
+hält sie deshalb neben den Karten — ein Kartenwechsel macht sie nicht ungültig, und umgekehrt
+überschreibt eine Statusnachricht keinen Karten-Mitschnitt. Sendet ein Panel gar keine (weil keine
+Status-Symbole konfiguriert sind), bleiben die beiden Stellen leer — wie am Gerät.
 
 **Karte gezielt aufrufen.** Neben der Fläche steht *Karte am Gerät aufrufen*: ein Klick, und das
 Panel springt auf diese Karte – damit muss man nicht am Gerät stehen, um die Ansicht zu füllen.

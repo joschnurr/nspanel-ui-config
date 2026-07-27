@@ -11,6 +11,7 @@ Aufbau der Nachrichten (aus ``pages.py`` des Backends und ``HMI/README.md`` des 
 
     entityUpd~<Titel>~<Navigation: 2 Einträge>~<Eintrag>~<Eintrag>…
     weatherUpdate~<Eintrag>~<Eintrag>…              (Screensaver, ohne Titel und Navigation)
+    statusUpdate~<Symbol1>~<Farbe1>~<Symbol2>~<Farbe2>~<altFont1>~<altFont2>
     pageType~<Kartentyp>                            (sagt, welche Karte gerade gilt)
 
 Ein *Eintrag* ist immer derselbe 6er-Block (``generate_entities_item``):
@@ -35,6 +36,9 @@ ENTITY_FIELDS: Final[tuple[str, ...]] = ("type", "entity", "icon", "color", "nam
 
 # Die Navigation belegt zwei vollständige Einträge (Blättern links/rechts).
 NAVIGATION_ENTRIES: Final = 2
+
+# So viele Status-Symbole kennt die Ruheanzeige (``for i in range(1,3)`` in pages.py).
+STATUS_ICONS: Final = 2
 
 # Karten, deren Einträge diesem Blockaufbau folgen: Vorspann nach dem Titel (zusätzlich zur
 # Navigation) und Felder je Eintrag.
@@ -167,6 +171,43 @@ def parse_weather_update(payload: str, card_type: str | None = None) -> dict[str
         "navigation": [],
         "strukturiert": True,
     }
+
+
+def parse_status_update(payload: str) -> list[dict[str, Any]] | None:
+    """Zerlegt eine ``statusUpdate~``-Nachricht: die beiden Status-Symbole der Ruheanzeige.
+
+    **Eine eigene Nachricht, kein Teil von** ``weatherUpdate``: ``update_status_icons`` (pages.py)
+    sendet erst beide Symbole je mit ihrer Farbe und danach für beide das ``altFont``-Kennzeichen —
+    daher die Reihenfolge Symbol/Farbe, Symbol/Farbe, altFont, altFont. Ein nicht konfiguriertes
+    Status-Symbol kommt als leeres Feldpaar an; die Stelle bleibt auf dem Display dann leer.
+
+    Im Symbolfeld steht **nicht zwingend nur ein Symbol**: ``icon_mapping.get_icon_id`` ersetzt in
+    einem Feld wie ``<I>mdi:fire</I> ha:{{ … }} °C`` nur den ``<I>…</I>``-Teil durch das Zeichen und
+    rendert das Template — heraus kommt Zeichen *und* Text. Getrennt wird das erst im Frontend, das
+    das Zeichen-Mapping kennt.
+    """
+    if not isinstance(payload, str) or not payload.startswith("statusUpdate" + TRENNER):
+        return None
+    felder = payload.split(TRENNER)[1:]
+
+    def feld(index: int) -> str:
+        return felder[index] if 0 <= index < len(felder) else ""
+
+    ergebnis = []
+    for i in range(STATUS_ICONS):
+        symbol = feld(2 * i)
+        farbe = feld(2 * i + 1)
+        ergebnis.append(
+            {
+                "iconChar": symbol or None,
+                "color": farbe,
+                "rgb": rgb565_to_rgb(farbe),
+                # Das Backend reicht den YAML-Wert unverändert durch (``True``/leer).
+                "altFont": feld(2 * STATUS_ICONS + i).strip().lower() in ("true", "1", "yes", "on"),
+                "leer": not symbol,
+            }
+        )
+    return ergebnis
 
 
 def parse_message(payload: str, card_type: str | None = None) -> dict[str, Any] | None:

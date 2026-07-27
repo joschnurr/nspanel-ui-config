@@ -148,6 +148,43 @@ def test_die_liste_der_bekannten_karten_kommt_mit() -> None:
     assert titel == {"Garage Pool", "Wohnzimmer"}
 
 
+def test_status_symbole_kommen_in_die_antwort() -> None:
+    zustand = live.LiveState()
+    assert zustand.handle("statusUpdate~A 45.2 °C~17299~B~65504~True~", jetzt=1000.0) is True
+
+    antwort = zustand.as_dict(jetzt=1010.0)
+    assert antwort["statusIcons"][0]["iconChar"] == "A 45.2 °C"
+    assert antwort["statusIcons"][1]["iconChar"] == "B"
+    assert antwort["statusIconsAgeSeconds"] == 10
+
+
+def test_status_symbole_ueberleben_den_kartenwechsel() -> None:
+    """Sie gehören keiner Karte: eine neue Karte darf sie weder ersetzen noch löschen."""
+    zustand = live.LiveState()
+    zustand.handle("statusUpdate~A~17299~B~65504~~", jetzt=1000.0)
+    zustand.handle("pageType~cardEntities")
+    zustand.handle(_karte("Garage Pool"), jetzt=1005.0)
+
+    antwort = zustand.as_dict(jetzt=1005.0, title="Garage Pool", card_type="cardEntities")
+    assert antwort["message"]["title"] == "Garage Pool"
+    assert antwort["statusIcons"][0]["iconChar"] == "A"
+    # Und umgekehrt: die Statusnachricht überschreibt den Karten-Mitschnitt nicht.
+    zustand.handle("statusUpdate~C~17299~D~65504~~", jetzt=1010.0)
+    assert zustand.message["title"] == "Garage Pool"
+    assert zustand.as_dict(jetzt=1010.0)["statusIcons"][0]["iconChar"] == "C"
+
+
+def test_ohne_statusnachricht_bleibt_das_feld_leer() -> None:
+    """Ein Panel ohne konfigurierte Status-Symbole sendet nie ein statusUpdate."""
+    zustand = live.LiveState()
+    zustand.handle("pageType~cardEntities")
+    zustand.handle(_karte("Garage Pool"), jetzt=1000.0)
+
+    antwort = zustand.as_dict(jetzt=1000.0)
+    assert antwort["statusIcons"] is None
+    assert antwort["statusIconsAgeSeconds"] is None
+
+
 def test_das_sende_topic_kommt_aus_dem_modell() -> None:
     modell = {"global": {"panelSendTopic": "cmnd/NSPanel_1/CustomSend"}}
     assert live.send_topic_of(modell) == "cmnd/NSPanel_1/CustomSend"

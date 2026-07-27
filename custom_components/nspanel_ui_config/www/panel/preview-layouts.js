@@ -99,11 +99,20 @@ function kartenLayout(layout, capacity) {
 // Welche Sonderkomponente wie gezeichnet wird. Uhrzeit und Datum füllt das Backend aus eigenen
 // Befehlen (`time`/`date`), nicht aus der Entity-Liste — ohne sie fehlte die halbe Ruheanzeige.
 //
-// **Bewusst nur diese zwei.** Der Dump enthält daneben `tAMPM` (der AM/PM-Zusatz, im
-// 24-Stunden-Format leer) und `tTimeAdd` (die frei konfigurierbare Zusatzzeile aus
-// `timeAdditionalTemplate`). Beide tragen *nicht* die Uhrzeit — sie mit ihr zu füllen ließ die
-// Vorschau die Uhr und das Datum doppelt zeigen.
-const SPECIAL_KINDS = { tTime: "clock", tDate: "date" };
+// `tIcon1`/`tIcon2` sind die beiden **Status-Symbole** aus `statusIcon1`/`statusIcon2`. Sie stehen
+// ebenfalls nicht in der Entity-Liste: das Backend schickt sie in einer eigenen Nachricht
+// (`statusUpdate`, pages.py → `update_status_icons`). `nummer` sagt der Zeichenschicht, welches
+// der beiden Felder sie füllt.
+//
+// **Bewusst nicht dabei:** `tAMPM` (der AM/PM-Zusatz, im 24-Stunden-Format leer) und `tTimeAdd`
+// (die frei konfigurierbare Zusatzzeile aus `timeAdditionalTemplate`). Beide tragen *nicht* die
+// Uhrzeit — sie mit ihr zu füllen ließ die Vorschau die Uhr und das Datum doppelt zeigen.
+const SPECIAL_KINDS = {
+  tTime: { kind: "clock" },
+  tDate: { kind: "date" },
+  tIcon1: { kind: "status", nummer: 1 },
+  tIcon2: { kind: "status", nummer: 2 },
+};
 
 /**
  * Screensaver: Plätze aus dem Seitencode, plus die Umschaltung auf das alternative Layout.
@@ -118,8 +127,8 @@ function screensaverLayout(layout, capacity, filled, model) {
   const [breite, hoehe] = layout.screen;
   const slots = [];
   for (const [name, rechteck] of Object.entries(layout.special || {})) {
-    const kind = SPECIAL_KINDS[name];
-    if (kind) slots.push({ kind, ...proz(rechteck, breite, hoehe) });
+    const art = SPECIAL_KINDS[name];
+    if (art) slots.push({ ...art, ...proz(rechteck, breite, hoehe) });
   }
 
   const alternativ = filled >= 6 && layout.alt;

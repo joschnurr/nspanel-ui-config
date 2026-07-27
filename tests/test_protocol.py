@@ -172,3 +172,41 @@ def test_pagetype_sagt_welche_karte_gilt() -> None:
     assert protocol.parse_page_type("pageType~screensaver") == "screensaver"
     assert protocol.parse_page_type("pageType~") is None
     assert protocol.parse_page_type("entityUpd~x") is None
+
+
+# Nach ``update_status_icons`` (pages.py): erst beide Symbole je mit Farbe, dann beide altFont-Werte.
+# Symbol 1 trägt hier — wie in einer echten Konfiguration mit ``<I>…</I> ha:{{ … }} °C`` — Zeichen
+# *und* Text; Symbol 2 ist ein reines Zeichen.
+STATUS = "statusUpdate~A 45.2 °C~17299~B~65504~True~"
+
+
+def test_status_symbole_werden_mit_farbe_und_altfont_gelesen() -> None:
+    eins, zwei = protocol.parse_status_update(STATUS)
+    assert eins["iconChar"] == "A 45.2 °C"
+    assert eins["rgb"] == protocol.rgb565_to_rgb(17299)
+    assert eins["altFont"] is True
+    assert eins["leer"] is False
+    assert zwei["iconChar"] == "B"
+    assert zwei["altFont"] is False
+
+
+def test_nicht_konfigurierte_status_symbole_kommen_als_leeres_paar() -> None:
+    """``update_status_icons`` sendet dann ``~~`` – die Stelle bleibt auf dem Display leer."""
+    eintraege = protocol.parse_status_update("statusUpdate~~~~~~")
+    assert len(eintraege) == 2
+    assert all(eintrag["leer"] for eintrag in eintraege)
+    assert all(eintrag["iconChar"] is None for eintrag in eintraege)
+
+
+def test_abgeschnittene_status_nachricht_ergibt_trotzdem_zwei_eintraege() -> None:
+    """Fehlende Felder dürfen nicht in einen IndexError laufen – sonst bliebe die Vorschau leer."""
+    eintraege = protocol.parse_status_update("statusUpdate~A~17299")
+    assert len(eintraege) == 2
+    assert eintraege[0]["iconChar"] == "A"
+    assert eintraege[1]["leer"] is True
+
+
+def test_status_nachricht_ist_keine_karten_nachricht() -> None:
+    """Sie gehört keiner Karte – ``parse_message`` muss sie deshalb liegen lassen."""
+    assert protocol.parse_message(STATUS, "screensaver2") is None
+    assert protocol.parse_status_update("weatherUpdate~~~~65535~Wetter~8°C") is None

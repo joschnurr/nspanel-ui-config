@@ -31,6 +31,8 @@ const {
   istIconZeichen,
   gridSensorText,
   liveContent,
+  statusIconTeile,
+  liveStatusContent,
   joinTemplates,
   splitTemplateResult,
 } = panel;
@@ -398,6 +400,61 @@ test("Uhr und Datum erscheinen genau einmal", () => {
       assert.equal(daten, 1, `${typ}/${model}: ${daten} Datumsfelder`);
     }
   }
+});
+
+test("beide Screensaver haben die zwei Status-Symbole", () => {
+  // `statusIcon1`/`statusIcon2` stehen nicht in der Entity-Liste – ohne eigene Plätze fehlten sie
+  // in der Vorschau, obwohl das Gerät sie zeigt.
+  for (const typ of ["screensaver", "screensaver2"]) {
+    for (const model of ["eu", "us-l", "us-p"]) {
+      const slots = previewSlots({ cardType: typ, capacity: 15, filled: 3, model }).slots;
+      const status = slots.filter((slot) => slot.kind === "status");
+      assert.equal(status.length, 2, `${typ}/${model}: ${status.length} Status-Plätze`);
+      assert.deepEqual(
+        status.map((slot) => slot.nummer).sort(),
+        [1, 2],
+        `${typ}/${model}: Status-Plätze ohne saubere Nummerierung`
+      );
+      // Sie zählen nicht zur Entity-Liste – sonst verschöbe sich deren Reihenfolge.
+      assert.equal(
+        entitySlots({ slots: status }).length,
+        0,
+        `${typ}/${model}: Status-Platz als Listeneintrag gezählt`
+      );
+    }
+  }
+  // Karten haben keine – dort gibt es die Felder nicht.
+  const karte = previewSlots({ cardType: "cardGrid", capacity: 6, filled: 6, model: "eu" }).slots;
+  assert.equal(karte.filter((slot) => slot.kind === "status").length, 0);
+});
+
+test("ein Status-Symbol trägt Symbol und Text zugleich", () => {
+  // Der Fall aus der echten Konfiguration: `<I>mdi:fireplace</I> ha:{{ … }} °C` wird auf dem Gerät
+  // zu Flammensymbol + Messwert. Nur das Symbol zu zeigen ließe genau den Wert weg, wegen dem es
+  // dort steht.
+  const teile = statusIconTeile("<I>mdi:fireplace</I> 57.4 °C");
+  assert.equal(teile.icon, "fireplace");
+  assert.equal(teile.text, "57.4 °C");
+
+  // Die Marker `ha:`/`text:` wirft das Backend weg (icon_mapping.get_icon_id) – sie dürfen nicht
+  // als Text auf dem Display landen.
+  assert.equal(statusIconTeile("ha:21.5 °C").text, "21.5 °C");
+  assert.equal(statusIconTeile("text:Hallo").text, "Hallo");
+  // Ein reiner Icon-Name bleibt ein reines Symbol.
+  assert.deepEqual(statusIconTeile("mdi:fireplace"), { icon: "fireplace", text: "" });
+});
+
+test("live werden Symbol und Wert eines Status-Feldes getrennt", () => {
+  const zeichen = iconChars.ICON_CHARS[icons.ICON_NAMES.indexOf("thermometer-water")];
+  const inhalt = liveStatusContent({ iconChar: `${zeichen} 45.2 °C`, rgb: [255, 165, 0] });
+  assert.equal(inhalt.icon, "mdi:thermometer-water");
+  assert.equal(inhalt.iconText, "45.2 °C");
+  assert.equal(inhalt.color, "#ffa500");
+  assert.equal(inhalt.frei, false);
+
+  // Nicht konfiguriert: das Backend schickt ein leeres Feldpaar, die Stelle bleibt leer.
+  assert.equal(liveStatusContent({ iconChar: null, leer: true }).frei, true);
+  assert.equal(liveStatusContent(undefined).frei, true);
 });
 
 test("auf dem Raster tritt bei Sensoren der Messwert an die Stelle des Symbols", () => {

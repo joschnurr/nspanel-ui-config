@@ -274,6 +274,13 @@ const STYLES = `
   .screen .slot.forecast .icon { --mdc-icon-size: 34px; }
   .screen .slot.forecast .val { font-size: 13px; max-width: 100%; }
   .screen .slot.center { justify-content: center; }
+  /* Die beiden Status-Symbole: links bzw. rechts am Rand, Symbol und Wert nebeneinander –
+     so wie das Gerät das Feld füllt. */
+  .screen .slot.status { justify-content: flex-start; gap: 4px; }
+  .screen .slot.status.rechts { justify-content: flex-end; }
+  .screen .slot.status .icon { --mdc-icon-size: 22px; }
+  .screen .slot.status .val { font-size: 14px; max-width: 100%; color: inherit; }
+  .screen .slot.status [hidden] { display: none; }
   .screen .clock { display: flex; align-items: flex-end; justify-content: flex-end; font-size: 44px; }
   .screen .date { display: flex; align-items: flex-start; justify-content: flex-end; font-size: 15px; color: #d7d9dd; }
   .screen .title {
@@ -631,10 +638,14 @@ function previewContent(entity, states = {}, cardType = null) {
   let icon = null;
   let iconAbgeleitet = false;
   let iconSonderform = false;
+  // Der Rohtext einer Sonderform – gebraucht, wenn kein Jinja drinsteckt und es also nichts zu
+  // rendern gibt (`<I>mdi:fire</I> fest`): dann steht schon hier, was das Display zeigen wird.
+  let iconRoh = null;
   if (typeof entity.icon === "string" && entity.icon.trim() !== "") {
     if (iconKind(entity.icon) === "special") {
       // `text:`/`ha:`/`<I>` sind kein Icon-Name. Steckt Jinja drin, rendert das Panel es nach.
       iconSonderform = true;
+      iconRoh = entity.icon;
       if (isTemplate(entity.icon)) templates.push({ feld: "icon", text: entity.icon });
     } else {
       icon = `mdi:${entity.icon.trim().replace(/^mdi:/, "")}`;
@@ -674,6 +685,7 @@ function previewContent(entity, states = {}, cardType = null) {
     iconText,
     iconAbgeleitet,
     iconSonderform,
+    iconRoh,
     iconUnbekannt: icon !== null && !iconAbgeleitet && !iconIsKnown(icon),
     color,
     // Fehlt eine echte entity_id in Home Assistant, ist das fast immer ein Tippfehler.
@@ -735,6 +747,62 @@ function liveContent(eintrag) {
     // Ein Zeichen, das nicht im mitgelieferten Mapping steht, kommt aus einer neueren
     // Backend-Version. Das Display zeigt es trotzdem – nur wir kennen den Namen nicht.
     iconUnbekannt: symbol && !name,
+    color: Array.isArray(eintrag.rgb) ? rgbToHex(eintrag.rgb) : null,
+    zustandFehlt: false,
+    templates: [],
+  };
+}
+
+/**
+ * Symbol und Text eines Status-Feldes, aus dem **gerenderten** Icon-Feld.
+ *
+ * Anders als bei einem Eintrag kann hier beides zugleich stehen: das Backend
+ * (`icon_mapping.get_icon_id`) wirft die Marker `ha:`/`text:` weg, ersetzt `<I>…</I>` durch das
+ * Symbolzeichen und lässt den übrigen Text stehen. Aus
+ * `<I>mdi:fireplace</I> ha:{{ … }} °C` wird auf dem Gerät also Flammensymbol + „57.4 °C" —
+ * beides gehört in die Vorschau, sonst fehlt genau der Messwert, wegen dem das Symbol dort steht.
+ */
+function statusIconTeile(text) {
+  const roh = String(text ?? "")
+    .replace(/text:/g, "")
+    .replace(/ha:/g, "");
+  const treffer = /<I>([^<]+)<\/I>/i.exec(roh);
+  const rest = roh
+    .replace(/<I>[^<]*<\/I>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (treffer) return { icon: treffer[1].trim().replace(/^mdi:/, ""), text: rest };
+  // Ohne `<I>…</I>` ist ein bekannter Icon-Name das Symbol, alles andere schlicht Text.
+  const name = rest.replace(/^mdi:/, "");
+  if (name && iconIsKnown(name)) return { icon: name, text: "" };
+  return { icon: null, text: rest };
+}
+
+/**
+ * Ein Status-Symbol, wie es das Gerät gerade zeigt (aus `statusUpdate`).
+ *
+ * Im Symbolfeld steht Zeichen *und* Text gemischt (siehe `parse_status_update`): das Zeichen aus
+ * dem Nextion-Font, dahinter der gerenderte Wert. Getrennt wird hier, weil nur das Frontend das
+ * Mapping Zeichen → Name kennt.
+ */
+function liveStatusContent(eintrag) {
+  if (!isPlain(eintrag) || eintrag.leer) {
+    return { frei: true, kind: "empty", name: "", value: "", icon: null, templates: [] };
+  }
+  const zeichen = [...String(eintrag.iconChar ?? "")];
+  const symbol = zeichen.find((z) => istIconZeichen(z)) || null;
+  const name = symbol ? iconNameFromChar(symbol) : null;
+  return {
+    frei: false,
+    kind: "status",
+    id: "",
+    name: "",
+    value: "",
+    icon: name ? `mdi:${name}` : null,
+    iconText: zeichen.filter((z) => !istIconZeichen(z)).join("").trim(),
+    iconAbgeleitet: false,
+    iconSonderform: false,
+    iconUnbekannt: Boolean(symbol) && !name,
     color: Array.isArray(eintrag.rgb) ? rgbToHex(eintrag.rgb) : null,
     zustandFehlt: false,
     templates: [],
@@ -1408,8 +1476,18 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     // Die Zeichenschicht bekommt den Inhalt als Funktion – dieselbe Fläche zeigt so wahlweise das
     // Modell oder das, was das Gerät gerade anzeigt (siehe _renderLivePreview).
-    const inhaltFuer = (slot) =>
-      previewContent(slot.index === "flat" ? card : entities[slot.index], states, info.shownType);
+    const inhaltFuer = (slot) => {
+      // Die beiden Status-Symbole stehen nicht in der Entity-Liste, sondern als eigene Felder am
+      // Screensaver – sie werden über ihre Nummer geholt, nicht über einen Listenindex.
+      if (slot.kind === "status") {
+        return previewContent(card[`statusIcon${slot.nummer}`], states, info.shownType);
+      }
+      return previewContent(
+        slot.index === "flat" ? card : entities[slot.index],
+        states,
+        info.shownType
+      );
+    };
     layout.slots.forEach((slot) => {
       const element = this._slotElement(slot, card, inhaltFuer, auftraege, marke);
       if (element) screen.appendChild(element);
@@ -1505,7 +1583,14 @@ class NsPanelUiConfigPanel extends PanelBase {
     }
 
     // Kein Template-Rendering nötig: was hier ankommt, ist bereits gerendert.
-    const inhaltFuer = (slot) => liveContent(eintraege[slot.index]);
+    // Die Status-Symbole kommen aus ihrer eigenen Nachricht (`statusUpdate`) und nicht aus der
+    // Eintragsliste – ohne sie bleiben die beiden Stellen leer, wie auf einem Gerät ohne
+    // konfigurierte Status-Symbole.
+    const statusIcons = Array.isArray(antwort.statusIcons) ? antwort.statusIcons : [];
+    const inhaltFuer = (slot) =>
+      slot.kind === "status"
+        ? liveStatusContent(statusIcons[slot.nummer - 1])
+        : liveContent(eintraege[slot.index]);
     layout.slots.forEach((slot) => {
       const element = this._slotElement(slot, {}, inhaltFuer, [], marke);
       if (element) screen.appendChild(element);
@@ -1745,6 +1830,8 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     const inhalt = inhaltFuer(slot);
 
+    if (slot.kind === "status") return this._statusSlot(element, slot, inhalt, auftraege, marke);
+
     if (slot.parts) return this._measuredSlot(element, slot, inhalt, auftraege, marke);
 
     const art = { icon: "icon-only", value: "row", "flat-title": "row" }[slot.kind] || slot.kind;
@@ -1861,6 +1948,70 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     this._faerbe(symbol || element, inhalt, auftraege, marke);
     if (inhalt.zustandFehlt) element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
+    return element;
+  }
+
+  /**
+   * Eines der beiden Status-Symbole der Ruheanzeige (`statusIcon1`/`statusIcon2`).
+   *
+   * **Warum eigens und nicht über `_slotIcon`:** dort ist im Icon-Feld entweder ein Symbol *oder*
+   * Text; hier ist regelmäßig beides drin (`<I>mdi:fireplace</I> ha:{{ … }} °C` wird zu Symbol +
+   * Messwert). Gefärbt wird deshalb auch der ganze Platz statt nur des Symbols – das HMI setzt die
+   * übertragene Farbe auf die Komponente, die Symbol und Text gemeinsam trägt.
+   */
+  _statusSlot(element, slot, inhalt, auftraege, marke) {
+    element.className = `slot status${slot.nummer === 2 ? " rechts" : ""}${
+      inhalt.frei ? " frei" : ""
+    }`;
+    if (inhalt.frei) {
+      element.title = `statusIcon${slot.nummer} ist nicht gesetzt – die Stelle bleibt leer`;
+      return element;
+    }
+
+    const symbol = document.createElement("ha-icon");
+    symbol.className = "icon";
+    const text = document.createElement("span");
+    text.className = "val";
+    element.appendChild(symbol);
+    element.appendChild(text);
+
+    const zeige = ({ icon, text: rest }) => {
+      if (icon) symbol.setAttribute("icon", icon.startsWith("mdi:") ? icon : `mdi:${icon}`);
+      symbol.hidden = !icon;
+      text.textContent = rest || "";
+    };
+
+    if (inhalt.iconSonderform) {
+      // Steckt Jinja drin, steht erst nach dem Rendern fest, was dort erscheint; ohne Jinja ist der
+      // Rohtext bereits das Ergebnis (`<I>mdi:fire</I> fest`) – der Platz bliebe sonst dauerhaft leer.
+      const hatTemplate = (inhalt.templates || []).some((eintrag) => eintrag.feld === "icon");
+      zeige(hatTemplate ? { icon: null, text: "" } : statusIconTeile(inhalt.iconRoh));
+      this._registerTemplate(inhalt, "icon", auftraege, marke, (gerendert) =>
+        zeige(statusIconTeile(gerendert))
+      );
+    } else {
+      zeige({ icon: inhalt.icon, text: inhalt.iconText || "" });
+      if (!inhalt.icon && !(inhalt.iconText || "")) {
+        symbol.hidden = false;
+        symbol.setAttribute("icon", "mdi:checkbox-blank-circle-outline");
+        symbol.style.opacity = ".35";
+        symbol.title = "Kein Symbol gesetzt – das Backend leitet es aus der Entity ab";
+      } else if (inhalt.iconAbgeleitet) {
+        symbol.style.opacity = ".6";
+        symbol.title = `Aus Home Assistant übernommen (${inhalt.icon}) – das Backend wählt eigenständig`;
+      } else if (inhalt.iconUnbekannt) {
+        symbol.title = `${inhalt.icon} steht nicht im Mapping des Backends – dort erschiene alert-circle-outline`;
+      }
+    }
+
+    this._faerbe(element, inhalt, auftraege, marke);
+    if (inhalt.zustandFehlt) {
+      element.title = `${inhalt.id} gibt es in Home Assistant nicht`;
+      const warnung = document.createElement("span");
+      warnung.className = "warn";
+      warnung.textContent = "⚠";
+      element.appendChild(warnung);
+    }
     return element;
   }
 
@@ -2750,6 +2901,8 @@ export {
   istIconZeichen,
   gridSensorText,
   liveContent,
+  statusIconTeile,
+  liveStatusContent,
   joinTemplates,
   splitTemplateResult,
 };

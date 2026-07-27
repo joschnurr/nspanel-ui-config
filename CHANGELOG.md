@@ -3,6 +3,26 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.13.0 – 2026-07-27
+
+### Die Ruheanzeige zeigt ihre beiden Status-Symbole
+
+Oben links und rechts trägt der Screensaver zwei kleine Felder (`statusIcon1`/`statusIcon2`) – bei
+vielen Panels der Heizungs- oder Wetterwert, den man den ganzen Tag sieht. In der Vorschau fehlten
+sie bisher ganz: bearbeitbar waren sie, sichtbar nicht.
+
+Sie sind kein gewöhnlicher Listeneintrag, und daran lag es. Ein Feld darf **Symbol und Text zugleich**
+tragen: aus `<I>mdi:fireplace</I> ha:{{ … }} °C` ersetzt das Backend nur den `<I>…</I>`-Teil durch das
+Zeichen und rendert den Rest weiter – auf dem Display steht dann das Flammensymbol *und* der Messwert.
+Die Vorschau setzt beides jetzt genauso zusammen und färbt, wie das HMI es tut, Symbol und Text
+gemeinsam.
+
+In der Live-Ansicht kommen sie aus einer **eigenen Nachricht** (`statusUpdate~…`, aus
+`update_status_icons`) und gehören keiner Karte: der Mitschnitt hält sie deshalb neben den Karten,
+sodass ein Kartenwechsel sie nicht ungültig macht und eine Statusnachricht umgekehrt keinen
+Karten-Mitschnitt überschreibt. Sendet ein Panel keine – weil nichts konfiguriert ist –, bleiben die
+beiden Stellen leer statt gefüllt zu wirken.
+
 ## 0.12.1 – 2026-07-27
 
 ### Auf dem Raster steht bei Sensoren der Messwert, kein Symbol

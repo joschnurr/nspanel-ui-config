@@ -23,7 +23,7 @@ import logging
 import time
 from typing import Any, Callable
 
-from .protocol import parse_message, parse_page_type
+from .protocol import parse_message, parse_page_type, parse_status_update
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +61,11 @@ class LiveState:
         self.seen: float | None = None
         self.page_seen: float | None = None
         self.ignoriert = 0
+        # **Die Status-Symbole gehören keiner Karte.** Sie kommen in einer eigenen Nachricht und
+        # gelten für die Ruheanzeige, egal welche Karte gerade dran ist — deshalb stehen sie neben
+        # ``per_card`` und werden von einem Kartenwechsel nicht ungültig.
+        self.status_icons: list[dict[str, Any]] | None = None
+        self.status_seen: float | None = None
         # **Je Karte der letzte Stand.** Ohne das wäre die Live-Ansicht kaum brauchbar: ein Panel
         # steht die meiste Zeit im Ruhezustand und sendet dann nur den Screensaver. Wer einmal
         # durch die Karten blättert, hat sie hier — und der Editor kann beim Bearbeiten die
@@ -78,6 +83,14 @@ class LiveState:
             self.card_type = seite
             self.page_seen = jetzt
             return False
+
+        status = parse_status_update(payload)
+        if status is not None:
+            # Kein Kartenwechsel und kein Karteninhalt: die beiden Symbole der Ruheanzeige gelten
+            # für sich. Der zuletzt gesehene Karten-Mitschnitt bleibt deshalb unangetastet.
+            self.status_icons = status
+            self.status_seen = jetzt
+            return True
 
         geparst = parse_message(payload, self.card_type)
         if geparst is None:
@@ -127,6 +140,13 @@ class LiveState:
             "fresh": alter is not None and alter <= FRISCH_SEKUNDEN,
             "ignored": self.ignoriert,
             "matched": getroffen,
+            # Die Status-Symbole der Ruheanzeige – unabhängig davon, welche Karte oben gewählt
+            # wurde. Ohne eigene Nachricht bleibt das ``None``, die Vorschau zeichnet die beiden
+            # Stellen dann leer.
+            "statusIcons": self.status_icons,
+            "statusIconsAgeSeconds": (
+                None if self.status_seen is None else max(0.0, jetzt - self.status_seen)
+            ),
             # Was das Panel zuletzt überhaupt angezeigt hat – als Orientierung, wenn die gesuchte
             # Karte noch nie dran war.
             "showing": (self.message or {}).get("title") or self.card_type,
