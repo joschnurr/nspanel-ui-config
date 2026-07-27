@@ -1712,6 +1712,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     });
 
     this._liveTitle = nachricht.title || "";
+    this._liveNavigation = nachricht.navigation || [];
     const marke = (this._previewToken = (this._previewToken || 0) + 1);
 
     const screen = document.createElement("div");
@@ -1948,16 +1949,27 @@ class NsPanelUiConfigPanel extends PanelBase {
       return element;
     }
 
-    if (slot.kind === "title" || slot.kind === "navbtn") {
-      // Rahmen aus dem abgemessenen Layout: Kartentitel und die beiden Blättertasten.
-      element.className = slot.kind === "title" ? "title measured" : "navbtn";
-      this._nachAttributen(element, slot, slot.kind === "navbtn" ? ICON_FAKTOR : 1);
-      element.textContent =
-        slot.kind === "title"
-          ? this._previewTitle(card)
-          : slot.taste === "prev"
-          ? "◀"
-          : "▶";
+    if (slot.kind === "title") {
+      element.className = "title measured";
+      this._nachAttributen(element, slot, 1);
+      element.textContent = this._previewTitle(card);
+      return element;
+    }
+
+    if (slot.kind === "navbtn") {
+      element.className = "navbtn";
+      this._nachAttributen(element, slot, ICON_FAKTOR);
+      // **Die Blättertasten sind überschreibbar.** `navItem1`/`navItem2` auf der Karte ersetzen die
+      // Standardpfeile durch ein eigenes Ziel samt Symbol – am Gerät steht dann dort dieses Symbol,
+      // nicht ◀ oder ▶. Ohne das zeigte die Vorschau eine Navigation, die es so nicht gibt.
+      const eigenes = this._navItem(card, slot.taste);
+      if (eigenes) {
+        element.appendChild(this._slotIcon(eigenes, auftraege, marke));
+        this._faerbe(element, eigenes, auftraege, marke);
+        element.title = eigenes.name || eigenes.id || "";
+      } else {
+        element.textContent = slot.taste === "prev" ? "◀" : "▶";
+      }
       return element;
     }
 
@@ -2217,6 +2229,24 @@ class NsPanelUiConfigPanel extends PanelBase {
     element.style.fontSize = `${fontGroesse(attr, slot.h * 3, faktor)}px`;
     const farbe = typeof attr.c === "number" ? rgb565ToHex(attr.c) : null;
     if (farbe) element.style.color = farbe;
+  }
+
+  /**
+   * Ein überschriebenes Navigationsziel der Karte (`navItem1`/`navItem2`) als Slot-Inhalt.
+   *
+   * Im Live-Modus stehen dieselben zwei Einträge in der Nachricht (`navigation`), dort kommen
+   * Symbol und Farbe fertig vom Backend.
+   */
+  _navItem(card, taste) {
+    if (this._previewMode === "live") {
+      const eintrag = (this._liveNavigation || [])[taste === "prev" ? 0 : 1];
+      if (!isPlain(eintrag) || eintrag.leer) return null;
+      return liveContent(eintrag);
+    }
+    const feld = taste === "prev" ? "navItem1" : "navItem2";
+    const eintrag = isPlain(card) ? card[feld] : null;
+    if (!isPlain(eintrag) || !eintrag.entity) return null;
+    return previewContent(eintrag, (this._hass && this._hass.states) || {});
   }
 
   /** Das Symbol eines Platzes – inklusive der Sonderformen, die gar kein Symbol sind. */

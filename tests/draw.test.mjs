@@ -343,3 +343,26 @@ test("der Messwert im Symbolfeld bekommt keinen Symbolfaktor", () => {
   assert.equal(wert.textContent, "21.5");
   assert.equal(wert.style.fontSize, "46px", "Font 4 ohne Symbolfaktor");
 });
+
+test("navItem1/navItem2 ersetzen die Pfeile der Blättertasten", () => {
+  // Am Gerät steht dort das konfigurierte Symbol (bei einer echten Anlage etwa
+  // gesture-tap-button), nicht ◀ oder ▶ – die Vorschau zeigte bisher immer die Pfeile.
+  const ergebnis = previewSlots({ cardType: "cardGrid2", capacity: 8, filled: 8, model: "eu" });
+  const links = ergebnis.slots.find((slot) => slot.kind === "navbtn" && slot.taste === "prev");
+  const rechts = ergebnis.slots.find((slot) => slot.kind === "navbtn" && slot.taste === "next");
+  const karte = {
+    type: "cardGrid2",
+    navItem1: { entity: "navigate.regenwasser", name: "regen", icon: "gesture-tap-button" },
+  };
+  const instanz = panel();
+
+  const mitEigenem = instanz._slotElement(links, karte, () => previewContent({}, {}), [], 1);
+  const [symbol] = mitEigenem.finde("icon");
+  assert.ok(symbol, "das eigene Symbol fehlt");
+  assert.equal(symbol.attribute.icon, "mdi:gesture-tap-button");
+  assert.equal(mitEigenem.textContent, "", "kein Pfeil, wenn ein Ziel gesetzt ist");
+
+  // Ohne Angabe bleibt es beim Pfeil.
+  const ohne = instanz._slotElement(rechts, karte, () => previewContent({}, {}), [], 1);
+  assert.equal(ohne.textContent, "▶");
+});

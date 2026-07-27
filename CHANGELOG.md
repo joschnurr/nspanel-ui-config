@@ -3,6 +3,15 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.16.3 – 2026-07-27
+
+### Die Blättertasten zeigen das konfigurierte Ziel
+
+`navItem1`/`navItem2` ersetzen auf der Karte die Standardpfeile durch ein eigenes Ziel samt Symbol.
+Am Gerät steht dort dann dieses Symbol – die Vorschau zeichnete stur ◀ und ▶ und zeigte damit eine
+Navigation, die es so nicht gibt. Jetzt erscheint das eingestellte Symbol, im Live-Modus das, was das
+Backend tatsächlich geschickt hat.
+
 ## 0.16.2 – 2026-07-27
 
 ### Die Kopfzeile zeigt, welche Fassung der Browser geladen hat
