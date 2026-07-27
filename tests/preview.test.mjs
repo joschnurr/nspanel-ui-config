@@ -457,6 +457,26 @@ test("live werden Symbol und Wert eines Status-Feldes getrennt", () => {
   assert.equal(liveStatusContent(undefined).frei, true);
 });
 
+test("die beiden Status-Symbole der echten Anlage", () => {
+  // Wörtlich mitgeschnitten von der produktiven Instanz (2026-07-27, GET /live): so schickt das
+  // Backend die Ruheanzeige-Symbole wirklich – Zeichen, Leerzeichen, Wert, Einheit in *einem* Feld.
+  // Das erste Zeichen (U+FA7F) liegt über dem klassischen PUA-Ende U+F8FF; mit der alten oberen
+  // Grenze galt es als Text, das Symbol fiel weg und „74 °C" stand mit dem Zeichen davor da.
+  const warmwasser = liveStatusContent({
+    iconChar: "\uFA7F 74 °C",
+    rgb: [255, 166, 0],
+    altFont: true,
+  });
+  assert.equal(warmwasser.icon, "mdi:thermometer-water");
+  assert.equal(warmwasser.iconText, "74 °C");
+  assert.equal(warmwasser.iconUnbekannt, false);
+
+  const ofen = liveStatusContent({ iconChar: "\uEE2D 25 °C", rgb: [0, 121, 255], altFont: true });
+  assert.equal(ofen.icon, "mdi:fireplace");
+  assert.equal(ofen.iconText, "25 °C");
+  assert.equal(ofen.color, "#0079ff");
+});
+
 test("auf dem Raster tritt bei Sensoren der Messwert an die Stelle des Symbols", () => {
   // Backend-Eigenheit (pages.py): auf cardGrid ist kein Platz für Symbol *und* Wert, also zeigt
   // das Display bei sensor-Entities ohne eigenes icon die ersten vier Zeichen des Zustands.
