@@ -210,3 +210,22 @@ def test_status_nachricht_ist_keine_karten_nachricht() -> None:
     """Sie gehört keiner Karte – ``parse_message`` muss sie deshalb liegen lassen."""
     assert protocol.parse_message(STATUS, "screensaver2") is None
     assert protocol.parse_status_update("weatherUpdate~~~~65535~Wetter~8°C") is None
+
+
+def test_die_schriftgroesse_wird_vom_symbol_getrennt() -> None:
+    """Auf dem Raster hängt das Backend die Font-Nummer ans Symbol – mit ``¬`` als Trenner.
+
+    Steht am Eintrag ein ``font``, sendet ``pages.py`` ``icon_id = f'{icon_id}¬{font}'``. Wer das
+    nicht abtrennt, zeigt auf dem Raster wörtlich "19¬0" statt der Zahl.
+    """
+    payload = (
+        "entityUpd~Sensoren~button~navigate.prev~<~65535~~~button~navigate.next~>~65535~~"
+        "~text~sensor.a~19¬2~2016~Außentemp.~"
+        "~text~sensor.b~100~2016~Luftdruck~"
+    )
+    eintraege = protocol.parse_message(payload, "cardGrid2")["entities"]
+    assert eintraege[0]["iconChar"] == "19"
+    assert eintraege[0]["font"] == 2
+    # Ohne Angabe bleibt das Feld unangetastet und ohne Schriftgröße.
+    assert eintraege[1]["iconChar"] == "100"
+    assert "font" not in eintraege[1] or eintraege[1]["font"] is None

@@ -669,6 +669,23 @@ function previewColor(value, state) {
  */
 const GRID_TYPEN = ["cardGrid", "cardGrid1", "cardGrid2"];
 
+/**
+ * Das Feld `font` eines Eintrags als Font-ID des Displays.
+ *
+ * Dieselben Namen wie im Backend (`pages.py`): es hängt die Nummer als `¬<font>` an das Symbol, und
+ * das Display wählt danach die Schrift. Ohne Angabe bleibt es beim Font, den die HMI-Komponente
+ * ohnehin trägt.
+ */
+const FONT_NAMEN = { small: 0, "medium-icon": 1, medium: 2, large: 3 };
+
+function fontIdAus(wert) {
+  if (typeof wert === "number" && Number.isInteger(wert)) return wert;
+  if (typeof wert !== "string" || !wert.trim()) return null;
+  const name = wert.trim();
+  if (name in FONT_NAMEN) return FONT_NAMEN[name];
+  return /^\d+$/.test(name) ? Number(name) : null;
+}
+
 function gridSensorText(zustand) {
   let text = String(zustand ?? "").slice(0, 4);
   if (text.endsWith(".")) text = text.slice(0, -1);
@@ -756,6 +773,8 @@ function previewContent(entity, states = {}, cardType = null) {
     name: name === null ? "" : name,
     value: value === null ? "" : value,
     icon,
+    // Abweichende Schriftgröße des Eintrags (Feld `font`) – gilt für das Symbolfeld.
+    fontOverride: fontIdAus(entity.font),
     // Text, der auf dem Raster an die Stelle des Symbols tritt (Messwert eines Sensors).
     iconText,
     iconAbgeleitet,
@@ -817,6 +836,8 @@ function liveContent(eintrag) {
     icon: name ? `mdi:${name}` : null,
     // Kein Symbol, sondern Text im Icon-Feld – auf dem Raster der Messwert des Sensors.
     iconText: !symbol && eintrag.iconChar ? String(eintrag.iconChar) : null,
+    // Die Schriftgröße hat das Backend mitgeschickt (¬<font> am Symbol, siehe protocol.py).
+    fontOverride: typeof eintrag.font === "number" ? eintrag.font : null,
     iconAbgeleitet: false,
     iconSonderform: false,
     // Ein Zeichen, das nicht im mitgelieferten Mapping steht, kommt aus einer neueren
@@ -2038,11 +2059,17 @@ class NsPanelUiConfigPanel extends PanelBase {
     if (icon) {
       symbol = this._slotIcon(inhalt, auftraege, marke);
       setze(symbol, icon);
-      richteAus(symbol, icon, ICON_FAKTOR);
-      // Das Symbol ist eine Glyphe dieses Fonts – seine Größe folgt derselben Tabelle.
+      // Ein `font` am Eintrag schlägt den Font der HMI-Komponente – genau dafür gibt es das Feld.
+      const iconAttr =
+        inhalt.fontOverride === null || inhalt.fontOverride === undefined
+          ? icon.attr
+          : { ...(icon.attr || {}), f: inhalt.fontOverride };
+      // Text im Symbolfeld (der Messwert) ist keine Glyphe: er füllt die Zeile weniger aus.
+      const faktor = inhalt.iconText === null || inhalt.iconText === undefined ? ICON_FAKTOR : 1;
+      richteAus(symbol, { ...icon, attr: iconAttr }, faktor);
       symbol.style.setProperty(
         "--mdc-icon-size",
-        `${fontGroesse(icon.attr, Math.min(icon.px[0], icon.px[1]), ICON_FAKTOR)}px`
+        `${fontGroesse(iconAttr, Math.min(icon.px[0], icon.px[1]), faktor)}px`
       );
       element.appendChild(symbol);
     }
@@ -3160,6 +3187,7 @@ export {
   iconNameFromChar,
   rgb565ToHex,
   fontGroesse,
+  fontIdAus,
   ausrichtung,
   istIconZeichen,
   gridSensorText,

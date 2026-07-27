@@ -31,6 +31,9 @@ from typing import Any, Final
 
 TRENNER: Final = "~"
 
+# Trennt im Icon-Feld das Symbol von der Schriftgröße (siehe ``_eintrag``).
+FONT_TRENNER: Final = "\u00ac"
+
 # Reihenfolge der Felder eines Eintrags.
 ENTITY_FIELDS: Final[tuple[str, ...]] = ("type", "entity", "icon", "color", "name", "value")
 
@@ -89,7 +92,14 @@ def _eintrag(felder: list[str]) -> dict[str, Any]:
     eintrag["rgb"] = rgb565_to_rgb(eintrag.get("color"))
     # Das Symbol kommt als Zeichen des Nextion-Icon-Fonts; den Namen dazu kennt erst das Frontend
     # (www/panel/icon-chars.js). Leere Zeichen bedeuten "kein Symbol".
-    eintrag["iconChar"] = eintrag.get("icon") or None
+    # **Schriftgröße im Icon-Feld.** Ist am Eintrag ein ``font`` konfiguriert, hängt das Backend sie
+    # als ``¬<nummer>`` an das Symbol an (``pages.py``: ``icon_id = f'{icon_id}¬{font}'``). Ohne das
+    # Abtrennen stünde auf dem Raster wörtlich "19¬0" statt der Zahl.
+    symbol = eintrag.get("icon") or ""
+    if FONT_TRENNER in symbol:
+        symbol, _, nummer = symbol.partition(FONT_TRENNER)
+        eintrag["font"] = int(nummer) if nummer.strip().isdigit() else None
+    eintrag["iconChar"] = symbol or None
     # Alles jenseits der sechs Standardfelder (cardPower: speed) bleibt erhalten.
     if len(felder) > len(ENTITY_FIELDS):
         eintrag["extra"] = felder[len(ENTITY_FIELDS) :]

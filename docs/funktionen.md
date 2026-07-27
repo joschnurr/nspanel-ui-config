@@ -72,6 +72,12 @@ Die *Pixelgrößen* der Font-IDs stehen allerdings nicht im Dump – sie stecken
 im Abgleich mit den Beispielbildern der [Upstream-Doku](https://docs.nspanel.pky.eu/). Das ist die
 einzige geschätzte Größe, die übrig bleibt.
 
+**Ein `font` am Eintrag schlägt den Font der Komponente.** Auf dem Raster lässt sich die
+Schriftgröße je Eintrag setzen (`small`, `medium-icon`, `medium`, `large` oder direkt eine Nummer);
+das Backend hängt sie als `¬<nummer>` an das Symbol, und das Display wählt danach die Schrift. Die
+Vorschau macht dasselbe – auch in der Live-Ansicht, wo diese Angabe mitgeliefert wird und vom Symbol
+abgetrennt werden muss (sonst stünde dort wörtlich `19¬2`).
+
 **Was Näherung bleibt:**
 
 - **Schriftart und Umbruch.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort

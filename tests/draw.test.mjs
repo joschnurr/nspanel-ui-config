@@ -25,6 +25,7 @@ const {
   liveStatusContent,
   rgb565ToHex,
   fontGroesse,
+  fontIdAus,
   ausrichtung,
 } = panelModul;
 const { previewSlots, entitySlots } = layouts;
@@ -295,4 +296,50 @@ test("fehlende Attribute führen zu einer brauchbaren Vorgabe statt zu einem Abs
   assert.equal(ausrichtung({ h: "r" }), "flex-end");
   // Ohne Font-ID zählt die Feldhöhe – so wie vor der Tabelle.
   assert.equal(fontGroesse(null, 30), 18);
+});
+
+test("ein font am Eintrag schlägt den Font der HMI-Komponente", () => {
+  // Genau der Fall aus der echten Anlage: auf cardGrid2 stehen kleine und große Werte
+  // nebeneinander, weil einzelne Einträge ein `font` tragen.
+  const ergebnis = previewSlots({ cardType: "cardGrid2", capacity: 8, filled: 8, model: "eu" });
+  const slot = entitySlots(ergebnis)[0];
+  const zeichne = (entity) =>
+    panel()._measuredSlot(fakeElement("div"), slot, previewContent(entity, {}, "cardGrid2"), [], 1);
+
+  // Ohne Angabe: der Font der Komponente (4 → 46 px).
+  const gross = zeichne({ entity: "light.a", icon: "lightbulb", name: "A" });
+  assert.equal(gross.finde("icon")[0].style["--mdc-icon-size"], "55px");
+
+  // Mit `font: medium` (= Font 2 → 24 px).
+  const klein = zeichne({ entity: "light.a", icon: "lightbulb", name: "A", font: "medium" });
+  assert.equal(klein.finde("icon")[0].style["--mdc-icon-size"], "29px");
+});
+
+test("fontIdAus kennt die Namen des Backends und lässt Zahlen durch", () => {
+  assert.equal(fontIdAus("small"), 0);
+  assert.equal(fontIdAus("medium-icon"), 1);
+  assert.equal(fontIdAus("medium"), 2);
+  assert.equal(fontIdAus("large"), 3);
+  assert.equal(fontIdAus(5), 5);
+  assert.equal(fontIdAus("5"), 5);
+  assert.equal(fontIdAus(""), null);
+  assert.equal(fontIdAus(undefined), null);
+  assert.equal(fontIdAus("riesig"), null);
+});
+
+test("der Messwert im Symbolfeld bekommt keinen Symbolfaktor", () => {
+  // Glyphen füllen die Zeile stärker aus als Ziffern – sonst wären die Zahlen zu groß.
+  const ergebnis = previewSlots({ cardType: "cardGrid", capacity: 6, filled: 6, model: "eu" });
+  const slot = entitySlots(ergebnis)[0];
+  const states = { "sensor.a": { state: "21.5", attributes: {} } };
+  const element = panel()._measuredSlot(
+    fakeElement("div"),
+    slot,
+    previewContent({ entity: "sensor.a", name: "Puffer" }, states, "cardGrid"),
+    [],
+    1
+  );
+  const [wert] = element.finde("icontext");
+  assert.equal(wert.textContent, "21.5");
+  assert.equal(wert.style.fontSize, "46px", "Font 4 ohne Symbolfaktor");
 });

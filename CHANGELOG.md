@@ -3,6 +3,21 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.16.1 – 2026-07-27
+
+### Die Schriftgröße je Eintrag (`font`) wirkt jetzt auch in der Vorschau
+
+Auf dem Raster lässt sich die Größe pro Eintrag einstellen – daher stehen auf einer `cardGrid2` große
+und kleine Werte nebeneinander. Das Backend hängt die gewählte Nummer als `¬<font>` an das Symbol
+(`pages.py`), das Display wählt danach die Schrift.
+
+- Die Vorschau wertet das Feld aus (`small`/`medium-icon`/`medium`/`large` oder eine Nummer) und
+  bemisst das Symbolfeld danach.
+- **Der Live-Parser trennt die Angabe ab.** Ohne das stand im Symbolfeld wörtlich `19¬2` statt der
+  Zahl – ein Fehler, den erst ein Blick auf ein echtes `cardGrid2` zeigte.
+- Text im Symbolfeld (der Messwert eines Sensors) bekommt keinen Symbolfaktor mehr: Glyphen füllen
+  die Zeile stärker aus als Ziffern, die Zahlen waren dadurch zu groß.
+
 ## 0.16.0 – 2026-07-27
 
 ### Die Vorschau folgt jetzt auch den Schriften und Ausrichtungen des Geräts
