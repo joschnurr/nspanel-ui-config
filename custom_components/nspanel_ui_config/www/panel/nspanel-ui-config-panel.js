@@ -66,8 +66,8 @@ const STYLES = `
   header .dirty { font-size: 13px; opacity: .9; }
 
   button {
-    font: inherit; font-size: 14px; cursor: pointer;
-    border: 1px solid transparent; border-radius: 4px; padding: 6px 12px;
+    font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid transparent; border-radius: 4px; padding: 4px 10px;
     background: rgba(255,255,255,.15); color: inherit;
   }
   button:hover:not(:disabled) { background: rgba(255,255,255,.28); }
@@ -331,11 +331,18 @@ const STYLES = `
   }
   .dialog {
     background: var(--card-background-color, #fff); border-radius: 8px;
-    padding: 18px 20px; width: min(680px, 92vw); max-height: 86vh; overflow-y: auto;
+    padding: 18px 20px; width: min(680px, 92vw); max-height: 90vh; overflow-y: auto;
     box-shadow: 0 8px 32px rgba(0,0,0,.3);
   }
+  /* Für Dialoge, in denen YAML steht: dort zählt jede Spalte, damit Zeilen nicht umbrechen. */
+  .dialog.wide { width: min(1180px, 96vw); }
   .dialog h3 { margin: 0 0 4px; font-weight: 400; }
   .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  /* Höhe am Fenster statt an einer festen Zeilenzahl: auf einem großen Schirm soll auch viel zu
+     sehen sein, auf einem kleinen darf der Dialog nicht über den Rand hinauswachsen. Ziehen geht
+     weiterhin (resize: vertical). */
+  textarea.gross { height: 62vh; min-height: 180px; }
+  textarea.mittel { height: 28vh; min-height: 120px; }
   .empty { color: var(--secondary-text-color, #727272); font-style: italic; font-size: 14px; }
 `;
 
@@ -3171,12 +3178,12 @@ class NsPanelUiConfigPanel extends PanelBase {
     const host = this._$("dialog-host");
     host.innerHTML = `
       <div class="overlay">
-        <div class="dialog body">
+        <div class="dialog body wide">
           <h3>YAML zum aktuellen Stand</h3>
           <p class="hint" id="yaml-hint">Wird geladen…</p>
           <div class="field">
-            <div class="row"><textarea id="yaml-text" rows="20" spellcheck="false"
-              style="font-family:var(--code-font-family,monospace);white-space:pre"></textarea></div>
+            <div class="row"><textarea id="yaml-text" class="gross" spellcheck="false"
+              wrap="off"></textarea></div>
           </div>
           <div class="status" id="yaml-status"></div>
           <div class="actions">
@@ -3256,7 +3263,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     const host = this._$("dialog-host");
     host.innerHTML = `
       <div class="overlay">
-        <div class="dialog body">
+        <div class="dialog body wide">
           <h3>Bestehende Konfiguration importieren</h3>
           <p class="hint">Liest den <code>config:</code>-Block einer AppDaemon-<code>apps.yaml</code>
             (oder einer bereits ausgelagerten Include-Datei) ein. Der Import ersetzt das aktuell
@@ -3269,7 +3276,8 @@ class NsPanelUiConfigPanel extends PanelBase {
           </div>
           <div class="field">
             <label>…oder YAML direkt einfügen</label>
-            <div class="row"><textarea id="imp-text" rows="8" placeholder="nspanel-1:\n  module: ...\n  config:\n    ..."></textarea></div>
+            <div class="row"><textarea id="imp-text" class="mittel" spellcheck="false" wrap="off"
+              placeholder="nspanel-1:\n  module: ...\n  config:\n    ..."></textarea></div>
           </div>
           <div class="field" id="imp-app-field" hidden>
             <label>App auswählen</label>

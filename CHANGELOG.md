@@ -3,6 +3,23 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.18.1 – 2026-07-28
+
+### Mehr Platz für YAML, kleinere Schaltflächen
+
+Die beiden Dialoge, in denen YAML steht — *YAML ansehen…* und *Importieren…* —, sind jetzt **breit**
+(bis 1180 px statt 680) und ihre Textfelder richten sich nach der **Fensterhöhe** statt nach einer
+festen Zeilenzahl: 62 % der Höhe für die YAML-Ansicht, 28 % fürs Einfügen beim Import. Auf einem
+großen Schirm ist damit auch viel zu sehen, auf einem kleinen wächst der Dialog trotzdem nicht über
+den Rand. Ziehen an der unteren Kante geht weiterhin.
+
+Zeilen **brechen dort nicht mehr um** (`wrap="off"`). Bei YAML trägt die Einrückung die Bedeutung —
+eine umgebrochene lange Template-Zeile sieht aus wie eine neue Ebene. Statt umzubrechen, lässt sich
+jetzt waagerecht scrollen.
+
+Die Schaltflächen sind durchgehend etwas kleiner (13 px statt 14, schmalere Ränder). Das betrifft
+die ganze Oberfläche, nicht nur die Dialoge — in der Kopfzeile stehen inzwischen fünf davon.
+
 ## 0.18.0 – 2026-07-28
 
 ### Die YAML ansehen – und darin arbeiten
