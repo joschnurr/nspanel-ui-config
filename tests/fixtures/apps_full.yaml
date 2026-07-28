@@ -86,6 +86,9 @@ nspanel-1:
 
       - type: cardGrid
         title: Heizung
+        # Ohne 'key' wäre 'navigate.heizung' von der Karte davor wirkungslos: das Backend sucht
+        # den Key, nicht den Titel.
+        key: heizung
         temperatureUnit: celsius
         navItem1:
           entity: navigate.wohnzimmer
@@ -99,6 +102,11 @@ nspanel-1:
             font: 2
             data:
               custom: wert
+          # Der einzige Weg zur versteckten Karte – ohne diesen Eintrag wäre sie am Panel
+          # überhaupt nicht aufrufbar.
+          - entity: navigate.versteckt
+            name: Versteckt
+            icon: mdi:eye-off
 
       - type: cardThermo
         title: Thermostat

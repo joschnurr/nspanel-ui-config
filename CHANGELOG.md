@@ -3,6 +3,50 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.19.0 – 2026-07-28
+
+### Die Kartenliste ist jetzt ein Baum – und zeigt, was am Panel nicht erreichbar ist
+
+Die flache Liste verriet nur, *dass* es eine Karte gibt, nicht ob man am Gerät je hinkommt. Das ist
+kein Schönheitsfehler: In einer echten Konfiguration hatten zwei Karten beide Blättertasten mit
+festen Zielen überschrieben, die Kette endete dort, und drei Karten dahinter waren unerreichbar.
+Die YAML war dabei vollkommen gültig – niemand meldete etwas.
+
+- **Baumansicht.** Unterseiten stehen eingerückt unter der Karte, die sie verlinkt, wie im
+  Dateimanager. Ein `↳` markiert den Weg über einen Eintrag, ein `⤷` den über eine Blättertaste.
+  Verlinken sich Karten gegenseitig, erscheint die zweite Erwähnung blass als „schon oben"
+  statt den Baum unendlich tief zu machen.
+- **Abschnitt „Nicht verlinkt".** Versteckte Karten, auf die kein `navigate.…` zeigt, stehen dort
+  mit Zähler – am Panel sind sie nicht aufrufbar.
+- **Ziehen und Fallenlassen.** Karten lassen sich mit der Maus umsortieren und zwischen „Aufbau"
+  und Unterseite verschieben; `hidden` wird dabei passend gesetzt oder entfernt. Zieht man zwei
+  Zeilen **innerhalb desselben Menüs**, ändert sich die Reihenfolge der Menüpunkte auf dieser
+  Karte – das ist die Reihenfolge, die man am Gerät sieht. Die ▲▼-Knöpfe folgen derselben Regel.
+
+### Vier Navigationsfehler, die vorher niemand gemeldet hat
+
+Die Prüfung kannte Kartentypen und Kapazitäten, aber nicht die Navigation:
+
+- **Totes Sprungziel** – `navigate.heizung`, obwohl keine Karte den Key `heizung` trägt (Fehler).
+  Der häufigste Fall: der Titel wurde für den Key gehalten. Beide Schreibweisen, die das Backend
+  akzeptiert (`<key>` und die Altform `<typ>_<key>`), gelten als gültig, `uuid.`-Ziele werden
+  übersprungen – die vergibt das Backend zur Laufzeit.
+- **Doppelter Key** – `search_card` liefert immer den ersten Treffer, die zweite Karte ist über
+  ihren Namen nicht mehr ansprechbar (Fehler).
+- **Unerreichbare Unterseite** – eine versteckte Karte, die niemand verlinkt, oder eine ohne
+  `key`, die gar nicht Ziel sein *kann* (Warnung).
+- **Gekappte Blätterkette** – beide Tasten überschrieben (Warnung). Eine einzelne Überschreibung
+  ist üblich (ein „zurück"-Knopf) und bleibt still.
+
+Auch `screensaver.defaultCard` wird geprüft: zeigt sie auf eine gelöschte Karte, landet das Panel
+nach dem Aufwachen nirgends.
+
+### Fixture
+
+Die Beispiel-`apps.yaml` enthielt selbst zwei dieser Fehler – `navigate.heizung` ohne passenden
+Key und eine versteckte Karte, die nichts verlinkte. Beides ist korrigiert; sie ist damit wieder
+das, was sie sein soll: eine gültige Konfiguration.
+
 ## 0.18.3 – 2026-07-28
 
 ### Auf dem Handy war vom Editor nichts zu sehen

@@ -36,6 +36,12 @@ Der Editor macht genau das sichtbar, bevor es auf dem Panel fehlt.
 Assistant wählen. Jedes Feld ist beschriftet mit dem, was es bewirkt, und den Werten, die es
 annehmen darf.
 
+**Navigationsbaum** – die Kartenliste zeigt, wie man am Gerät von Karte zu Karte kommt:
+Unterseiten stehen eingerückt unter der Karte, die sie verlinkt. Karten lassen sich per Ziehen
+umsortieren und zur Unterseite machen; innerhalb eines Menüs ändert das Ziehen die Reihenfolge der
+Menüpunkte. Ein eigener Abschnitt sammelt Karten, die **niemand verlinkt** – am Panel sind die
+nicht erreichbar, in einer flachen Liste sieht man das nicht.
+
 **Vorschau** – über jedem Formular eine Nachbildung der Displayfläche in Originalgröße: die
 Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Die Geometrie ist
 aus der Display-Firmware abgemessen, nicht geschätzt. Man sieht, wie die Karte wirkt, bevor sie auf
@@ -48,6 +54,11 @@ veröffentlicht. → [docs/funktionen.md](docs/funktionen.md#live-ansicht-was-da
 **Anzeigekapazität** – „5 von 4 Plätzen": der Editor weiß, wie viele Einträge jeder Kartentyp auf
 deinem Panel-Modell wirklich zeigt, und markiert überzählige.
 → [docs/kapazitaet.md](docs/kapazitaet.md)
+
+**Prüfung der Navigation** – die Fehler, bei denen die YAML gültig bleibt und trotzdem eine Karte
+verschwindet: ein `navigate.…` ohne passenden Key, zweimal derselbe Key (dann gewinnt immer die
+erste Karte), eine Unterseite, die niemand verlinkt, und beide Blättertasten überschrieben – ab da
+kommt man durch Blättern nicht mehr weiter.
 
 **Icons** – Vorschau und Vorschläge aus den 6896 Namen, die das Backend tatsächlich kennt, mit
 Warnung bei Unbekanntem (ohne den Wert zu verwerfen).

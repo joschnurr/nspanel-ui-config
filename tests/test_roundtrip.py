@@ -319,6 +319,143 @@ def test_validate_model_meldet_bei_gueltiger_config_nur_das_wirkungslose_unit() 
     assert "'unit'" in findings[0]["message"]
 
 
+# --- Navigation ---------------------------------------------------------------------------------
+#
+# Der Anlass ist ein echter Ausfall: zwei sichtbare Karten hatten beide Blättertasten mit festen
+# Zielen überschrieben, dadurch endete die Kette dort, und drei Karten dahinter waren am Panel
+# nicht mehr erreichbar. Die YAML war dabei vollkommen gültig – niemand hat etwas gemeldet.
+
+
+def _navigation_findings(model: dict) -> dict[str, str]:
+    """Befunde der Navigationsprüfung als ``pfad -> meldung``."""
+    interessant = ("navigate.", "Key '", "nicht erreichbar", "Blättertasten")
+    return {
+        finding["path"]: finding["message"]
+        for finding in schema.validate_model(model)
+        if any(teil in finding["message"] for teil in interessant)
+    }
+
+
+def test_navigation_meldet_totes_sprungziel() -> None:
+    model = importer.config_block_to_model(
+        {
+            "cards": [
+                {
+                    "type": "cardGrid",
+                    "key": "menu",
+                    "entities": [{"entity": "navigate.gibtesnicht"}],
+                }
+            ]
+        }
+    )
+    befunde = _navigation_findings(model)
+    assert "navigate.gibtesnicht" in befunde["cards[0].entities"]
+
+
+def test_navigation_akzeptiert_beide_schreibweisen_des_ziels() -> None:
+    """``search_card`` probiert erst ``<typ>_<key>``, dann den blanken Key – beides ist gültig."""
+    model = importer.config_block_to_model(
+        {
+            "cards": [
+                {
+                    "type": "cardGrid",
+                    "key": "menu",
+                    "entities": [
+                        {"entity": "navigate.ziel"},
+                        {"entity": "navigate.cardEntities_ziel"},
+                        # uuid-Ziele vergibt das Backend zur Laufzeit; im Modell stehen sie nie.
+                        {"entity": "navigate.uuid.4711"},
+                    ],
+                }
+            ],
+            "hiddenCards": [{"type": "cardEntities", "key": "ziel", "entities": []}],
+        }
+    )
+    assert _navigation_findings(model) == {}
+
+
+def test_navigation_meldet_unerreichbare_unterseite() -> None:
+    model = importer.config_block_to_model(
+        {
+            "cards": [{"type": "cardGrid", "key": "menu", "entities": []}],
+            "hiddenCards": [
+                {"type": "cardEntities", "title": "Energie", "key": "energie", "entities": []}
+            ],
+        }
+    )
+    befunde = _navigation_findings(model)
+    assert "nicht erreichbar" in befunde["hiddenCards[0]"]
+    assert "navigate.energie" in befunde["hiddenCards[0]"]
+
+
+def test_navigation_meldet_unterseite_ohne_key() -> None:
+    """Ohne ``key`` kann kein ``navigate.…`` die Karte je treffen."""
+    model = importer.config_block_to_model(
+        {
+            "cards": [{"type": "cardGrid", "key": "menu", "entities": []}],
+            "hiddenCards": [{"type": "cardEntities", "title": "Namenlos", "entities": []}],
+        }
+    )
+    assert "keinen 'key'" in _navigation_findings(model)["hiddenCards[0]"]
+
+
+def test_navigation_meldet_doppelten_key() -> None:
+    """Der zweite Treffer ist unerreichbar: ``search_card`` liefert immer den ersten."""
+    model = importer.config_block_to_model(
+        {
+            "cards": [
+                {"type": "cardGrid", "key": "licht", "entities": [{"entity": "navigate.licht"}]},
+                {"type": "cardEntities", "key": "licht", "entities": []},
+            ]
+        }
+    )
+    assert "schon bei cards[0] vergeben" in _navigation_findings(model)["cards[1].key"]
+
+
+def test_navigation_meldet_gekappte_blaetterkette() -> None:
+    """Beide Tasten überschrieben – ab hier kommt man nicht mehr weiter durch die Karten."""
+    model = importer.config_block_to_model(
+        {
+            "cards": [
+                {"type": "cardGrid", "key": "a", "entities": []},
+                {
+                    "type": "cardGrid",
+                    "key": "b",
+                    "navItem1": {"entity": "navigate.a"},
+                    "navItem2": {"entity": "navigate.a"},
+                    "entities": [],
+                },
+                {"type": "cardGrid", "key": "c", "entities": []},
+            ]
+        }
+    )
+    assert "Blättertasten" in _navigation_findings(model)["cards[1].navItem1"]
+
+
+def test_navigation_schweigt_bei_einer_einzelnen_ueberschriebenen_taste() -> None:
+    """Ein „zurück"-Knopf auf einer Karte ist üblich – die andere Taste blättert weiter."""
+    model = importer.config_block_to_model(
+        {
+            "cards": [
+                {"type": "cardGrid", "key": "a", "entities": []},
+                {"type": "cardGrid", "key": "b", "navItem1": {"entity": "navigate.a"}, "entities": []},
+                {"type": "cardGrid", "key": "c", "entities": []},
+            ]
+        }
+    )
+    assert _navigation_findings(model) == {}
+
+
+def test_navigation_prueft_auch_die_startkarte_des_screensavers() -> None:
+    model = importer.config_block_to_model(
+        {
+            "cards": [{"type": "cardGrid", "key": "menu", "entities": []}],
+            "screensaver": {"type": "screensaver", "defaultCard": "navigate.weggefallen"},
+        }
+    )
+    assert "navigate.weggefallen" in _navigation_findings(model)["screensaver.defaultCard"]
+
+
 # --- Optional: gegen die echte apps.yaml -------------------------------------------------------
 
 

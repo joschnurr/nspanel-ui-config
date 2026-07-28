@@ -40,6 +40,11 @@ const { ICON_CHARS } = await import(`./icon-chars.js${MODUL_VERSION}`);
 // Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
 // Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
 const { previewSlots } = await import(`./preview-layouts.js${MODUL_VERSION}`);
+// Der Navigationsbaum: welche Karte von welcher aus erreichbar ist – und die Umbauten, die
+// Ziehen und Fallenlassen auslösen. Ohne DOM gehalten, damit die Zuordnung testbar bleibt.
+const { baueBaum, verschiebeKarte, verschiebeEintrag } = await import(
+  `./nav-tree.js${MODUL_VERSION}`
+);
 
 const ELEMENT_NAME = "nspanel-ui-config-panel";
 
@@ -110,6 +115,25 @@ const STYLES = `
   .item .tools { display: none; gap: 2px; }
   .item:hover .tools, .item.active .tools { display: flex; }
   .item .tools button { background: none; border: none; padding: 1px 5px; font-size: 13px; }
+
+  /* Baumansicht: die Einrückung zeigt, über welchen Weg eine Karte erreichbar ist. */
+  nav h2 .h2note { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .7; }
+  nav .warnzahl {
+    background: var(--warning-color, #ffa600); color: #000; border-radius: 9px;
+    padding: 0 6px; font-size: 11px; margin-left: 4px;
+  }
+  nav .navhint {
+    font-size: 11.5px; color: var(--secondary-text-color, #727272);
+    margin: 0 0 6px; line-height: 1.4;
+  }
+  nav .navhint.warn { color: var(--error-color, #db4437); }
+  .item.tree .via { opacity: .45; font-size: 12px; width: 12px; flex: none; }
+  .item.wieder .label { opacity: .55; font-style: italic; }
+  .item[draggable="true"] { cursor: grab; }
+  .item.zieht { opacity: .4; }
+  /* Ablegezone: sonst kann man nur *vor* eine vorhandene Zeile ziehen, nie an den Anfang. */
+  .drop { height: 8px; border-radius: 4px; margin: 1px 0; }
+  .drop.aktiv { background: var(--primary-color, #03a9f4); height: 10px; }
 
   .add-row { display: flex; gap: 4px; margin-top: 6px; }
   .add-row select { flex: 1; min-width: 0; }
@@ -1263,6 +1287,17 @@ class NsPanelUiConfigPanel extends PanelBase {
 
   // --- Seitenleiste --------------------------------------------------------------------------
 
+  /**
+   * Die Seitenleiste als **Baum**: welche Karte ist von welcher aus erreichbar?
+   *
+   * Die flache Liste zeigte nur, *dass* es eine Karte gibt – nicht, ob man am Gerät je hinkommt.
+   * Genau daran scheiterte eine echte Konfiguration: zwei Karten hatten ihre Blättertasten
+   * überschrieben, die Kette endete dort, drei Karten dahinter waren unerreichbar. Im Baum sieht
+   * man das sofort, und „nicht verlinkt" steht als eigener Abschnitt darunter.
+   *
+   * Karten lassen sich ziehen: innerhalb der Liste zum Umsortieren, zwischen den Abschnitten, um
+   * eine Karte zur Unterseite zu machen (oder zurück).
+   */
   _renderNav() {
     const nav = this._$("nav");
     if (!this._model || !this._schema) {
@@ -1272,26 +1307,46 @@ class NsPanelUiConfigPanel extends PanelBase {
       return;
     }
     const sel = this._selection;
-    const active = (kind, index) =>
-      sel.kind === kind && (index === undefined || sel.index === index) ? " active" : "";
+    const baum = baueBaum(this._model);
 
-    const cardItems = (kind, cards) =>
-      (cards || [])
-        .map(
-          (card, index) => `
-          <div class="item${active(kind, index)}" data-kind="${kind}" data-index="${index}">
-            <span class="label">${esc(cardLabel(card))}
-              <span class="sub">${esc(isPlain(card) ? card.type || "?" : "?")}</span>
-            </span>
-            <span class="tools">
-              <button class="icon" data-act="up" title="Nach oben">▲</button>
-              <button class="icon" data-act="down" title="Nach unten">▼</button>
-              <button class="icon" data-act="dup" title="Duplizieren">⧉</button>
-              <button class="icon" data-act="del" title="Löschen">✕</button>
-            </span>
-          </div>`
-        )
-        .join("") || `<div class="empty" style="padding:4px 8px">keine</div>`;
+    const zeile = (knoten) => {
+      const { card, kind, index, tiefe, ueber, mehrfach, eltern } = knoten;
+      const aktiv = sel.kind === kind && sel.index === index ? " active" : "";
+      const art = isPlain(card) ? card.type || "?" : "?";
+      // Woran diese Zeile im Menü der Elternkarte hängt – daran entscheidet sich beim Ziehen, ob
+      // ein Menüpunkt umsortiert oder eine Karte verschoben wird.
+      const bindung =
+        eltern && eltern.eintragIndex !== null && eltern.eintragIndex !== undefined
+          ? ` data-eltern="${eltern.kind}:${eltern.index}" data-eintrag="${eltern.eintragIndex}"`
+          : "";
+      // Woher der Weg zu dieser Karte führt – das erklärt die Einrückung.
+      const weg =
+        ueber === "kette"
+          ? ""
+          : ueber === "entity"
+          ? '<span class="via" title="über einen Eintrag dieser Karte erreichbar">↳</span>'
+          : `<span class="via" title="über ${esc(ueber || "")} (Blättertaste)">⤷</span>`;
+      return `
+        <div class="item tree${aktiv}${mehrfach ? " wieder" : ""}" draggable="true"
+             data-kind="${kind}" data-index="${index}"${bindung}
+             style="padding-left:${8 + tiefe * 14}px">
+          ${weg}
+          <span class="label">${esc(cardLabel(card))}
+            <span class="sub">${esc(art)}${mehrfach ? " · schon oben" : ""}</span>
+          </span>
+          <span class="tools">
+            <button class="icon" data-act="up" title="Nach oben">▲</button>
+            <button class="icon" data-act="down" title="Nach unten">▼</button>
+            <button class="icon" data-act="dup" title="Duplizieren">⧉</button>
+            <button class="icon" data-act="del" title="Löschen">✕</button>
+          </span>
+        </div>`;
+    };
+
+    const aeste = (knoten) => zeile(knoten) + (knoten.kinder || []).map(aeste).join("");
+    const wurzeln = baum.wurzeln.map(aeste).join("") ||
+      `<div class="empty" style="padding:4px 8px">keine</div>`;
+    const verwaist = baum.verwaist.map(zeile).join("");
 
     const typeOptions = [...this._schema.cardTypes]
       .map((type) => `<option value="${esc(type)}">${esc(type)}</option>`)
@@ -1299,21 +1354,35 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     nav.innerHTML = `
       <h2>Allgemein</h2>
-      <div class="item${active("global")}" data-kind="global"><span class="label">Globale Einstellungen</span></div>
-      <div class="item${active("screensaver")}" data-kind="screensaver"><span class="label">Screensaver</span></div>
+      <div class="item${sel.kind === "global" ? " active" : ""}" data-kind="global"><span class="label">Globale Einstellungen</span></div>
+      <div class="item${sel.kind === "screensaver" ? " active" : ""}" data-kind="screensaver"><span class="label">Screensaver</span></div>
 
-      <h2>Karten</h2>
-      ${cardItems("cards", this._model.cards)}
+      <h2>Aufbau <span class="h2note">ziehen zum Umsortieren</span></h2>
+      <div class="drop" data-drop="cards" data-pos="0"></div>
+      ${wurzeln}
       <div class="add-row">
         <select id="add-type">${typeOptions}</select>
         <button data-add="cards" title="Karte hinzufügen">+</button>
       </div>
 
-      <h2>Versteckte Karten</h2>
-      ${cardItems("hiddenCards", this._model.hiddenCards)}
+      <h2>Nicht verlinkt${baum.verwaist.length ? ` <span class="warnzahl">${baum.verwaist.length}</span>` : ""}</h2>
+      <p class="navhint">${
+        baum.verwaist.length
+          ? "Diese Unterseiten verlinkt keine Karte – am Gerät sind sie nicht erreichbar."
+          : "Alle Unterseiten sind von einer Karte aus erreichbar."
+      }</p>
+      <div class="drop" data-drop="hiddenCards" data-pos="0"></div>
+      ${verwaist}
       <div class="add-row">
-        <button data-add="hiddenCards" style="flex:1">+ versteckte Karte</button>
+        <button data-add="hiddenCards" style="flex:1">+ Unterseite</button>
       </div>
+      ${
+        baum.unbekannt.length
+          ? `<p class="navhint warn">Sprungziel ohne Karte: ${baum.unbekannt
+              .map((u) => `<code>${esc(u.ziel)}</code>`)
+              .join(", ")}</p>`
+          : ""
+      }
     `;
 
     nav.querySelectorAll(".item").forEach((item) => {
@@ -1323,18 +1392,127 @@ class NsPanelUiConfigPanel extends PanelBase {
         const index = item.dataset.index === undefined ? undefined : Number(item.dataset.index);
         if (toolButton) {
           event.stopPropagation();
-          this._cardAction(toolButton.dataset.act, kind, index);
+          const act = toolButton.dataset.act;
+          // Bei einem Menüpunkt meinen ▲▼ die Reihenfolge *auf der Menükarte*. Die Position in
+          // `hiddenCards` zu tauschen sähe am Gerät nach gar nichts aus.
+          if ((act === "up" || act === "down") && item.dataset.eltern) {
+            const [ekind, eindex] = item.dataset.eltern.split(":");
+            const von = Number(item.dataset.eintrag);
+            this._sortiereEintrag(ekind, Number(eindex), von, act === "up" ? von - 1 : von + 2);
+            return;
+          }
+          this._cardAction(act, kind, index);
           return;
         }
         this._selection = { kind, index: index || 0 };
         this._renderNav();
         this._renderDetail();
       });
+      if (item.dataset.index !== undefined) this._bindDrag(item);
     });
+    nav.querySelectorAll(".drop").forEach((ziel) => this._bindDrop(ziel));
 
     nav.querySelectorAll("button[data-add]").forEach((button) => {
       button.addEventListener("click", () => this._addCard(button.dataset.add));
     });
+  }
+
+  /** Was eine Zeile beim Ziehen über sich verrät: ihre Karte und ihr Platz im Menü darüber. */
+  _zeilenInfo(item) {
+    const bindung = item.dataset.eltern ? item.dataset.eltern.split(":") : null;
+    return {
+      kind: item.dataset.kind,
+      index: Number(item.dataset.index),
+      eltern: bindung
+        ? { kind: bindung[0], index: Number(bindung[1]), eintragIndex: Number(item.dataset.eintrag) }
+        : null,
+    };
+  }
+
+  /** Eine Kartenzeile zum Ziehen anmelden. */
+  _bindDrag(item) {
+    item.addEventListener("dragstart", (event) => {
+      this._zieht = this._zeilenInfo(item);
+      item.classList.add("zieht");
+      event.dataTransfer.effectAllowed = "move";
+      // Firefox startet ohne gesetzte Daten gar keinen Zug.
+      event.dataTransfer.setData("text/plain", item.dataset.kind);
+    });
+    item.addEventListener("dragend", () => {
+      item.classList.remove("zieht");
+      this._zieht = null;
+      this.shadowRoot.querySelectorAll(".drop.aktiv").forEach((d) => d.classList.remove("aktiv"));
+    });
+    // Auf eine Zeile fallen lassen heißt: davor einsortieren.
+    item.addEventListener("dragover", (event) => {
+      if (this._zieht) event.preventDefault();
+    });
+    item.addEventListener("drop", (event) => {
+      event.preventDefault();
+      this._dropAuf(this._zeilenInfo(item));
+    });
+  }
+
+  /** Die schmalen Zonen zwischen den Abschnitten – dort landet man am Anfang einer Liste. */
+  _bindDrop(ziel) {
+    ziel.addEventListener("dragover", (event) => {
+      if (!this._zieht) return;
+      event.preventDefault();
+      ziel.classList.add("aktiv");
+    });
+    ziel.addEventListener("dragleave", () => ziel.classList.remove("aktiv"));
+    ziel.addEventListener("drop", (event) => {
+      event.preventDefault();
+      ziel.classList.remove("aktiv");
+      this._dropAuf({ kind: ziel.dataset.drop, index: Number(ziel.dataset.pos), eltern: null });
+    });
+  }
+
+  /**
+   * Führt den Zug aus.
+   *
+   * Zwei verschiedene Umbauten sehen beim Ziehen gleich aus: Hängen beide Zeilen unter derselben
+   * Menükarte, ist die Reihenfolge **auf dieser Karte** gemeint – das ist die Reihenfolge, die man
+   * am Gerät sieht. Sonst wandert die Karte selbst zwischen „Aufbau" und „Unterseiten".
+   */
+  _dropAuf(ziel) {
+    const quelle = this._zieht;
+    this._zieht = null;
+    if (!quelle) return;
+
+    const gleichesMenue =
+      quelle.eltern &&
+      ziel.eltern &&
+      quelle.eltern.kind === ziel.eltern.kind &&
+      quelle.eltern.index === ziel.eltern.index;
+
+    if (gleichesMenue) {
+      if (quelle.eltern.eintragIndex === ziel.eltern.eintragIndex) return;
+      this._sortiereEintrag(
+        quelle.eltern.kind,
+        quelle.eltern.index,
+        quelle.eltern.eintragIndex,
+        ziel.eltern.eintragIndex
+      );
+      return;
+    }
+
+    if (quelle.kind === ziel.kind && quelle.index === ziel.index) return;
+    const neu = verschiebeKarte(this._model, quelle.kind, quelle.index, ziel.kind, ziel.index);
+    if (!neu) return;
+    this._selection = neu;
+    this._markDirty();
+    this._renderNav();
+    this._renderDetail();
+  }
+
+  /** Einen Menüpunkt innerhalb seiner Karte umsortieren. */
+  _sortiereEintrag(kind, index, von, nach) {
+    const karte = (this._model[kind] || [])[index];
+    if (!karte || verschiebeEintrag(karte, von, nach) === null) return;
+    this._markDirty();
+    this._renderNav();
+    this._renderDetail();
   }
 
   _addCard(kind) {

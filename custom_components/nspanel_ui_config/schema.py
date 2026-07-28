@@ -738,6 +738,151 @@ def empty_model() -> dict[str, Any]:
     }
 
 
+def _navigation_targets(card: Any) -> list[tuple[str, str]]:
+    """Alle ``navigate.<ziel>`` einer Karte als ``(ziel, quelle)``.
+
+    Gegenstück zu ``www/panel/nav-tree.js`` – dort für die Baumansicht, hier für die Prüfung.
+    """
+    if not isinstance(card, dict):
+        return []
+    targets: list[tuple[str, str]] = []
+    for entity in card.get(CARD_ENTITIES_FIELD) or []:
+        value = entity.get("entity") if isinstance(entity, dict) else None
+        if isinstance(value, str) and value.strip().startswith("navigate."):
+            targets.append((value.strip()[len("navigate.") :], "entities"))
+    for field in ("navItem1", "navItem2"):
+        value = card.get(field)
+        if isinstance(value, dict):
+            value = value.get("entity")
+        if isinstance(value, str) and value.strip().startswith("navigate."):
+            targets.append((value.strip()[len("navigate.") :], field))
+    return targets
+
+
+def _card_aliases(card: Any) -> set[str]:
+    """Unter welchen Namen ``navigate.<…>`` diese Karte findet.
+
+    ``search_card`` (config.py im Backend) probiert erst die zusammengesetzte ``card.id``
+    ``<typ>_<key>`` und danach den blanken ``key`` – beide Schreibweisen sind gültig.
+    """
+    if not isinstance(card, dict):
+        return set()
+    key = card.get("key")
+    if not isinstance(key, str) or not key:
+        return set()
+    aliases = {key}
+    card_type = card.get("type")
+    if isinstance(card_type, str):
+        legacy = f"{card_type}_{key}"
+        for zeichen in ".~ ":
+            legacy = legacy.replace(zeichen, "_")
+        aliases.add(legacy)
+    return aliases
+
+
+def _check_navigation(model: dict[str, Any]) -> list[dict[str, str]]:
+    """Prüfe, ob am Gerät jede Karte erreichbar ist.
+
+    Das ist der stille Fehler, der einer gültigen YAML nicht anzusehen ist: Sichtbare Karten hängen
+    über die beiden oberen Blättertasten zusammen, versteckte Karten erreicht man **nur** über ein
+    ``navigate.<key>``. Wer nun eine Blättertaste mit ``navItem1``/``navItem2`` überschreibt, kappt
+    die Kette – alle Karten dahinter sind weg, ohne dass irgendetwas eine Fehlermeldung ausgibt.
+    Genau so gingen in einer echten Konfiguration drei Karten verloren.
+    """
+    findings: list[dict[str, str]] = []
+    visible = [c for c in (model.get("cards") or []) if isinstance(c, dict)]
+    hidden = [c for c in (model.get("hiddenCards") or []) if isinstance(c, dict)]
+    screensaver = model.get("screensaver")
+
+    # 1. Doppelte Keys: ``navigate.<key>`` trifft dann immer nur die erste Karte (config.py,
+    #    ``search_card`` liefert den ersten Treffer), die zweite ist so nicht mehr ansprechbar.
+    by_key: dict[str, str] = {}
+    for path, cards in (("cards", visible), ("hiddenCards", hidden)):
+        for index, card in enumerate(cards):
+            key = card.get("key")
+            if not isinstance(key, str) or not key:
+                continue
+            where = f"{path}[{index}]"
+            if key in by_key:
+                findings.append(
+                    {
+                        "level": "error",
+                        "path": f"{where}.key",
+                        "message": f"Key '{key}' ist schon bei {by_key[key]} vergeben. "
+                        f"'navigate.{key}' führt immer zur ersten Karte – diese hier ist so nicht "
+                        f"erreichbar.",
+                    }
+                )
+            else:
+                by_key[key] = where
+
+    known: set[str] = set()
+    for card in [*visible, *hidden, screensaver]:
+        known |= _card_aliases(card)
+
+    # 2. Sprungziele, zu denen es keine Karte gibt. ``uuid.``-Ziele vergibt das Backend zur
+    #    Laufzeit selbst; die stehen nie im Modell und werden deshalb übersprungen.
+    reached: set[str] = set()
+    quellen: list[tuple[str, Any]] = [
+        *((f"cards[{i}]", c) for i, c in enumerate(visible)),
+        *((f"hiddenCards[{i}]", c) for i, c in enumerate(hidden)),
+    ]
+    default_card = (screensaver or {}).get("defaultCard") if isinstance(screensaver, dict) else None
+    if isinstance(default_card, str) and default_card.strip().startswith("navigate."):
+        quellen.append(("screensaver", {"entities": [{"entity": default_card}]}))
+
+    for path, card in quellen:
+        for target, source in _navigation_targets(card):
+            reached.add(target)
+            if target.startswith("uuid.") or target in known:
+                continue
+            findings.append(
+                {
+                    "level": "error",
+                    "path": f"{path}.{source}" if path != "screensaver" else "screensaver.defaultCard",
+                    "message": f"'navigate.{target}' zeigt auf keine Karte – es gibt keine Karte "
+                    f"mit dem Key '{target}'. Die Taste bleibt wirkungslos.",
+                }
+            )
+
+    # 3. Versteckte Karten, die niemand verlinkt: am Gerät schlicht nicht aufrufbar. Sie tauchen in
+    #    keiner Blätterkette auf – ein ``navigate.…`` ist der einzige Weg dorthin.
+    for index, card in enumerate(hidden):
+        key = card.get("key")
+        if isinstance(key, str) and key and _card_aliases(card) & reached:
+            continue
+        if isinstance(key, str) and key:
+            hinweis = f"Keine Karte enthält 'navigate.{key}'."
+        else:
+            hinweis = "Sie hat keinen 'key', über den ein 'navigate.…' sie ansprechen könnte."
+        label = card.get("title") or key or f"hiddenCards[{index}]"
+        findings.append(
+            {
+                "level": "warning",
+                "path": f"hiddenCards[{index}]",
+                "message": f"Versteckte Karte „{label}“ ist am Panel nicht erreichbar. {hinweis}",
+            }
+        )
+
+    # 4. Beide Blättertasten überschrieben – die Ursache von Fall 3. Eine einzelne Überschreibung
+    #    ist normal (ein „zurück"-Knopf), aber wer beide belegt, kappt die Kette: von dieser Karte
+    #    aus kommt man zu den folgenden sichtbaren Karten überhaupt nicht mehr.
+    for index, card in enumerate(visible):
+        if len(visible) < 3 or card.get("navItem1") is None or card.get("navItem2") is None:
+            continue
+        findings.append(
+            {
+                "level": "warning",
+                "path": f"cards[{index}].navItem1",
+                "message": "navItem1 und navItem2 ersetzen beide Blättertasten. Die Kette durch die "
+                "sichtbaren Karten endet hier – die folgenden Karten sind nur noch über ein "
+                "'navigate.…' erreichbar, nicht mehr durch Blättern.",
+            }
+        )
+
+    return findings
+
+
 def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
     """Prüfe das Modell auf Auffälligkeiten und liefere eine Liste von Befunden.
 
@@ -847,6 +992,8 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
         check_card(card, f"cards[{index}]")
     for index, card in enumerate(model.get("hiddenCards") or []):
         check_card(card, f"hiddenCards[{index}]")
+
+    findings.extend(_check_navigation(model))
 
     global_settings = model.get("global") or {}
     panel_model = global_settings.get("model")
