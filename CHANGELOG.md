@@ -3,6 +3,32 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.18.2 – 2026-07-28
+
+### Der YAML-Dialog lag quer – und prüft jetzt beim Tippen
+
+Die Dialoge legten Überschrift, Hinweis, Textfeld und Schaltflächen **nebeneinander** statt
+untereinander; die drei Knöpfe standen als hohe Balken rechts, das Textfeld blieb ein schmaler
+Streifen. In 0.18.1 fiel es auf, weil die Dialoge breiter wurden – falsch war es schon vorher.
+
+Der Grund: Die Dialoge tragen die Klasse `body`, aber nur, damit ihre Knöpfe die hellen Farben
+bekommen (`.body button`). Dieselbe Klasse ist zugleich das **Hauptlayout der App** – `display:
+flex` für Navigation neben Inhalt. Der Dialog wurde damit zur Flex-Zeile, und `align-items:
+stretch` zog die Knöpfe auf volle Höhe. Jetzt steht dort ausdrücklich eine Spalte.
+
+Damit sitzt der Hinweis *„So sähe die Datei beim nächsten Speichern aus…"* oben über dem Feld, die
+Schaltflächen haben wieder ihre normale Höhe, und **das Textfeld bekommt den ganzen Rest** – der
+Dialog ist 90 % der Fensterhöhe hoch, alles andere behält seine eigene Höhe.
+
+### YAML-Syntaxprüfung beim Tippen
+
+Kurz nach der letzten Eingabe geht der Text an dieselbe Stelle, die ihn später wirklich liest. Die
+Statuszeile meldet *YAML in Ordnung – n Karte(n)* oder die Fehlerstelle mit Zeile und Spalte;
+solange etwas nicht stimmt, bleibt **Übernehmen** gesperrt.
+
+Geprüft wird auf dem Server, nicht im Browser: ein nachgebautes „sieht gültig aus", das beim
+Übernehmen dann doch scheitert, wäre schlimmer als keine Prüfung.
+
 ## 0.18.1 – 2026-07-28
 
 ### Mehr Platz für YAML, kleinere Schaltflächen

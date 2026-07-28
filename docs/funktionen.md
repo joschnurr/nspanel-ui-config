@@ -262,9 +262,15 @@ YAML wird ein Modell, das den Editor füllt; geschrieben wird erst mit *Speicher
 bei einer Quelle der Wahrheit – die Ausgabedatei erzeugt weiterhin nur der Generator, von Hand
 gepflegt wird sie nie (beim nächsten Speichern wäre das wieder überschrieben).
 
-Ein YAML-Fehler lässt den Dialog offen stehen und meldet die Stelle, statt den bearbeiteten Text zu
-verwerfen. Dass der Rundlauf nichts verliert – auch die ausgelagerte Form ohne App-Wrapper, mit der
-Kopfzeilen-Warnung davor –, hält `tests/test_roundtrip.py` fest.
+**Geprüft wird beim Tippen**, kurz nach der letzten Eingabe: Der Text geht an dieselbe Stelle, die
+ihn später wirklich liest, und die Statuszeile sagt entweder *YAML in Ordnung – n Karte(n)* oder
+nennt die Fehlerstelle mit Zeile und Spalte. Solange etwas nicht stimmt, bleibt **Übernehmen**
+gesperrt. Die Prüfung läuft bewusst auf dem Server statt als Nachbildung im Browser – ein „sieht
+gültig aus", das beim Übernehmen doch scheitert, wäre schlimmer als keine Prüfung.
+
+Ein Fehler lässt den Dialog offen stehen, statt den bearbeiteten Text zu verwerfen. Dass der
+Rundlauf nichts verliert – auch die ausgelagerte Form ohne App-Wrapper, mit der Kopfzeilen-Warnung
+davor –, hält `tests/test_roundtrip.py` fest.
 
 ## Sicherungen
 

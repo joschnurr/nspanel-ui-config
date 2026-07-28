@@ -329,20 +329,33 @@ const STYLES = `
     position: fixed; inset: 0; background: rgba(0,0,0,.45);
     display: flex; align-items: center; justify-content: center; z-index: 10;
   }
+  /* Spalte, nicht Zeile. Die Dialoge tragen die Klasse 'body' nur, damit die Knöpfe darin die
+     hellen Farben bekommen (.body button). 'body' ist aber zugleich das Hauptlayout der App und
+     legt als Flex-Zeile alles nebeneinander – Überschrift, Hinweis, Feld und Aktionen, wobei die
+     Knöpfe auf volle Höhe gestreckt werden. Hier also ausdrücklich zurück auf eine Spalte. */
   .dialog {
     background: var(--card-background-color, #fff); border-radius: 8px;
-    padding: 18px 20px; width: min(680px, 92vw); max-height: 90vh; overflow-y: auto;
+    padding: 18px 20px; width: min(680px, 92vw); max-height: 90vh;
+    display: flex; flex-direction: column; min-height: 0; gap: 2px;
     box-shadow: 0 8px 32px rgba(0,0,0,.3);
   }
   /* Für Dialoge, in denen YAML steht: dort zählt jede Spalte, damit Zeilen nicht umbrechen. */
-  .dialog.wide { width: min(1180px, 96vw); }
-  .dialog h3 { margin: 0 0 4px; font-weight: 400; }
-  .dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  /* Höhe am Fenster statt an einer festen Zeilenzahl: auf einem großen Schirm soll auch viel zu
-     sehen sein, auf einem kleinen darf der Dialog nicht über den Rand hinauswachsen. Ziehen geht
-     weiterhin (resize: vertical). */
-  textarea.gross { height: 62vh; min-height: 180px; }
-  textarea.mittel { height: 28vh; min-height: 120px; }
+  .dialog.wide { width: min(1180px, 96vw); height: 90vh; }
+  .dialog h3 { margin: 0 0 4px; font-weight: 400; flex: none; }
+  .dialog > .hint, .dialog > .status { flex: none; }
+  /* Das Eingabefeld bekommt den Rest der Höhe; alles andere behält seine eigene. */
+  .dialog .field.fuellend { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
+  .dialog .field.fuellend > label, .dialog .field.fuellend > .desc { flex: none; }
+  /* align-items: center aus .field .row würde das Feld auf seine Eigenhöhe zusammenziehen. */
+  .dialog .field.fuellend > .row { flex: 1; min-height: 0; align-items: stretch; }
+  .dialog .field.fuellend textarea { height: 100%; resize: none; }
+  .dialog .actions {
+    display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+    margin-top: 14px; flex: none;
+  }
+  .dialog .actions button { flex: none; }
+  /* Dialoge ohne füllendes Feld (Sicherungen) dürfen weiterhin scrollen. */
+  .dialog:not(.wide) { overflow-y: auto; }
   .empty { color: var(--secondary-text-color, #727272); font-style: italic; font-size: 14px; }
 `;
 
@@ -3181,15 +3194,14 @@ class NsPanelUiConfigPanel extends PanelBase {
         <div class="dialog body wide">
           <h3>YAML zum aktuellen Stand</h3>
           <p class="hint" id="yaml-hint">Wird geladen…</p>
-          <div class="field">
-            <div class="row"><textarea id="yaml-text" class="gross" spellcheck="false"
-              wrap="off"></textarea></div>
+          <div class="field fuellend">
+            <div class="row"><textarea id="yaml-text" spellcheck="false" wrap="off"></textarea></div>
           </div>
           <div class="status" id="yaml-status"></div>
           <div class="actions">
             <button id="yaml-close">Schließen</button>
             <button id="yaml-copy">Kopieren</button>
-            <button class="primary" id="yaml-apply">Übernehmen</button>
+            <button class="primary" id="yaml-apply" disabled>Übernehmen</button>
           </div>
         </div>
       </div>`;
@@ -3202,6 +3214,52 @@ class NsPanelUiConfigPanel extends PanelBase {
       if (event.target.classList.contains("overlay")) close();
     });
 
+    const applyBtn = host.querySelector("#yaml-apply");
+
+    /**
+     * Syntaxprüfung – **auf dem Server, mit demselben Parser, der den Text später wirklich liest.**
+     * Eine Nachbildung im Browser könnte nur raten; ein „sieht gültig aus“, das beim Übernehmen
+     * doch scheitert, wäre schlimmer als keine Prüfung. Solange etwas nicht stimmt, bleibt
+     * *Übernehmen* gesperrt.
+     */
+    let pruefTimer = null;
+    const pruefen = async () => {
+      const text = area.value;
+      if (!text.trim()) {
+        applyBtn.disabled = true;
+        statusEl.textContent = "Leer – nichts zu übernehmen.";
+        statusEl.className = "status err";
+        return;
+      }
+      statusEl.textContent = "Prüfe…";
+      statusEl.className = "status";
+      try {
+        const result = await this._hass.callApi("POST", "nspanel_ui_config/import", { text });
+        if (text !== area.value) return; // in der Zwischenzeit weitergetippt
+        const karten = ((result.model || {}).cards || []).length;
+        const befunde = (result.findings || []).length;
+        applyBtn.disabled = false;
+        statusEl.textContent =
+          `YAML in Ordnung – ${karten} Karte(n)` +
+          (befunde ? `, ${befunde} Hinweis(e) nach dem Übernehmen.` : ".");
+        statusEl.className = "status ok";
+      } catch (err) {
+        if (text !== area.value) return;
+        applyBtn.disabled = true;
+        statusEl.textContent = this._errText(err);
+        statusEl.className = "status err";
+      }
+    };
+
+    area.addEventListener("input", () => {
+      clearTimeout(pruefTimer);
+      // Bis die Prüfung durch ist, nicht übernehmbar – sonst klickt man schneller als der Parser.
+      applyBtn.disabled = true;
+      statusEl.textContent = "…";
+      statusEl.className = "status";
+      pruefTimer = setTimeout(pruefen, 700);
+    });
+
     try {
       const antwort = await this._hass.callApi("POST", "nspanel_ui_config/yaml", {
         model: this._model,
@@ -3212,6 +3270,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           antwort.path ? ` (<code>${esc(antwort.path)}</code>)` : ""
         }. <b>Übernehmen</b> liest den Text zurück in den Editor – geschrieben wird er erst mit
          <b>Speichern</b>.`;
+      await pruefen();
     } catch (err) {
       host.querySelector("#yaml-hint").textContent = "";
       statusEl.textContent = `Nicht abrufbar: ${this._errText(err)}`;
@@ -3274,9 +3333,9 @@ class NsPanelUiConfigPanel extends PanelBase {
               Leer lassen, um den beim Einrichten hinterlegten Pfad zu verwenden.</div>
             <div class="row"><input type="text" id="imp-path" placeholder="/config/appdaemon/apps/apps.yaml"></div>
           </div>
-          <div class="field">
+          <div class="field fuellend">
             <label>…oder YAML direkt einfügen</label>
-            <div class="row"><textarea id="imp-text" class="mittel" spellcheck="false" wrap="off"
+            <div class="row"><textarea id="imp-text" spellcheck="false" wrap="off"
               placeholder="nspanel-1:\n  module: ...\n  config:\n    ..."></textarea></div>
           </div>
           <div class="field" id="imp-app-field" hidden>
