@@ -111,6 +111,63 @@ def test_jinja_template_ueberlebt_unveraendert() -> None:
     assert _roundtrip(block)["cards"][0]["entities"][0]["color"] == template
 
 
+def _dump(block: dict) -> str:
+    """YAML-Text zu einem Konfigurationsblock — für Tests, die auf die *Form* der Datei schauen."""
+    return generator.dump_config_yaml(importer.config_block_to_model(block))
+
+
+def _block_mit_template(template: str) -> dict:
+    return {"cards": [{"type": "cardGrid", "entities": [{"entity": "sensor.x", "value": template}]}]}
+
+
+def test_mehrzeiliges_template_wird_ein_literalblock() -> None:
+    """Sonst stünde ein über mehrere Zeilen geschriebenes Template als eine Zeile voller \\n da.
+
+    Inhaltlich wäre das richtig, aber niemand könnte die Datei noch lesen — und sie landet in der
+    Konfiguration des Nutzers, nicht in einem Cache.
+    """
+    template = "{% if is_state('input_boolean.party','on') %}\n  [255, 0, 200]\n{% else %}\n  [0, 0, 0]\n{% endif %}"
+    text = _dump(_block_mit_template(template))
+
+    assert "value: |-" in text, text
+    assert "\\n" not in text, "Zeilenumbrüche gehören in den Block, nicht in Escapes"
+    # Die Zeilen stehen einzeln in der Datei, jede für sich eingerückt.
+    zeilen = [zeile.strip() for zeile in text.splitlines()]
+    assert "{% else %}" in zeilen, text
+    assert "[255, 0, 200]" in zeilen
+    assert _roundtrip(_block_mit_template(template))["cards"][0]["entities"][0]["value"] == template
+
+
+def test_template_mit_beiden_anfuehrungszeichen_bleibt_lesbar() -> None:
+    """Apostroph *und* Anführungszeichen: einfache Quotes würden jeden Apostroph verdoppeln."""
+    template = "{{ iif(is_state('x','on'), \"an\", 'aus') }}"
+    text = _dump(_block_mit_template(template))
+
+    assert "''" not in text, text
+    assert 'value: "{{ iif(is_state(' in text
+    assert _roundtrip(_block_mit_template(template))["cards"][0]["entities"][0]["value"] == template
+
+
+def test_backslash_bleibt_bei_einfachen_quotes() -> None:
+    """Ein Backslash müsste in doppelten Quotes verdoppelt werden, in einfachen nicht."""
+    template = r"{{ states('sensor.x') | regex_replace('\d+', '') }}"
+    text = _dump(_block_mit_template(template))
+
+    assert r"\\" not in text, text
+    assert _roundtrip(_block_mit_template(template))["cards"][0]["entities"][0]["value"] == template
+
+
+def test_mehrzeiliger_wert_ohne_blockform_bleibt_trotzdem_heil() -> None:
+    """Ein Leerzeichen am Zeilenende lässt keinen Literalblock zu — der Wert darf nicht leiden.
+
+    PyYAML weicht dann selbst auf doppelte Quotes aus; erzwungen wird der Block also nirgends.
+    """
+    for template in ("{{ a }} \n{{ b }}", "\n{{ b }}", "{{ a }}\n"):
+        text = _dump(_block_mit_template(template))
+        gelesen = yaml.safe_load(text)["cards"][0]["entities"][0]["value"]
+        assert gelesen == template, f"{template!r} kam als {gelesen!r} zurück"
+
+
 def test_nicht_dict_entity_geht_nicht_verloren() -> None:
     """Kaputte Konfiguration darf den Import nicht sprengen — der Editor soll sie anzeigen können."""
     block = {"cards": [{"type": "cardEntities", "entities": ["light.kaputt"]}]}

@@ -63,10 +63,18 @@ def _represent_list(dumper: yaml.SafeDumper, data: list[Any]) -> yaml.Node:
 
 
 def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.Node:
+    # Mehrzeiliges als Literalblock. Ein über mehrere Zeilen geschriebenes Jinja-Template stünde
+    # sonst als eine einzige lange Zeile voller \n-Escapes in der Datei — inhaltlich richtig, aber
+    # nicht mehr lesbar. Lässt der Wert keinen Block zu (führende/abschließende Leerzeichen, \r),
+    # wählt PyYAML von sich aus doppelte Quotes; erzwungen wird hier also nichts.
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
     # Jinja-Templates enthalten fast immer Apostrophe. In einfachen Quotes müsste PyYAML jeden davon
-    # verdoppeln ('' statt '), was Templates praktisch unlesbar macht — also doppelte Quotes, solange
-    # der String das ohne Escaping zulässt.
-    if "'" in data and not any(char in data for char in '"\\\n'):
+    # verdoppeln ('' statt '), was Templates praktisch unlesbar macht — also doppelte Quotes, sofern
+    # die nicht ihrerseits mehr zu escapen hätten. Ein Backslash schließt das aus: den müssten
+    # doppelte Quotes verdoppeln, einfache nicht.
+    if "'" in data and "\\" not in data and data.count('"') < data.count("'"):
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style='"')
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 

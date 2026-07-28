@@ -3,6 +3,40 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.17.2 – 2026-07-28
+
+### Mehrzeilige Templates standen als eine Zeile voller `\n` in der Datei
+
+Wer ein Template über mehrere Zeilen schreibt – das Eingabefeld ist ein mehrzeiliger Kasten und lädt
+dazu ein –, fand es in der erzeugten YAML als **eine einzige lange Zeile** wieder, mit `\n` an jeder
+Umbruchstelle:
+
+```yaml
+value: "{% if is_state('input_boolean.party','on') %}\n  [255, 0, 200]\n{% else %}\n  [0, 0, 0]\n{% endif %}"
+```
+
+Gelesen hat das Backend immer den richtigen Text – der Wert war nie beschädigt, ein Roundtrip kam
+unverändert zurück. Nur ansehen konnte man sich die Datei nicht mehr, und sie landet nun einmal in
+der Konfiguration des Nutzers. Jetzt steht dort ein Literalblock, Zeile für Zeile:
+
+```yaml
+value: |-
+  {% if is_state('input_boolean.party','on') %}
+    [255, 0, 200]
+  {% else %}
+    [0, 0, 0]
+  {% endif %}
+```
+
+Denselben Ursprung hatte ein zweiter Fall: enthielt ein Template Apostroph **und**
+Anführungszeichen, verdoppelte PyYAML jeden Apostroph (`is_state(''x'',''on'')`). Der Umweg auf
+doppelte Quotes, der genau das verhindern soll, griff nur bei Templates ganz ohne `"`, `\` und
+Zeilenumbruch. Gewählt wird jetzt die Form, die weniger zu escapen hat; ein Backslash bleibt bei den
+einfachen Quotes, weil doppelte ihn verdoppeln müssten.
+
+Beim nächsten Speichern werden betroffene Stellen einmalig umformatiert – inhaltlich ändert sich
+nichts, die Sicherung davor entsteht wie immer.
+
 ## 0.17.1 – 2026-07-27
 
 ### Der Aufruf-Knopf fehlte ausgerechnet im leeren Zustand
