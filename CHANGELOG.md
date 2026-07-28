@@ -3,6 +3,22 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.18.3 – 2026-07-28
+
+### Auf dem Handy war vom Editor nichts zu sehen
+
+Der Editor war fürs Tablet gebaut: die Seitenleiste liegt mit **festen 290 px** neben dem Inhalt.
+Auf einem Telefon (meist 360–400 CSS-Pixel breit) blieb für das Formular ein Streifen von wenigen
+Pixeln – der Bildschirm sah leer aus. Eine Media-Query gab es bis jetzt nicht.
+
+- Unterhalb von 700 px liegen Kartenliste und Formular **untereinander** statt nebeneinander; die
+  Liste bekommt höchstens 42 % der Höhe (unter 480 px: 34 %), der Rest gehört dem Formular.
+- Kopfzeile, Ränder und Dialoge sind dort kompakter.
+- Die Displayfläche bleibt bei ihren 480 px – sie soll maßstäblich sein – und wird stattdessen
+  waagerecht gescrollt.
+- Die Seitenleiste zeigt jetzt „Wird geladen…", solange Modell und Schema fehlen. Vorher war sie
+  in dieser Zeit leer, was auf einem schmalen Schirm wie ein Defekt aussah.
+
 ## 0.18.2 – 2026-07-28
 
 ### Der YAML-Dialog lag quer – und prüft jetzt beim Tippen

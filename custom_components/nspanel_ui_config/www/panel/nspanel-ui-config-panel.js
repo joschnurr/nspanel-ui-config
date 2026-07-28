@@ -325,6 +325,34 @@ const STYLES = `
     color: #7f8590; font-size: 20px;
   }
 
+  /* --- Schmale Bildschirme (Handy) -----------------------------------------------------------
+     Der Editor war fürs Tablet gebaut: die Seitenleiste liegt mit festen 290 px neben dem Inhalt.
+     Auf einem Telefon (oft 360–400 CSS-Pixel breit) bleibt dafür kein Platz — die Karten-Liste
+     füllte den Schirm, und vom Formular war nur ein Streifen zu sehen. Unterhalb von 700 px liegen
+     Liste und Formular deshalb untereinander. */
+  @media (max-width: 700px) {
+    .body { flex-direction: column; }
+    nav {
+      width: auto; max-height: 42vh;
+      border-right: none; border-bottom: 1px solid var(--ns-border);
+    }
+    main { padding: 12px 14px; }
+    header { padding: 8px 12px; gap: 6px; }
+    header h1 { font-size: 16px; flex-basis: 100%; }
+    header button { padding: 5px 9px; font-size: 13px; }
+    /* Die Displayfläche ist 480 px breit und bleibt es – sie soll ja maßstäblich sein.
+       Auf schmalen Geräten wird sie deshalb waagerecht gescrollt statt gestaucht. */
+    .screenwrap { padding: 0 8px 10px; }
+    fieldset { padding: 10px 10px; }
+    .dialog { width: 96vw; padding: 14px 12px; }
+  }
+
+  /* Sehr schmal: die Seitenleiste darf nicht die halbe Höhe fressen. */
+  @media (max-width: 480px) {
+    nav { max-height: 34vh; }
+    header h1 .version { display: block; margin-left: 0; }
+  }
+
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.45);
     display: flex; align-items: center; justify-content: center; z-index: 10;
@@ -1238,7 +1266,9 @@ class NsPanelUiConfigPanel extends PanelBase {
   _renderNav() {
     const nav = this._$("nav");
     if (!this._model || !this._schema) {
-      nav.innerHTML = "";
+      // Sichtbar machen, dass noch geladen wird: eine leere Leiste sieht auf einem schmalen
+      // Bildschirm aus wie ein kaputtes Panel – dort füllt sie fast den ganzen Schirm.
+      nav.innerHTML = `<div class="empty" style="padding:8px">Wird geladen…</div>`;
       return;
     }
     const sel = this._selection;
