@@ -1134,6 +1134,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           <h1>NSPanel UI Konfiguration <span class="version" title="Fassung, die dieser Browser geladen hat – nach einem Update die Seite neu laden (Strg+Shift+R)">v${esc(PANEL_VERSION)}</span></h1>
           <span class="dirty" id="dirty"></span>
           <button id="btn-import">Importieren…</button>
+          <button id="btn-yaml">YAML ansehen…</button>
           <button id="btn-backups">Sicherungen…</button>
           <button id="btn-save">Speichern</button>
           <button id="btn-generate">YAML erzeugen</button>
@@ -1151,6 +1152,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       <datalist id="entity-list"></datalist>
     `;
     this._$("btn-import").addEventListener("click", () => this._openImportDialog());
+    this._$("btn-yaml").addEventListener("click", () => this._openYamlDialog());
     this._$("btn-backups").addEventListener("click", () => this._openBackupDialog());
     this._$("btn-save").addEventListener("click", () => this._save());
     this._$("btn-generate").addEventListener("click", () => this._generate());
@@ -3152,6 +3154,102 @@ class NsPanelUiConfigPanel extends PanelBase {
       this._setStatus(`Zurückspielen fehlgeschlagen: ${this._errText(err)}`, "error");
     }
     this._renderStatus();
+  }
+
+  /**
+   * Die YAML zum aktuellen Stand – ansehen und bearbeiten.
+   *
+   * **Gezeigt wird der Stand im Editor, auch der ungespeicherte.** Die Frage, die man hier stellt,
+   * lautet „was landet beim nächsten Speichern in der Datei?" – nicht „was steht dort jetzt".
+   *
+   * **Bearbeiten geht über denselben Weg wie der Import**: der Text wird gelesen und ergibt ein
+   * Modell, das den Editor füllt. Die Datei selbst schreibt weiterhin nur der Generator; von Hand
+   * gepflegt wird sie nie, sonst wäre sie beim nächsten Speichern wieder überschrieben. Dass der
+   * Rundlauf dabei nichts verliert, hält `tests/test_roundtrip.py` fest.
+   */
+  async _openYamlDialog() {
+    const host = this._$("dialog-host");
+    host.innerHTML = `
+      <div class="overlay">
+        <div class="dialog body">
+          <h3>YAML zum aktuellen Stand</h3>
+          <p class="hint" id="yaml-hint">Wird geladen…</p>
+          <div class="field">
+            <div class="row"><textarea id="yaml-text" rows="20" spellcheck="false"
+              style="font-family:var(--code-font-family,monospace);white-space:pre"></textarea></div>
+          </div>
+          <div class="status" id="yaml-status"></div>
+          <div class="actions">
+            <button id="yaml-close">Schließen</button>
+            <button id="yaml-copy">Kopieren</button>
+            <button class="primary" id="yaml-apply">Übernehmen</button>
+          </div>
+        </div>
+      </div>`;
+
+    const close = () => (host.innerHTML = "");
+    const statusEl = host.querySelector("#yaml-status");
+    const area = host.querySelector("#yaml-text");
+    host.querySelector("#yaml-close").addEventListener("click", close);
+    host.querySelector(".overlay").addEventListener("click", (event) => {
+      if (event.target.classList.contains("overlay")) close();
+    });
+
+    try {
+      const antwort = await this._hass.callApi("POST", "nspanel_ui_config/yaml", {
+        model: this._model,
+      });
+      area.value = antwort.text || "";
+      host.querySelector("#yaml-hint").innerHTML =
+        `So sähe die Datei beim nächsten Speichern aus${
+          antwort.path ? ` (<code>${esc(antwort.path)}</code>)` : ""
+        }. <b>Übernehmen</b> liest den Text zurück in den Editor – geschrieben wird er erst mit
+         <b>Speichern</b>.`;
+    } catch (err) {
+      host.querySelector("#yaml-hint").textContent = "";
+      statusEl.textContent = `Nicht abrufbar: ${this._errText(err)}`;
+      statusEl.className = "status err";
+      return;
+    }
+
+    host.querySelector("#yaml-copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(area.value);
+        statusEl.textContent = "In die Zwischenablage kopiert.";
+        statusEl.className = "status ok";
+      } catch (err) {
+        // Ohne Berechtigung (oder ohne https) gibt es die Zwischenablage nicht – dann wenigstens
+        // markieren, damit Strg+C greift.
+        area.select();
+        statusEl.textContent = `Zwischenablage nicht verfügbar (${this._errText(err)}) – Text ist markiert.`;
+        statusEl.className = "status err";
+      }
+    });
+
+    host.querySelector("#yaml-apply").addEventListener("click", async () => {
+      statusEl.textContent = "Lese…";
+      statusEl.className = "status";
+      try {
+        const result = await this._hass.callApi("POST", "nspanel_ui_config/import", {
+          text: area.value,
+        });
+        this._model = result.model;
+        this._findings = result.findings || [];
+        this._selection = { kind: "global", index: 0 };
+        this._dirty = true;
+        close();
+        this._renderAll();
+        this._setStatus(
+          "YAML übernommen. Noch nicht gespeichert – „Speichern“ übernimmt den Stand.",
+          "ok"
+        );
+      } catch (err) {
+        // Bewusst *nicht* schließen: der bearbeitete Text soll nicht verlorengehen, nur weil ein
+        // Doppelpunkt fehlt.
+        statusEl.textContent = `Nicht übernommen: ${this._errText(err)}`;
+        statusEl.className = "status err";
+      }
+    });
   }
 
   _openImportDialog() {

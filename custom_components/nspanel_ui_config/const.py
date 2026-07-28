@@ -66,6 +66,9 @@ API_CONFIG: Final = "/api/nspanel_ui_config/config"
 API_GENERATE: Final = "/api/nspanel_ui_config/generate"
 API_IMPORT: Final = "/api/nspanel_ui_config/import"
 API_SCHEMA: Final = "/api/nspanel_ui_config/schema"
+# Die YAML zum aktuellen Stand, *ohne* sie zu schreiben — für die Ansicht im Editor. Bewusst
+# getrennt von API_GENERATE: das schreibt die Datei und stößt den AppDaemon-Reload an.
+API_YAML: Final = "/api/nspanel_ui_config/yaml"
 API_BACKUPS: Final = "/api/nspanel_ui_config/backups"
 API_BACKUP_RESTORE: Final = "/api/nspanel_ui_config/backups/restore"
 # Was das Backend zuletzt ans Display geschickt hat (Mitschnitt über MQTT, siehe live.py).

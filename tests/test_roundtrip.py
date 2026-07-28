@@ -78,6 +78,25 @@ def test_roundtrip_ueber_yaml_text_ist_verlustfrei() -> None:
     assert _roundtrip(block) == block
 
 
+def test_erzeugte_yaml_laesst_sich_wieder_einlesen() -> None:
+    """Darauf beruht „YAML ansehen → Übernehmen" im Editor.
+
+    Der Dialog zeigt die erzeugte Datei und liest den bearbeiteten Text über denselben Weg zurück
+    wie der Import. Das setzt voraus, dass ``parse_apps_yaml`` die *ausgelagerte* Form versteht —
+    ohne App-Wrapper, mit der Kopfzeilen-Warnung davor. Ginge das schief, stünde im Editor nach dem
+    Übernehmen ein leeres Modell.
+    """
+    model = importer.parse_apps_yaml(_fixture_text())
+    text = generator.dump_config_yaml(model)
+    assert text.startswith("# AUTOMATISCH ERZEUGT")
+
+    zurueck = importer.parse_apps_yaml(text)
+    assert zurueck == model
+
+    # Und der Weg ist wiederholbar: zweimal durch den Dialog ändert nichts mehr.
+    assert importer.parse_apps_yaml(generator.dump_config_yaml(zurueck)) == model
+
+
 def test_roundtrip_ist_stabil_bei_wiederholung() -> None:
     """Zweimal generieren darf nichts weiter verändern (kein schleichendes Umformen)."""
     block = _config_block(_fixture_text(), "nspanel-1")

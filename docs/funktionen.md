@@ -250,6 +250,22 @@ Sie erscheinen ab dem zweiten getippten Zeichen und auf 50 Treffer begrenzt, dam
 Installation im DOM steht. `delete` wird ebenfalls angeboten – damit lässt das Backend den Platz
 bewusst frei.
 
+## YAML ansehen und bearbeiten
+
+**YAML ansehen…** in der Kopfzeile zeigt die Datei, die beim nächsten Speichern entstehen würde –
+aus dem Stand *im Editor*, auch dem ungespeicherten. Die Frage lautet „was landet gleich in der
+Datei?", nicht „was steht dort jetzt". Erzeugt wird der Text über `POST …/yaml`, der bewusst nichts
+schreibt und keinen Reload auslöst.
+
+Der Text ist bearbeitbar. **Übernehmen** liest ihn über denselben Weg zurück wie der Import: aus dem
+YAML wird ein Modell, das den Editor füllt; geschrieben wird erst mit *Speichern*. Damit bleibt es
+bei einer Quelle der Wahrheit – die Ausgabedatei erzeugt weiterhin nur der Generator, von Hand
+gepflegt wird sie nie (beim nächsten Speichern wäre das wieder überschrieben).
+
+Ein YAML-Fehler lässt den Dialog offen stehen und meldet die Stelle, statt den bearbeiteten Text zu
+verwerfen. Dass der Rundlauf nichts verliert – auch die ausgelagerte Form ohne App-Wrapper, mit der
+Kopfzeilen-Warnung davor –, hält `tests/test_roundtrip.py` fest.
+
 ## Sicherungen
 
 Vor jedem Überschreiben der Ausgabedatei wandert der bisherige Stand nach `backups/` neben der
@@ -304,6 +320,7 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 | `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde |
 | `POST` | `/api/nspanel_ui_config/config` | Modell speichern |
 | `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name`, `save`) |
+| `POST` | `/api/nspanel_ui_config/yaml` | YAML zum übergebenen Stand (`{"model": …}`, ohne Body der gespeicherte) — **nur zum Ansehen**, schreibt nichts |
 | `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen, schreiben und AppDaemon neu laden (`{"reload": false}` überspringt den Reload) |
 | `GET` | `/api/nspanel_ui_config/backups` | vorhandene Sicherungen der Ausgabedatei |
 | `POST` | `/api/nspanel_ui_config/backups/restore` | eine Sicherung zurückspielen (`{"name": …}`) |

@@ -5,6 +5,7 @@ Endpunkte (alle nur für Admins):
   GET  /api/nspanel_ui_config/config    → aktuelles Config-Modell (JSON)
   POST /api/nspanel_ui_config/config    → Modell speichern (JSON)
   POST /api/nspanel_ui_config/import    → bestehende apps.yaml einlesen (Pfad oder Text)
+  POST /api/nspanel_ui_config/yaml      → YAML zum übergebenen Stand, nur zum Ansehen
   POST /api/nspanel_ui_config/generate  → YAML erzeugen, schreiben und AppDaemon neu laden
   GET  /api/nspanel_ui_config/backups   → vorhandene Sicherungen der Ausgabedatei
   POST /api/nspanel_ui_config/backups/restore → eine Sicherung zurückspielen
@@ -34,6 +35,7 @@ from .const import (
     API_LIVE,
     API_SCHEMA,
     API_SHOW,
+    API_YAML,
     CONF_BACKUP_COUNT,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
@@ -41,7 +43,7 @@ from .const import (
     DEFAULT_BACKUP_COUNT,
     DOMAIN,
 )
-from .generator import write_config_yaml
+from .generator import dump_config_yaml, write_config_yaml
 from .importer import find_apps, parse_apps_yaml
 from .reload import ReloadError, async_trigger_reload
 from .schema import empty_model, schema_payload, validate_model
@@ -54,6 +56,7 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelSchemaView(hass))
     hass.http.register_view(NsPanelConfigView(hass))
     hass.http.register_view(NsPanelImportView(hass))
+    hass.http.register_view(NsPanelYamlView(hass))
     hass.http.register_view(NsPanelGenerateView(hass))
     hass.http.register_view(NsPanelBackupsView(hass))
     hass.http.register_view(NsPanelBackupRestoreView(hass))
@@ -223,6 +226,50 @@ class NsPanelImportView(_NsPanelView):
                 "model": model,
                 "findings": validate_model(model),
                 "saved": bool(payload.get("save")),
+            }
+        )
+
+
+class NsPanelYamlView(_NsPanelView):
+    """Liefert die YAML zum aktuellen Stand — **ohne** zu schreiben und ohne Reload.
+
+    Body optional: ``{"model": {…}}``. Der Editor schickt seinen *gerade bearbeiteten* Stand mit,
+    auch den ungespeicherten: gezeigt werden soll, was beim nächsten Speichern in der Datei landen
+    würde, nicht was zuletzt gespeichert wurde. Ohne Body gilt das gespeicherte Modell.
+
+    ``path`` sagt dazu, wohin diese YAML beim Speichern geschrieben wird — im Editor steht die
+    Ansicht sonst ohne Bezug da.
+    """
+
+    url = API_YAML
+    name = "api:nspanel_ui_config:yaml"
+
+    async def post(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = {}  # leerer Body ist erlaubt: dann der gespeicherte Stand
+        if not isinstance(payload, dict):
+            payload = {}
+
+        model = payload.get("model")
+        if not isinstance(model, dict):
+            model = data.get("model") or {}
+
+        try:
+            text = await self.hass.async_add_executor_job(dump_config_yaml, model)
+        except Exception as err:  # noqa: BLE001 – kaputtes Modell des Nutzers, nicht unseres
+            _LOGGER.error("YAML-Vorschau fehlgeschlagen: %s", err)
+            return self.json_message(f"YAML nicht erzeugbar: {err}", HTTPStatus.BAD_REQUEST)
+
+        return self.json(
+            {
+                "text": text,
+                "path": data["options"].get(CONF_OUTPUT_PATH),
+                "findings": validate_model(model),
             }
         )
 

@@ -3,6 +3,28 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.18.0 – 2026-07-28
+
+### Die YAML ansehen – und darin arbeiten
+
+Bisher sah man das Ergebnis erst in der Datei, also nach dem Schreiben. **YAML ansehen…** in der
+Kopfzeile zeigt sie jetzt vorher: den Stand *im Editor*, auch den ungespeicherten. Die Frage, die
+man vor dem Speichern stellt, lautet ja „was landet gleich in der Datei?" und nicht „was steht dort
+noch von letztem Mal".
+
+Dahinter steht ein eigener Endpunkt (`POST …/yaml`), der **nichts schreibt und keinen Reload
+auslöst** — im Unterschied zu *YAML erzeugen*, das beides tut. Wer nur nachsehen will, muss die
+Anlage dafür nicht anfassen.
+
+Der Text ist **bearbeitbar**. *Übernehmen* liest ihn über denselben Weg zurück wie der Import: aus
+dem YAML wird ein Modell, das den Editor füllt; geschrieben wird es erst mit *Speichern*. Damit
+bleibt es bei einer Quelle der Wahrheit — die Ausgabedatei erzeugt weiterhin nur der Generator. Von
+Hand gepflegt wird sie nach wie vor nicht: der nächste Speichervorgang überschriebe das ohnehin.
+
+Ein YAML-Fehler verwirft den bearbeiteten Text nicht, sondern lässt den Dialog stehen und nennt die
+Stelle. Dass der Rundlauf nichts verliert — auch in der ausgelagerten Form ohne App-Wrapper und mit
+der Kopfzeilen-Warnung davor —, hält ein neuer Test fest.
+
 ## 0.17.3 – 2026-07-28
 
 ### Die Live-Ansicht hielt `screensaver2` manchmal für den klassischen Screensaver
