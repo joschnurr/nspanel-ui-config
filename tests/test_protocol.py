@@ -129,14 +129,40 @@ def test_welcher_screensaver_es_ist_sagt_der_pagetype() -> None:
 
     Gefunden beim ersten Mitschnitt an einer echten Instanz: dort lief `screensaver2` mit 14
     Einträgen, erkannt wurde `screensaver` mit 6 Plätzen. Zwei Drittel wären weggefallen.
+
+    Solange die Zahl der Blöcke auch auf den klassischen passt, ist der pageType die einzige
+    Auskunft – und ohne ihn bleibt es beim klassischen.
     """
-    payload = "weatherUpdate" + "~text~sensor.x~A~65535~Name~Wert" * 12
-    assert protocol.parse_message(payload, "screensaver2")["cardType"] == "screensaver2"
-    assert protocol.parse_message(payload, "screensaver")["cardType"] == "screensaver"
-    # Ohne bekannten pageType bleibt es beim klassischen Screensaver.
-    assert protocol.parse_message(payload)["cardType"] == "screensaver"
+    wenige = "weatherUpdate" + "~text~sensor.x~A~65535~Name~Wert" * 3
+    assert protocol.parse_message(wenige, "screensaver2")["cardType"] == "screensaver2"
+    assert protocol.parse_message(wenige, "screensaver")["cardType"] == "screensaver"
+    assert protocol.parse_message(wenige)["cardType"] == "screensaver"
     # Ein Kartentyp, der gar kein Screensaver ist, darf nicht durchschlagen.
-    assert protocol.parse_message(payload, "cardGrid")["cardType"] == "screensaver"
+    assert protocol.parse_message(wenige, "cardGrid")["cardType"] == "screensaver"
+
+
+def test_mehr_eintraege_als_plaetze_verraten_screensaver2_ohne_pagetype() -> None:
+    """Der Fall, der in der Praxis auffiel: nach einem Neustart fehlt der pageType.
+
+    Im Ruhezustand schickt das Backend die Wetteraktualisierung immer wieder, den ``pageType`` aber
+    nur beim *Wechsel* in die Ruheanzeige. Nach einem Neustart der Integration ist er deshalb
+    unbekannt, und die Live-Ansicht zeichnete `screensaver2` als klassischen Screensaver – mit 6
+    statt 15 Plätzen, sichtbar an abgeschnittenen Beschriftungen.
+
+    Zwölf Blöcke kann der klassische nicht zeigen. Das ist hart entscheidbar und schlägt deshalb
+    auch einen anderslautenden pageType.
+    """
+    viele = "weatherUpdate" + "~text~sensor.x~A~65535~Name~Wert" * 12
+    assert protocol.parse_message(viele)["cardType"] == "screensaver2"
+    assert protocol.parse_message(viele, "cardGrid")["cardType"] == "screensaver2"
+    assert protocol.parse_message(viele, "screensaver")["cardType"] == "screensaver2"
+    assert protocol.parse_message(viele, "screensaver2")["cardType"] == "screensaver2"
+
+    # Genau an der Grenze: sechs Blöcke passen noch auf den klassischen, sieben nicht mehr.
+    grenze = "weatherUpdate" + "~text~sensor.x~A~65535~Name~Wert" * 6
+    assert protocol.parse_message(grenze)["cardType"] == "screensaver"
+    darueber = "weatherUpdate" + "~text~sensor.x~A~65535~Name~Wert" * 7
+    assert protocol.parse_message(darueber)["cardType"] == "screensaver2"
 
 
 def test_farben_werden_aus_dem_display_format_zurueckgerechnet() -> None:

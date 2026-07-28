@@ -20,6 +20,7 @@ const {
   entityObjectFields,
   navTargets,
   navSuggestions,
+  liveCardType,
   cardLabel,
   esc,
   isPlain,
@@ -157,6 +158,30 @@ test("navSuggestions deckelt die Entity-Vorschläge", () => {
   const treffer = navSuggestions([], ids, "lampe");
   assert.equal(treffer.length, 50);
   assert.equal(treffer[0].value, "light.lampe_000");
+});
+
+test("liveCardType lässt beim Screensaver die Konfiguration entscheiden", () => {
+  // Welche Bauart läuft, steht nicht in der Nachricht. Der Mitschnitt trägt den Typ nur, wenn kurz
+  // zuvor ein pageType kam – sonst rät er, und screensaver2 zeichnete als klassischer.
+  assert.equal(
+    liveCardType({ type: "screensaver2" }, { cardType: "screensaver" }),
+    "screensaver2"
+  );
+  assert.equal(
+    liveCardType({ type: "screensaver" }, { cardType: "screensaver2" }),
+    "screensaver"
+  );
+});
+
+test("liveCardType lässt gewöhnliche Karten unangetastet", () => {
+  // Bei allem außer dem Screensaver gilt weiter der Mitschnitt – die Live-Ansicht leitet nichts ab.
+  assert.equal(liveCardType({ type: "cardGrid" }, { cardType: "cardEntities" }), "cardEntities");
+  // Auch nicht, wenn nur eine der beiden Seiten ein Screensaver ist.
+  assert.equal(liveCardType({ type: "screensaver2" }, { cardType: "cardGrid" }), "cardGrid");
+  assert.equal(liveCardType({ type: "cardGrid" }, { cardType: "screensaver2" }), "screensaver2");
+  // Fehlende Angaben dürfen nicht werfen.
+  assert.equal(liveCardType(null, { cardType: "cardGrid" }), "cardGrid");
+  assert.equal(liveCardType({ type: "screensaver2" }, null), null);
 });
 
 test("setField löscht den Key bei undefined statt leere Werte zu speichern", () => {

@@ -29,6 +29,12 @@ from __future__ import annotations
 
 from typing import Any, Final
 
+from .schema import capacity_for
+
+# Plätze des klassischen Screensavers. Aus schema.py statt hier noch einmal hingeschrieben — die
+# Zahl steht dort neben der des alternativen Layouts und wird zusammen mit ihr gepflegt.
+_KLASSISCHE_SCREENSAVER_PLAETZE: Final[int] = capacity_for("screensaver") or 6
+
 TRENNER: Final = "~"
 
 # Trennt im Icon-Feld das Symbol von der Schriftgröße (siehe ``_eintrag``).
@@ -162,9 +168,16 @@ def parse_weather_update(payload: str, card_type: str | None = None) -> dict[str
     """Zerlegt eine ``weatherUpdate~``-Nachricht (die Ruheanzeige).
 
     **Welcher der beiden Screensaver es ist, steht nicht in der Nachricht** — beide Bauarten füllen
-    dieselben 6er-Blöcke, nur mit unterschiedlich vielen. Maßgeblich ist deshalb der zuletzt
-    gemeldete ``pageType``; ohne den gilt der klassische ``screensaver``. Das ist keine Feinheit:
-    ``screensaver2`` hat 15 Plätze statt 6, die Vorschau würde sonst zwei Drittel wegwerfen.
+    dieselben 6er-Blöcke, nur mit unterschiedlich vielen. Zwei Anhaltspunkte gibt es:
+
+    1. **Die Zahl der Blöcke.** Mehr als die sechs Plätze des klassischen kann nur ``screensaver2``
+       zeigen. Das ist hart entscheidbar und schlägt deshalb auch einen anderslautenden ``pageType``.
+    2. **Der zuletzt gemeldete** ``pageType``, sonst der klassische ``screensaver``.
+
+    Warum das zählt: Im Ruhezustand schickt das Backend die Wetteraktualisierung immer wieder, den
+    ``pageType`` aber nur beim *Wechsel* in die Ruheanzeige. Nach einem Neustart der Integration ist
+    er darum unbekannt — und ohne Punkt 1 liefe ``screensaver2`` als klassischer Screensaver in die
+    Vorschau, die dann zwei Drittel der Einträge wegwirft.
     """
     if not isinstance(payload, str) or not payload.startswith("weatherUpdate" + TRENNER):
         return None
@@ -173,9 +186,15 @@ def parse_weather_update(payload: str, card_type: str | None = None) -> dict[str
     while len(teile) >= 6:
         eintraege.append(_eintrag(teile[:6]))
         teile = teile[6:]
+    if len(eintraege) > _KLASSISCHE_SCREENSAVER_PLAETZE:
+        typ = "screensaver2"
+    elif card_type in ("screensaver", "screensaver2"):
+        typ = card_type
+    else:
+        typ = "screensaver"
     return {
         "instruction": "weatherUpdate",
-        "cardType": card_type if card_type in ("screensaver", "screensaver2") else "screensaver",
+        "cardType": typ,
         "title": "",
         "entities": eintraege,
         "navigation": [],

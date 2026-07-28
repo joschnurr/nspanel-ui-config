@@ -466,6 +466,23 @@ function navSuggestions(ziele, entityIds, text) {
   return [...treffer, ...entities];
 }
 
+/**
+ * Mit welchem Kartentyp die Live-Ansicht zeichnet.
+ *
+ * Normalerweise mit dem, der im Mitschnitt steht – die Live-Ansicht leitet nichts ab. Eine Ausnahme
+ * gibt es: **welche Screensaver-Bauart läuft, entscheidet die Konfiguration.** In der Nachricht
+ * steht sie nicht; der Mitschnitt trägt sie nur, wenn kurz zuvor ein `pageType` kam, und rät sonst.
+ * Stehen beide auf einem Screensaver, gilt deshalb der konfigurierte – sonst zeichnete ein
+ * `screensaver2` als klassischer, mit 6 statt 15 Plätzen.
+ */
+function liveCardType(karte, nachricht) {
+  const gemeldet = (nachricht && nachricht.cardType) || null;
+  const konfiguriert = isPlain(karte) && typeof karte.type === "string" ? karte.type : null;
+  const istScreensaver = (typ) => typeof typ === "string" && typ.startsWith("screensaver");
+  if (istScreensaver(konfiguriert) && istScreensaver(gemeldet)) return konfiguriert;
+  return gemeldet;
+}
+
 /** Beschriftung einer Karte in der Seitenleiste. */
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
@@ -1708,7 +1725,7 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     const model = (this._model.global || {}).model || "eu";
     const eintraege = nachricht.entities || [];
-    const info = capacityInfo(this._schema, nachricht.cardType, eintraege.length, model);
+    const info = capacityInfo(this._schema, liveCardType(gesucht, nachricht), eintraege.length, model);
     const layout = previewSlots({
       cardType: info.shownType,
       capacity: info.limit === null ? eintraege.length : info.limit,
@@ -3235,6 +3252,7 @@ export {
   entityObjectFields,
   navTargets,
   navSuggestions,
+  liveCardType,
   cardLabel,
   esc,
   isPlain,

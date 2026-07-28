@@ -3,6 +3,29 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.17.3 – 2026-07-28
+
+### Die Live-Ansicht hielt `screensaver2` manchmal für den klassischen Screensaver
+
+Dann quetschten sich die Kacheln in ein Layout mit **6 statt 15 Plätzen**, und die Beschriftungen
+brachen mitten im Wort ab. Das trat nicht immer auf, und der Grund dafür ist der eigentliche Fund:
+
+Im Ruhezustand schickt das Backend die Wetteraktualisierung (`weatherUpdate~…`) immer wieder — den
+`pageType`, der die Bauart nennt, aber **nur beim Wechsel** in die Ruheanzeige. In der Nachricht
+selbst steht sie nicht; beide Bauarten füllen dieselben 6er-Blöcke. Nach einem Neustart von Home
+Assistant ist der letzte `pageType` deshalb unbekannt — der Mitschnitt liegt im Speicher —, und es
+galt der klassische Screensaver. Bis zum nächsten Wechsel blieb es dabei.
+
+Zwei Stellen ziehen das jetzt gerade:
+
+- **Die Zahl der Blöcke entscheidet mit.** Mehr als sechs kann der klassische Screensaver nicht
+  zeigen; kommen mehr, ist es zwingend `screensaver2`. Das ist hart entscheidbar und schlägt sogar
+  einen anderslautenden `pageType`.
+- **Bei der Ruheanzeige gilt die Konfiguration.** Steht im Editor `screensaver2`, zeichnet die
+  Live-Ansicht auch so — welche Bauart läuft, ergibt sich aus der Konfiguration, nicht aus einer
+  Nachricht, die es nicht verrät. Für alle übrigen Karten bleibt es beim Mitschnitt: dort leitet die
+  Live-Ansicht weiterhin nichts ab.
+
 ## 0.17.2 – 2026-07-28
 
 ### Mehrzeilige Templates standen als eine Zeile voller `\n` in der Datei
