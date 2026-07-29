@@ -1,0 +1,107 @@
+# Beispiel-Konfiguration für nspanel-lovelace-ui — als Startpunkt gedacht.
+#
+# Wer noch keine apps.yaml hat, kann diese Datei im Editor unter „Importieren…" einlesen und
+# anschließend im Panel umbauen. Alle Entities hier sind **erfunden** und existieren in keiner
+# Installation: Der Editor markiert sie mit ⚠, sobald er sie in Home Assistant nicht findet — genau
+# das ist der Hinweis, welche Zeile noch dir gehört.
+#
+# Absichtlich klein gehalten. Was das Backend sonst noch kann, steht in
+# https://docs.nspanel.pky.eu — und in docs/funktionen.md dieser Integration.
+
+nspanel-1:
+  module: nspanel
+  class: NsPanelLovelaceUIManager
+  config:
+    # --- Verbindung zum Panel ---------------------------------------------------------------
+    # Die beiden Topics müssen zu deinem Tasmota-Gerät passen: NSPanel_1 ist der dort vergebene
+    # Name. Steht er falsch, bleibt das Display schwarz und niemand meldet einen Fehler.
+    panelRecvTopic: "NSPanel_1/tele/RESULT"
+    panelSendTopic: "NSPanel_1/cmnd/CustomSend"
+
+    # eu = Standardgerät (quer). us-l/us-p sind die US-Bauformen; us-p steht hochkant und zeigt
+    # auf manchen Karten mehr Einträge.
+    model: eu
+
+    # --- Verhalten --------------------------------------------------------------------------
+    sleepTimeout: 20          # Sekunden ohne Berührung bis zur Ruheanzeige
+    screenBrightness: 100     # während der Bedienung
+    sleepBrightness: 20       # in der Ruheanzeige
+    locale: "de_DE"
+    timeFormat: "%H:%M"
+    dateFormat: "%A, %d. %B %Y"
+
+    # --- Ruheanzeige ------------------------------------------------------------------------
+    # screensaver2 ist das neuere Layout mit 15 Plätzen; "screensaver" ist das klassische mit 6.
+    screensaver:
+      type: screensaver2
+      weatherUnit: celsius
+      # Die Wetter-Entity trägt das große Symbol und die Temperatur.
+      entity: weather.beispiel_zuhause
+      entities:
+        - entity: weather.beispiel_zuhause
+        - entity: sensor.beispiel_pv_heute
+          name: "PV Heute"
+          icon: mdi:solar-power
+        - entity: sensor.beispiel_luftfeuchte
+          name: "Luftfeuchte"
+      # Die zwei kleinen Symbole links und rechts neben dem Datum. altFont macht die Schrift größer.
+      statusIcon1:
+        entity: sensor.beispiel_heizung_vorlauf
+        icon: mdi:thermometer-water
+        altFont: true
+      statusIcon2:
+        entity: binary_sensor.beispiel_fenster
+        icon:
+          "on": mdi:window-open
+          "off": mdi:window-closed
+
+    # --- Karten -----------------------------------------------------------------------------
+    # Ein `key` lohnt sich an jeder Karte: nur damit lässt sie sich per navigate.<key> ansteuern —
+    # und der Editor kann sie am Gerät aufrufen.
+    cards:
+      - type: cardEntities
+        title: Wohnzimmer
+        key: wohnzimmer
+        entities:
+          - entity: light.beispiel_stehlampe
+          - entity: switch.beispiel_steckdose
+            name: Steckdose
+          # iText. zeigt festen Text statt eines Zustands – gut für Überschriften.
+          - entity: iText.
+            name: Guten Tag
+            icon: mdi:hand-wave
+            color: [255, 255, 0]
+          # Sprung auf eine andere Karte. Ohne Eintrag wie diesen ist eine versteckte Karte am
+          # Gerät gar nicht erreichbar.
+          - entity: navigate.heizung
+            name: Zur Heizung
+            icon: mdi:radiator
+
+      - type: cardGrid
+        title: Lichter
+        key: lichter
+        entities:
+          - entity: light.beispiel_kueche
+            name: Küche
+          - entity: light.beispiel_flur
+            name: Flur
+          - entity: light.beispiel_terrasse
+            name: Terrasse
+
+      - type: cardThermo
+        title: Heizung
+        key: thermostat
+        entity: climate.beispiel_wohnzimmer
+        temperatureUnit: celsius
+
+    # Versteckte Karten stehen nicht im Blätterlauf des Panels. Man erreicht sie nur über einen
+    # navigate.<key>-Eintrag – dafür bekommen sie oben statt der Blättertasten einen Zurück-Pfeil.
+    hiddenCards:
+      - type: cardGrid
+        title: Heizung
+        key: heizung
+        entities:
+          - entity: sensor.beispiel_heizung_vorlauf
+            name: Vorlauf
+          - entity: sensor.beispiel_heizung_ruecklauf
+            name: Rücklauf

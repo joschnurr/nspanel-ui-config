@@ -78,6 +78,24 @@ def test_roundtrip_ueber_yaml_text_ist_verlustfrei() -> None:
     assert _roundtrip(block) == block
 
 
+def test_beispielkonfiguration_ist_einlesbar_und_ohne_befund() -> None:
+    """``docs/beispiel-apps.yaml`` ist der Startpunkt für alle, die noch keine Konfiguration haben.
+
+    Sie wird im Editor importiert — eine Beispieldatei, die dabei stolpert oder Warnungen auslöst,
+    wäre der denkbar schlechteste erste Eindruck. Der Test hält sie deshalb an denselben Maßstäben
+    wie eine echte Konfiguration: einlesbar, ohne Validierungsbefund, verlustfrei im Rundlauf.
+    """
+    text = (Path(__file__).parents[1] / "docs" / "beispiel-apps.yaml").read_text(encoding="utf-8")
+    model = importer.parse_apps_yaml(text)
+
+    assert model["cards"], "Beispiel ohne Karten wäre kein Beispiel"
+    assert model["hiddenCards"], "die versteckte Karte zeigt, wozu navigate.<key> da ist"
+    assert model["screensaver"]["type"] == "screensaver2"
+    assert not schema.validate_model(model), schema.validate_model(model)
+
+    assert importer.parse_apps_yaml(generator.dump_config_yaml(model)) == model
+
+
 def test_erzeugte_yaml_laesst_sich_wieder_einlesen() -> None:
     """Darauf beruht „YAML ansehen → Übernehmen" im Editor.
 

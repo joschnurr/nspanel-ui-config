@@ -59,12 +59,12 @@ def test_maskierte_screensaver_eintraege_gelten_nicht_als_leer() -> None:
     """
     payload = (
         "weatherUpdate"
-        "~~~~31728~Wetter Seebach~20.9°C"
+        "~~~~31728~Wetter Zuhause~20.9°C"
         "~~~~17299~PV Heute~0.0 kWh"
     )
     eintraege = protocol.parse_message(payload, "screensaver2")["entities"]
     assert [e["leer"] for e in eintraege] == [False, False]
-    assert eintraege[0]["name"] == "Wetter Seebach"
+    assert eintraege[0]["name"] == "Wetter Zuhause"
     assert eintraege[0]["value"] == "20.9°C"
     assert eintraege[0]["type"] == ""
 

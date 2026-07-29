@@ -122,7 +122,14 @@ Home Assistant neu starten.
 
 Anschließend *Einstellungen → Geräte & Dienste → Integration hinzufügen → „NSPanel UI Config"*.
 Im Dialog werden Ausgabepfad, Reload-Weg und optional eine zu importierende `apps.yaml` abgefragt.
-Der Editor erscheint danach als **NSPanel UI** in der Seitenleiste.
+Angeboten wird dabei nur, was auf deiner Installationsart laufen kann. Der Editor erscheint danach
+als **NSPanel UI** in der Seitenleiste.
+
+**Noch keine Konfiguration?** Dann im Editor *Importieren…* öffnen und
+[`docs/beispiel-apps.yaml`](docs/beispiel-apps.yaml) einfügen — Ruheanzeige, drei Karten und eine
+Unterseite als Gerüst. Die Entities darin sind erfunden; der Editor markiert sie mit ⚠, und genau
+diese Stellen ersetzt du durch deine eigenen. Der ganze Ablauf steht in
+[docs/einrichtung.md](docs/einrichtung.md#neu-anfangen).
 
 ### Bestehende `apps.yaml` umstellen
 
@@ -177,7 +184,8 @@ NSPANEL_REAL_APPS_YAML=/pfad/zu/appdaemon/apps/apps.yaml pytest
 
 | | |
 | --- | --- |
-| [Einrichtung](docs/einrichtung.md) | bestehende `apps.yaml` umstellen, Bind-Mount, Reihenfolge, Rückweg |
+| [Einrichtung](docs/einrichtung.md) | Schritt für Schritt – neu anfangen oder bestehende `apps.yaml` umstellen, Bind-Mount, Reload, Abnahme |
+| [Beispielkonfiguration](docs/beispiel-apps.yaml) | Startpunkt zum Importieren: Ruheanzeige, drei Karten, eine Unterseite |
 | [Funktionen im Detail](docs/funktionen.md) | Template-Editor, Icons, Farben, Reload-Wege, HTTP-API |
 | [Anzeigekapazität](docs/kapazitaet.md) | wie viele Entities je Karte und Modell wirklich sichtbar sind |
 | [Architektur](docs/architecture.md) | Transportweg, Datenmodell, Designentscheidungen |

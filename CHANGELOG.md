@@ -3,6 +3,52 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.21.0 – 2026-07-29
+
+### Eine Beispielkonfiguration zum Anfangen
+
+Die Einrichtungsdoku kannte bisher nur einen Weg: eine bestehende `apps.yaml` umstellen. Wer neu
+anfängt, stand vor einem leeren Editor. `docs/beispiel-apps.yaml` ist jetzt der Startpunkt — im
+Editor unter *Importieren…* einlesen, und es stehen eine Ruheanzeige, drei Karten und eine
+Unterseite da, kommentiert und mit den Stellen, auf die es ankommt (`key`, `navigate.<key>`,
+`statusIcon`, versteckte Karten).
+
+**Alle Entities darin sind erfunden.** Das ist Absicht: Der Editor markiert unbekannte Entities
+mit ⚠ — und genau diese Markierungen sind die Liste dessen, was noch zu ersetzen ist. Ein Test hält
+die Datei an denselben Maßstäben wie eine echte Konfiguration: einlesbar, ohne Validierungsbefund,
+verlustfrei im Rundlauf. Eine Beispieldatei, die beim ersten Import stolpert, wäre der schlechteste
+denkbare erste Eindruck.
+
+### Die Einrichtung führt jetzt durch beide Wege — und bis zur Abnahme
+
+[`docs/einrichtung.md`](docs/einrichtung.md) beginnt mit einem Wegweiser (neu anfangen oder
+umstellen), zieht die Pfadfrage nach vorn, weil sie für beide gilt, und endet nicht mehr beim
+Reload, sondern bei der Frage, ob er auch wirkt:
+
+**Neu: „Prüfen, ob es wirkt".** Vier Schritte — Titel ändern, erzeugen, warten, Karte am Gerät
+aufrufen — und eine Tabelle, die jede Beobachtung einordnet: neuer Titel, alter Titel, alter Titel
+auch nach dem Neustart, leere Live-Ansicht. Genau diese Kette hat einen halben Vormittag gekostet,
+weil der Reload lautlos ins Leere lief; sie steht jetzt aufgeschrieben da.
+
+Dazu die Erklärung, die dabei am meisten gefehlt hat: Die Live-Ansicht zeigt den **Mitschnitt**. Eine
+Karte, die seit der Änderung nicht aufgerufen wurde, steht dort zwangsläufig im alten Stand — auch
+wenn alles richtig läuft.
+
+### Kein Ortsname mehr im Repo
+
+In den Protokoll-Tests stand „Wetter Seebach" aus einem Mitschnitt der echten Anlage. Jetzt „Wetter
+Zuhause". Sonst war nichts Persönliches zu finden: Die Testfixture nutzt erfundene Entity-IDs, die
+Beispiele in der Doku sind generisch, und die Bilder zeigen ein Panel ohne Bezug zu einer bestimmten
+Installation.
+
+### HACS zeigt weiterhin den Platzhalter – und daran ändert sich so bald nichts
+
+Nachgeprüft: Die neueste HACS-Fassung ist **2.0.5 vom 28.01.2025**, seit anderthalb Jahren kein
+Release. Solange HACS seine Bild-URLs fest gegen das Brands-CDN baut, bleibt der Platzhalter stehen —
+unabhängig davon, dass die HACS-Doku inzwischen das `brand/`-Verzeichnis im Repository als
+bevorzugten Weg nennt. Am Repo liegt es nicht: Die Bilder sind vorhanden, haben die geforderten
+Maße, und Home Assistant selbst zeigt sie korrekt an. Steht so in `docs/funktionen.md`.
+
 ## 0.20.1 – 2026-07-29
 
 ### `touch_module` braucht `production_mode: false` – sonst passiert nichts, und niemand sagt es

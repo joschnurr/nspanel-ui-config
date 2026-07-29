@@ -1,10 +1,72 @@
-# Einrichtung: bestehende `apps.yaml` umstellen
+# Einrichtung
 
 Diese Integration **ändert die `apps.yaml` nie**. Sie schreibt ausschließlich eine eigene Datei;
 die `apps.yaml` bindet diese per `!include` ein. Diese Verbindung stellst du **einmalig von Hand**
 her — danach bleibt die `apps.yaml` unverändert liegen.
 
-## Was sich ändert
+Welcher Weg für dich gilt, hängt davon ab, wo du stehst:
+
+| Ausgangslage | Weg |
+| --- | --- |
+| Du hast bereits eine `apps.yaml` mit deiner Panel-Konfiguration | [Bestehende Konfiguration umstellen](#bestehende-konfiguration-umstellen) |
+| Du fängst neu an — AppDaemon läuft, das Panel ist noch leer | [Neu anfangen](#neu-anfangen) |
+
+Danach gilt für beide dasselbe: [Reload einrichten](#reload-einrichten) und
+[prüfen, ob es wirkt](#prüfen-ob-es-wirkt).
+
+## Wo die Datei liegen muss
+
+Der Pfad im `!include` ist der **aus Sicht von AppDaemon**. Der Ausgabepfad in den
+Integrations-Optionen ist der **aus Sicht von Home Assistant**. Je nach Installationsart sind das
+derselbe oder zwei verschiedene Pfade auf dieselbe Datei:
+
+| Installationsart | Ausgabepfad (Home Assistant) | `!include` (AppDaemon) | einzurichten |
+| --- | --- | --- | --- |
+| **HA OS / Supervised** | `/share/nspanel/nspanel_config.yaml` | derselbe Pfad | nichts – das Add-on sieht `/share` bereits |
+| **HA Container** | `/nspanel-shared/nspanel_config.yaml` | derselbe Pfad | einmaliger Bind-Mount in beide Container |
+| **HA Core** (venv) | frei wählbar, z. B. `/config/nspanel_config.yaml` | derselbe Pfad | nichts – gleiches Dateisystem |
+
+### Bind-Mount für die Container-Variante
+
+Einen Host-Ordner in beide Container mounten — Home Assistant schreibend, AppDaemon lesend:
+
+```yaml
+  homeassistant:
+    volumes:
+      - vol-homeassistant:/config
+      - /srv/nspanel-shared:/nspanel-shared        # rw: hier wird geschrieben
+
+  appdaemon:
+    volumes:
+      - vol-appdaemon:/conf
+      - /srv/nspanel-shared:/nspanel-shared:ro     # ro: hier wird nur gelesen
+```
+
+Beide Container danach neu erstellen (`docker compose up -d`), damit die Mounts greifen.
+
+## Neu anfangen
+
+Wer noch keine Konfiguration hat, braucht keine von Hand zu schreiben.
+
+1. **Bind-Mount einrichten** (nur Container-Variante, siehe [unten](#wo-die-datei-liegen-muss)) und
+   die Container neu erstellen.
+2. **Integration einrichten**: *Einstellungen → Geräte & Dienste → Integration hinzufügen →
+   „NSPanel UI Config"*. Ausgabepfad und Reload-Weg sind zur erkannten Installationsart bereits
+   vorbelegt; das Importfeld bleibt leer.
+3. **Beispiel laden** (empfohlen): Im Editor *Importieren…* öffnen und den Inhalt von
+   [`beispiel-apps.yaml`](beispiel-apps.yaml) in das YAML-Feld einfügen. Damit stehen eine
+   Ruheanzeige, drei Karten und eine Unterseite als Gerüst da. Alle Entities darin sind erfunden —
+   der Editor markiert sie mit ⚠, und genau diese Stellen ersetzt du durch deine eigenen.
+   *Ohne Beispiel* geht es auch: Der Editor startet dann mit einem leeren Gerüst, und du legst
+   Karten einzeln an.
+4. **Karten anpassen**, speichern, **„YAML erzeugen"**. Jetzt liegt die Datei am Ausgabepfad.
+5. **`apps.yaml` anlegen** (oder um die App ergänzen) — mit der `!include`-Zeile aus dem
+   [nächsten Abschnitt](#was-sich-ändert), passend zu deinem Ausgabepfad.
+6. **AppDaemon neu starten.**
+
+## Bestehende Konfiguration umstellen
+
+### Was sich ändert
 
 Die Struktur der `apps.yaml` bleibt, nur der Inhalt von `config:` zieht um:
 
@@ -42,37 +104,7 @@ nspanel-1:
 `module`, `class` und der App-Name bleiben unangetastet — sie gehören zu AppDaemon, nicht zur
 Panel-Konfiguration. Nur der `config:`-Block wird ersetzt.
 
-## Wo die Datei liegen muss
-
-Der Pfad im `!include` ist der **aus Sicht von AppDaemon**. Der Ausgabepfad in den
-Integrations-Optionen ist der **aus Sicht von Home Assistant**. Je nach Installationsart sind das
-derselbe oder zwei verschiedene Pfade auf dieselbe Datei:
-
-| Installationsart | Ausgabepfad (Home Assistant) | `!include` (AppDaemon) | einzurichten |
-| --- | --- | --- | --- |
-| **HA OS / Supervised** | `/share/nspanel/nspanel_config.yaml` | derselbe Pfad | nichts – das Add-on sieht `/share` bereits |
-| **HA Container** | `/nspanel-shared/nspanel_config.yaml` | derselbe Pfad | einmaliger Bind-Mount in beide Container |
-| **HA Core** (venv) | frei wählbar, z. B. `/config/nspanel_config.yaml` | derselbe Pfad | nichts – gleiches Dateisystem |
-
-### Bind-Mount für die Container-Variante
-
-Einen Host-Ordner in beide Container mounten — Home Assistant schreibend, AppDaemon lesend:
-
-```yaml
-  homeassistant:
-    volumes:
-      - vol-homeassistant:/config
-      - /srv/nspanel-shared:/nspanel-shared        # rw: hier wird geschrieben
-
-  appdaemon:
-    volumes:
-      - vol-appdaemon:/conf
-      - /srv/nspanel-shared:/nspanel-shared:ro     # ro: hier wird nur gelesen
-```
-
-Beide Container danach neu erstellen (`docker compose up -d`), damit die Mounts greifen.
-
-## Reihenfolge — und warum sie zählt
+### Reihenfolge — und warum sie zählt
 
 **Erst die Datei erzeugen, dann die `apps.yaml` umstellen.** Zeigt der `!include` auf eine Datei,
 die es noch nicht gibt, startet AppDaemon nicht mehr sauber.
@@ -122,6 +154,32 @@ braucht den Docker-Socket im Home-Assistant-Container, den weder die Add-on-Welt
 venv-Installation hat. Die Felder der übrigen Wege blendet der Dialog gleich mit aus — eine Angabe,
 die niemand ausliest, ist schlimmer als keine. Ein bereits gespeicherter Modus bleibt wählbar, auch
 wenn er nicht mehr passt (nach einem Umzug), sonst ließe sich der Dialog nicht einmal öffnen.
+
+## Prüfen, ob es wirkt
+
+Der Reload ist die Stelle, an der es lautlos schiefgehen kann: Die Datei wird geschrieben, alles
+meldet Erfolg, und am Panel bleibt trotzdem der alte Stand stehen. Die Probe dauert eine Minute:
+
+1. **Etwas Sichtbares ändern** — den Titel einer Karte, zum Beispiel auf `Test 1`.
+2. **Speichern**, dann **„YAML erzeugen"**.
+3. Zehn Sekunden warten (AppDaemon prüft im Sekundentakt).
+4. Auf der Karte in die **Live-Ansicht** wechseln und **„Karte am Gerät aufrufen"** drücken.
+
+Steht der neue Titel am Gerät und in der Live-Ansicht, funktioniert die ganze Kette. Sonst hilft die
+Einordnung:
+
+| Beobachtung | wo es klemmt |
+| --- | --- |
+| Neuer Titel erscheint | alles in Ordnung |
+| Alter Titel, nach einem AppDaemon-Neustart aber der neue | der Reload greift nicht — `production_mode`, falscher `reload_touch_path`, oder auf `restart_container` wechseln |
+| Alter Titel auch nach dem Neustart | die erzeugte Datei ist nicht die, die AppDaemon einbindet — Pfade im `!include` und in den Optionen vergleichen |
+| Live-Ansicht bleibt leer | das Panel hat diese Karte noch nie gezeigt; der Aufruf-Knopf holt sie |
+
+**Warum der Kartenaufruf dazugehört:** Die Live-Ansicht zeigt den *Mitschnitt* — also das, was das
+Backend zuletzt wirklich ans Display geschickt hat. Eine Karte, die seit der Änderung nicht
+aufgerufen wurde, steht dort zwangsläufig im alten Stand, selbst wenn alles richtig läuft. Die
+Vorschau *aus der Konfiguration* zeigt dagegen sofort den neuen Titel — sie zeichnet aus dem
+Editor-Modell und sagt über das Gerät nichts aus.
 
 ## Zurück zum vorherigen Stand
 

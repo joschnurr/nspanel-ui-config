@@ -371,6 +371,16 @@ Bild-URLs noch fest gegen das CDN baut, statt den lokalen Proxy zu nutzen. Das i
 (u. a. hacs/frontend#937, hacs/integration#5179) und kommt mit einer künftigen HACS-Version – von
 dieser Integration aus lässt sich daran nichts ändern.
 
+**Warten ist dabei die einzige Option, und es kann dauern.** Nachgeprüft am 2026-07-29: Die neueste
+HACS-Fassung ist weiterhin **2.0.5 vom 28.01.2025** — seit anderthalb Jahren kein Release. Die
+HACS-Doku nennt inzwischen zwar das `brand/`-Verzeichnis im Repository als bevorzugten Weg, aber
+was zählt, ist die Fassung, die tatsächlich installiert ist. Ein Update, das den Platzhalter
+ersetzt, steht also nicht kurz bevor.
+
+**Am Repo liegt es nicht:** Die vier Bilder sind vorhanden, haben die geforderten Maße (von
+`tests/test_manifests.py` geprüft), und Home Assistant selbst zeigt sie unter *Geräte & Dienste*
+korrekt an. Es gibt hier nichts zu reparieren.
+
 Fehlt eine Dark-Variante (`dark_icon.png`), fällt HA auf die helle zurück – Dark-Assets sind nicht
 nötig.
 
