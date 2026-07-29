@@ -3,6 +3,29 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.19.1 – 2026-07-28
+
+### `hidden` an der Karte: gesetzt, aber von niemandem gelesen
+
+Beim Ziehen einer Karte zu den Unterseiten setzte der Editor ihr ein `hidden: true`. Der Kommentar
+daneben behauptete, das Backend lese diese Eigenschaft und sie müsse zur Liste passen. Beides
+stimmte nicht:
+
+- **Das Backend liest keinen `hidden`-Key.** Es baut seine Karten als `Card(card, hidden=True)`
+  (`config.py`) — die Eigenschaft ergibt sich allein daraus, dass die Karte unter `hiddenCards:`
+  steht.
+- **In der Datei kam der Key ohnehin nie an.** `hidden` ist kein bekanntes Kartenfeld, also ließ
+  `denormalize_card` es weg. Es stand nur im gespeicherten Modell und verschwand beim nächsten
+  Rundlauf über den YAML-Dialog wieder.
+
+Gefunden bei der Frage, ob Änderungen aus dem YAML-Dialog vollständig in den Masken ankommen. Die
+Antwort ist ja — `hidden` war der einzige Key im Modell einer laufenden Anlage, der beim Erzeugen
+still wegfiel, und er war wirkungslos.
+
+Der Editor setzt ihn jetzt nicht mehr und **entfernt einen Altbestand**, sobald eine Karte verschoben
+wird. Am Verhalten des Panels ändert das nichts: Die Zugehörigkeit zur Liste war schon immer die
+ganze Information, auch für den Kartenbaum.
+
 ## 0.19.0 – 2026-07-28
 
 ### Die Kartenliste ist jetzt ein Baum – und zeigt, was am Panel nicht erreichbar ist

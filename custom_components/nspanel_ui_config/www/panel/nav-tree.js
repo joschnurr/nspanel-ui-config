@@ -149,10 +149,15 @@ export function verschiebeKarte(model, vonKind, vonIndex, nachKind, nachIndex) {
   einfuegen = Math.max(0, Math.min(einfuegen, ziel.length));
   ziel.splice(einfuegen, 0, karte);
 
-  // `hidden` ist die Eigenschaft, die das Backend liest – sie muss zur Liste passen, sonst bekommt
-  // eine Unterseite die Blättertasten statt der Zurück-Taste (oder umgekehrt).
-  if (nachKind === "hiddenCards") karte.hidden = true;
-  else delete karte.hidden;
+  // **Die Liste entscheidet, nicht ein Key an der Karte.** Das Backend baut seine Karten in
+  // `config.py` als `Card(card, hidden=True)` – die Eigenschaft ergibt sich allein daraus, dass die
+  // Karte unter `hiddenCards:` steht; ein `hidden:` in der Konfiguration liest es nirgends.
+  //
+  // Früher wurde hier eins gesetzt. Es stand dann im gespeicherten Modell, kam aber nie in der
+  // erzeugten YAML an (`hidden` ist kein bekanntes Kartenfeld, also wirft `denormalize_card` es
+  // weg) und verschwand beim nächsten Rundlauf über den YAML-Dialog wieder. Ein solcher Rest wird
+  // hier deshalb entfernt, statt ihn weiterzuschleppen.
+  delete karte.hidden;
 
   return { kind: nachKind, index: einfuegen };
 }

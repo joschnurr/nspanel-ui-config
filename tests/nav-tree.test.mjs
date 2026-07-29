@@ -108,23 +108,32 @@ test("die flache Liste zeichnet den Baum in Anzeigereihenfolge", () => {
 
 // --- Umbauten durch Ziehen und Fallenlassen ----------------------------------------------------
 
-test("eine Karte in die versteckten zu ziehen setzt hidden", () => {
-  // `hidden` muss zur Liste passen: sonst bekommt eine Unterseite die Blättertasten statt der
-  // Zurück-Taste – und wird zur Sackgasse.
+test("eine Karte in die versteckten zu ziehen setzt kein hidden an der Karte", () => {
+  // Die Zugehörigkeit zur Liste ist die ganze Information. Das Backend baut daraus selbst
+  // `Card(card, hidden=True)` (config.py); einen `hidden:`-Key liest es nirgends – und in die
+  // erzeugte YAML käme er auch nicht, weil er kein bekanntes Kartenfeld ist.
   const model = { cards: [karte("a"), karte("b")], hiddenCards: [] };
   const ziel = verschiebeKarte(model, "cards", 1, "hiddenCards", 0);
   assert.deepEqual(ziel, { kind: "hiddenCards", index: 0 });
   assert.equal(model.cards.length, 1);
   assert.equal(model.hiddenCards[0].key, "b");
-  assert.equal(model.hiddenCards[0].hidden, true);
+  assert.equal("hidden" in model.hiddenCards[0], false);
 });
 
-test("zurück in die sichtbaren entfernt hidden wieder", () => {
-  const model = { cards: [karte("a")], hiddenCards: [karte("b", [], { hidden: true })] };
+test("ein Altbestand von hidden wird beim Verschieben entfernt", () => {
+  // Ältere Fassungen haben den Key gesetzt. Er stand dann im gespeicherten Modell, ohne je in der
+  // Datei anzukommen – wer eine solche Karte anfasst, wird ihn hier los.
+  const model = {
+    cards: [karte("a")],
+    hiddenCards: [karte("b", [], { hidden: true }), karte("c", [], { hidden: true })],
+  };
   verschiebeKarte(model, "hiddenCards", 0, "cards", 0);
   assert.equal(model.cards[0].key, "b");
   assert.equal("hidden" in model.cards[0], false);
-  assert.deepEqual(model.hiddenCards, []);
+
+  // Auch beim Zug in die andere Richtung, nicht nur zurück in die sichtbaren.
+  verschiebeKarte(model, "hiddenCards", 0, "hiddenCards", 0);
+  assert.equal("hidden" in model.hiddenCards[0], false);
 });
 
 test("innerhalb einer Liste stimmt die Position nach dem Herausnehmen", () => {
