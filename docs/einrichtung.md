@@ -109,6 +109,13 @@ Integrations-Optionen:
 `touch_module` lädt nur die eine betroffene App neu statt AppDaemon komplett; dafür muss Home
 Assistant die angetickte Datei sehen (`reload_touch_path`, z. B. `/appdaemon-apps/apps.yaml` – **die apps.yaml, nicht das App-Modul**).
 
+**Zur Auswahl steht nur, was auf der erkannten Installationsart laufen kann.** `restart_addon`
+spricht die Supervisor-API an, die es allein unter HA OS und Supervised gibt; `restart_container`
+braucht den Docker-Socket im Home-Assistant-Container, den weder die Add-on-Welt noch eine
+venv-Installation hat. Die Felder der übrigen Wege blendet der Dialog gleich mit aus — eine Angabe,
+die niemand ausliest, ist schlimmer als keine. Ein bereits gespeicherter Modus bleibt wählbar, auch
+wenn er nicht mehr passt (nach einem Umzug), sonst ließe sich der Dialog nicht einmal öffnen.
+
 ## Zurück zum vorherigen Stand
 
 Falls etwas nicht passt: die `!include`-Zeile wieder durch den gesicherten `config:`-Block ersetzen

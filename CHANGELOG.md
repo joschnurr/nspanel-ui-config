@@ -3,6 +3,35 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.20.0 – 2026-07-29
+
+### Zur Auswahl steht nur, was auf dieser Installation laufen kann
+
+Der Einrichtungs- und der Optionen-Dialog boten alle vier Reload-Wege an, gleich welche
+Installationsart erkannt wurde — samt der drei Textfelder dazu. Wer unter Home Assistant OS
+`restart_container` einstellte, bekam keine Fehlermeldung: Die YAML wurde geschrieben, das Generieren
+meldete nichts Auffälliges, und am Panel änderte sich trotzdem nichts. Ein Weg, den es auf dem
+System gar nicht gibt, ist keine Wahlmöglichkeit, sondern eine Falle.
+
+Angeboten wird jetzt nur noch, was funktionieren kann:
+
+| Installationsart | zur Auswahl |
+| --- | --- |
+| HA OS / Supervised | `none`, `touch_module`, `restart_addon` |
+| HA Container | `none`, `touch_module`, `restart_container` |
+| HA Core (venv) | `none`, `touch_module` |
+| nicht erkannt | alle — hier wird nichts ausgeschlossen |
+
+Die Begründung steckt in der Sache: `restart_addon` spricht die Supervisor-API an, die es nur mit
+Supervisor gibt; `restart_container` braucht `/var/run/docker.sock` im Home-Assistant-Container, den
+weder die Add-on-Welt noch eine venv-Installation hat. Die **Textfelder der übrigen Wege sind
+mit ausgeblendet** — eine Angabe, die niemand ausliest, ist schlimmer als keine.
+
+Ein bereits gespeicherter Modus bleibt wählbar, auch wenn er nicht mehr zum System passt. Nach einem
+Umzug (etwa von Home Assistant OS auf Docker) ließe sich der Optionen-Dialog sonst nicht einmal mehr
+öffnen: Der vorbelegte Wert stünde nicht in der Liste, und man käme gar nicht erst dazu, ihn
+umzustellen.
+
 ## 0.19.1 – 2026-07-28
 
 ### `hidden` an der Karte: gesetzt, aber von niemandem gelesen

@@ -22,11 +22,16 @@ from __future__ import annotations
 from typing import Any, Final, TYPE_CHECKING
 
 from .const import (
+    CONF_RELOAD_ADDON,
+    CONF_RELOAD_CONTAINER,
+    CONF_RELOAD_TOUCH_PATH,
     DEFAULT_RELOAD_ADDON,
     DEFAULT_RELOAD_CONTAINER,
     RELOAD_MODE_ADDON,
     RELOAD_MODE_NONE,
+    RELOAD_MODE_RESTART,
     RELOAD_MODE_TOUCH,
+    RELOAD_MODES,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -107,6 +112,59 @@ PROFILES: Final[dict[str, dict[str, Any]]] = {
         ),
     },
 }
+
+
+# Welche Reload-Wege auf welcher Installationsart überhaupt funktionieren *können*. Die Einrichtung
+# bietet nur diese an — ein Weg, der hier gar nicht laufen kann, ist keine Wahlmöglichkeit, sondern
+# eine Falle: Man stellt ihn ein, das Generieren meldet nichts Auffälliges, und am Panel ändert sich
+# trotzdem nichts.
+#
+#   ``restart_addon``     spricht die Supervisor-API an. Den Supervisor (und damit Add-ons) gibt es
+#                         nur bei Home Assistant OS und Supervised.
+#   ``restart_container`` braucht ``/var/run/docker.sock`` im HA-Container. In der Add-on-Welt ist er
+#                         nicht erreichbar, und bei einer venv-Installation läuft AppDaemon gar nicht
+#                         in Docker.
+#   ``touch_module``      braucht nur Dateizugriff — das ist überall denkbar.
+#   ``none``              geht immer (von Hand neu laden).
+PROFILE_RELOAD_MODES: Final[dict[str, tuple[str, ...]]] = {
+    PROFILE_ADDON: (RELOAD_MODE_NONE, RELOAD_MODE_TOUCH, RELOAD_MODE_ADDON),
+    PROFILE_CONTAINER: (RELOAD_MODE_NONE, RELOAD_MODE_TOUCH, RELOAD_MODE_RESTART),
+    PROFILE_CORE: (RELOAD_MODE_NONE, RELOAD_MODE_TOUCH),
+    # Nicht erkannt heißt nicht „geht nicht": hier nichts ausschließen, sonst nimmt man dem Anwender
+    # womöglich genau den Weg, der bei ihm funktioniert.
+    PROFILE_UNKNOWN: tuple(RELOAD_MODES),
+}
+
+# Das Textfeld, das zu einem Modus gehört. Fällt der Modus weg, hat auch sein Feld im Formular
+# nichts mehr zu suchen — sonst steht dort eine Angabe, die nirgends ausgewertet wird.
+RELOAD_MODE_FIELDS: Final[dict[str, str]] = {
+    RELOAD_MODE_TOUCH: CONF_RELOAD_TOUCH_PATH,
+    RELOAD_MODE_RESTART: CONF_RELOAD_CONTAINER,
+    RELOAD_MODE_ADDON: CONF_RELOAD_ADDON,
+}
+
+
+def profile_reload_modes(profile: str, aktuell: Any = None) -> list[str]:
+    """Die Reload-Wege, die auf dieser Installationsart in Frage kommen.
+
+    ``aktuell`` ist der bereits gespeicherte Modus. Er kommt immer mit in die Liste, auch wenn er
+    nicht zum Profil passt: Nach einem Umzug (etwa von Home Assistant OS auf Docker) stünde sonst
+    ein Wert in den Optionen, den das Formular nicht darstellen kann — der Dialog ließe sich dann
+    gar nicht mehr öffnen, statt den Anwender auf einen passenden Weg umstellen zu lassen.
+    """
+    moeglich = list(PROFILE_RELOAD_MODES.get(profile, PROFILE_RELOAD_MODES[PROFILE_UNKNOWN]))
+    if isinstance(aktuell, str) and aktuell and aktuell not in moeglich:
+        moeglich.append(aktuell)
+    return moeglich
+
+
+def profile_reload_fields(modi: list[str]) -> list[str]:
+    """Die Textfelder, die zu diesen Modi gehören — in der Reihenfolge von ``RELOAD_MODES``."""
+    return [
+        RELOAD_MODE_FIELDS[modus]
+        for modus in RELOAD_MODES
+        if modus in modi and modus in RELOAD_MODE_FIELDS
+    ]
 
 
 def profile_for_installation_type(installation_type: Any) -> str:

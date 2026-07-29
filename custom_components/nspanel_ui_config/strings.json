@@ -15,7 +15,7 @@
         },
         "data_description": {
           "output_path": "Where the generated YAML is written. What matters is that AppDaemon can read exactly this file – via /share for an add-on, or via a shared mount for separate containers.",
-          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API.",
+          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API. Only the paths that can actually work on the detected installation type are offered.",
           "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/SLUG/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
           "reload_touch_path": "AppDaemon's apps.yaml. It has to be that file: touching the app module (apps/nspanel.py) restarts the app but does NOT re-read the configuration pulled in via !include, so the change would stay invisible. Home Assistant must be able to see it.",
           "reload_container": "Requires /var/run/docker.sock to be mounted into the Home Assistant container.",
@@ -42,7 +42,7 @@
         },
         "data_description": {
           "output_path": "Where the generated YAML is written. What matters is that AppDaemon can read exactly this file – via /share for an add-on, or via a shared mount for separate containers.",
-          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API.",
+          "reload_mode": "AppDaemon does not notice a changed !include file by itself. \"none\" = reload manually · \"restart_addon\" = restart the AppDaemon add-on through the Supervisor (Home Assistant OS/Supervised) · \"touch_module\" = update the mtime of a file AppDaemon watches (fine-grained, needs file access) · \"restart_container\" = restart the Docker container through the Docker API. Only the paths that can actually work on the detected installation type are offered.",
           "reload_addon": "Shown in the URL of the add-on page (…/hassio/addon/SLUG/info). For the community \"AppDaemon\" add-on it is a0d7b954_appdaemon.",
           "reload_touch_path": "AppDaemon's apps.yaml. It has to be that file: touching the app module (apps/nspanel.py) restarts the app but does NOT re-read the configuration pulled in via !include, so the change would stay invisible. Home Assistant must be able to see it.",
           "reload_container": "Requires /var/run/docker.sock to be mounted into the Home Assistant container.",

@@ -35,31 +35,38 @@ from .const import (
     DEFAULT_RELOAD_CONTAINER,
     DEFAULT_RELOAD_MODE,
     DOMAIN,
-    RELOAD_MODES,
 )
-from .install_profile import async_detect_profile, profile_defaults
+from .install_profile import (
+    async_detect_profile,
+    profile_defaults,
+    profile_reload_fields,
+    profile_reload_modes,
+)
 
-# Die Reload-Felder gehören jeweils nur zu einem Modus; sie stehen bewusst trotzdem alle im
-# Formular, weil HAs Options-Flow keine abhängigen Felder ohne zweiten Schritt kann — und ein
-# zweiter Schritt wäre für drei Textfelder mehr Umweg als Gewinn. Die Vorbelegung sorgt dafür, dass
-# das zur Installationsart passende Feld gefüllt ist und die anderen leer bleiben.
+# **Nur zeigen, was hier laufen kann.** Welcher Reload-Weg auf der erkannten Installationsart
+# überhaupt funktioniert, steht in `install_profile.PROFILE_RELOAD_MODES`; das Formular bietet nur
+# diese an und blendet die Textfelder der übrigen aus. Ein Weg, den es auf diesem System nicht gibt,
+# ist keine Wahlmöglichkeit, sondern eine Falle: Man stellt ihn ein, das Generieren meldet nichts,
+# und am Panel ändert sich trotzdem nichts.
+#
+# Abhängig von der *gerade getroffenen* Auswahl lässt sich ein Feld nicht ein- oder ausblenden — HAs
+# Formulare kennen keine solche Abhängigkeit ohne zweiten Schritt. Die Installationsart steht aber
+# schon vor dem Öffnen fest, und genau daran hängt die Auswahl hier.
 
 
-def _schema(werte: dict[str, Any]) -> vol.Schema:
-    """Formular für Einrichtung und Optionen – identische Felder, nur andere Vorbelegung."""
-    return vol.Schema(
-        {
-            vol.Required(CONF_OUTPUT_PATH, default=werte[CONF_OUTPUT_PATH]): str,
-            vol.Required(CONF_RELOAD_MODE, default=werte[CONF_RELOAD_MODE]): vol.In(RELOAD_MODES),
-            vol.Optional(CONF_RELOAD_ADDON, default=werte[CONF_RELOAD_ADDON]): str,
-            vol.Optional(CONF_RELOAD_TOUCH_PATH, default=werte[CONF_RELOAD_TOUCH_PATH]): str,
-            vol.Optional(CONF_RELOAD_CONTAINER, default=werte[CONF_RELOAD_CONTAINER]): str,
-            vol.Optional(CONF_IMPORT_YAML_PATH, default=werte[CONF_IMPORT_YAML_PATH]): str,
-            vol.Optional(CONF_BACKUP_COUNT, default=werte[CONF_BACKUP_COUNT]): vol.All(
-                vol.Coerce(int), vol.Range(min=0, max=100)
-            ),
-        }
+def _schema(werte: dict[str, Any], modi: list[str]) -> vol.Schema:
+    """Formular für Einrichtung und Optionen – gleiche Felder, gefiltert nach Installationsart."""
+    felder: dict[Any, Any] = {
+        vol.Required(CONF_OUTPUT_PATH, default=werte[CONF_OUTPUT_PATH]): str,
+        vol.Required(CONF_RELOAD_MODE, default=werte[CONF_RELOAD_MODE]): vol.In(modi),
+    }
+    for feld in profile_reload_fields(modi):
+        felder[vol.Optional(feld, default=werte[feld])] = str
+    felder[vol.Optional(CONF_IMPORT_YAML_PATH, default=werte[CONF_IMPORT_YAML_PATH])] = str
+    felder[vol.Optional(CONF_BACKUP_COUNT, default=werte[CONF_BACKUP_COUNT])] = vol.All(
+        vol.Coerce(int), vol.Range(min=0, max=100)
     )
+    return vol.Schema(felder)
 
 
 def _options_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
@@ -107,7 +114,7 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_schema(werte),
+            data_schema=_schema(werte, profile_reload_modes(profile)),
             description_placeholders={
                 # Erkannte Installationsart und der dazu passende Hinweis stehen über dem Formular,
                 # damit man nicht raten muss, welches der Reload-Felder für einen gilt.
@@ -150,9 +157,13 @@ class NsPanelUiConfigOptionsFlow(OptionsFlow):
             CONF_BACKUP_COUNT: current.get(CONF_BACKUP_COUNT, DEFAULT_BACKUP_COUNT),
         }
 
+        # Der gespeicherte Modus kommt mit in die Auswahl, auch wenn er nicht zum Profil passt —
+        # nach einem Umzug ließe sich der Dialog sonst nicht einmal mehr öffnen.
+        modi = profile_reload_modes(profile, werte[CONF_RELOAD_MODE])
+
         return self.async_show_form(
             step_id="init",
-            data_schema=_schema(werte),
+            data_schema=_schema(werte, modi),
             description_placeholders={
                 "installation": installation_type or vorgabe["label"],
                 "hinweis": vorgabe["hint"],
