@@ -3,6 +3,37 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.22.1 – 2026-07-29
+
+### Manchmal blieb der Editor leer, und jeder Knopf meldete „callApi"
+
+Gemeldet aus dem Betrieb: der Editor lädt, aber im Inhalt steht nichts — nur die Kopfzeile mit
+„Importieren…", „YAML ansehen…", „Speichern" und „YAML erzeugen". Wer dann einen Knopf drückt,
+bekommt `Cannot read properties of undefined (reading 'callApi')`. Ein Neuladen der Seite half
+meistens, weshalb es als Zufall erschien.
+
+Es ist kein Zufall, sondern eine Reihenfolge. `customElements.define` steht am Dateiende, also
+hinter den `await import(...)` der Nebenmodule am Dateianfang. Home Assistant lädt das Panel-Modul
+und erzeugt sein Element danach mit `document.createElement(…)` — trifft dieser Moment das Fenster,
+in dem die Definition noch nicht steht, ist das Element **noch nicht aufgewertet**. Dann greift in
+`setCustomPanelProperties` der Ausweichpfad `el[key] = wert` (auf ein `setProperties` prüft es
+zuerst, das gibt es hier nicht), und `hass` landet als **eigene** Eigenschaft auf dem Element. Eine
+eigene Dateneigenschaft verdeckt den Setter aus der Prototypkette dauerhaft: beim späteren Upgrade
+feuert `set hass` nie, `this._hass` bleibt `undefined`.
+
+Damit erklärt sich das Bild vollständig — die Kopfzeile erscheint, weil sie kein `hass` braucht,
+der Inhalt fehlt, weil er erst nach dem Laden von Schema und Modell entsteht, und der Knopfdruck
+läuft in genau jenes `undefined`. Es heilt auch nicht von selbst: Home Assistant schreibt bei jedem
+State-Update weiter auf dieselbe eigene Eigenschaft. Warum „manchmal": ob das Fenster getroffen
+wird, hängt daran, wie lange die fünf Nebenmodule brauchen — im warmen Browser-Cache sind sie da,
+bevor das Element entsteht, nach einem Update oder auf einer langsamen Verbindung nicht.
+
+Der Konstruktor räumt solche vor dem Upgrade eingetroffenen Eigenschaften jetzt ab und setzt sie neu,
+womit die Accessoren greifen. Lit macht in `_saveInstanceProperties` genau das; ohne Framework muss
+es von Hand dastehen. Zwei Tests halten es fest: einer stellt das Upgrade nach (eigene Eigenschaft
+setzen, Prototyp untertauschen, retten, prüfen), einer sichert ab, dass der Aufruf im Konstruktor
+nicht wieder verschwindet.
+
 ## 0.22.0 – 2026-07-29
 
 ### Das Wettersymbol fehlte in der Vorschau – ausgerechnet auf dem Screensaver

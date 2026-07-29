@@ -537,3 +537,39 @@ test("der Aufruf-Knopf fehlt auch dann nicht, wenn noch nichts empfangen wurde",
   const bisReturn = zweig.slice(0, zweig.indexOf("return;"));
   assert.match(bisReturn, /this\._showButton\(gesucht, antwort/, "Knopf fehlt im leeren Zustand");
 });
+
+test("Eigenschaften, die vor dem Upgrade des Elements ankamen, gehen nicht verloren", () => {
+  // Der Ausfall, den das verhindert (an der echten Anlage aufgetreten): Home Assistant erzeugt das
+  // Panel, solange `customElements.define` noch hinter den await-Imports am Dateianfang hängt, und
+  // weist `hass` per `el.hass = …` zu. Diese *eigene* Eigenschaft verdeckt den Setter dauerhaft –
+  // der Editor bleibt leer (nur die Kopfzeile steht, die braucht kein hass) und der erste
+  // Knopfdruck endet mit „Cannot read properties of undefined (reading 'callApi')“.
+  const { NsPanelUiConfigPanel } = module;
+  const hass = { callApi: async () => ({}), states: {} };
+
+  const el = {}; // noch nicht aufgewertetes Element
+  el.hass = hass; // so weist setCustomPanelProperties zu, wenn es kein setProperties findet
+  el.narrow = false;
+  Object.setPrototypeOf(el, NsPanelUiConfigPanel.prototype); // das Upgrade
+
+  assert.equal(el._hass, undefined, "Vorbedingung: der Setter kann hier nicht gefeuert haben");
+
+  NsPanelUiConfigPanel.prototype._rescueUpgradeProperties.call(el);
+
+  assert.equal(el._hass, hass, "hass ist nicht beim Setter angekommen");
+  assert.equal(el.narrow, false, "narrow wurde beim Retten verloren");
+});
+
+test("der Konstruktor rettet die Eigenschaften auch wirklich, und zwar zuletzt", () => {
+  // Der Test oben prüft nur die Methode. Fällt der Aufruf im Konstruktor weg, wäre der Fehler
+  // zurück, ohne dass ein Test rot wird – deshalb hier zusätzlich an der Quelle nachsehen.
+  const quelle = readFileSync(
+    new URL("../custom_components/nspanel_ui_config/www/panel/nspanel-ui-config-panel.js", import.meta.url),
+    "utf-8"
+  );
+  const konstruktor = quelle.slice(
+    quelle.indexOf("class NsPanelUiConfigPanel"),
+    quelle.indexOf("_rescueUpgradeProperties() {")
+  );
+  assert.match(konstruktor, /this\._rescueUpgradeProperties\(\);\s*\}/, "Aufruf fehlt am Ende des Konstruktors");
+});

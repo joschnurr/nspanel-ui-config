@@ -1221,6 +1221,39 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._previewMode = "model";
     this._livePollTimer = null;
     this._liveTitle = "";
+    // Muss die letzte Anweisung im Konstruktor bleiben: sie kann `_boot()` auslösen, und das
+    // erwartet ein fertig initialisiertes Objekt.
+    this._rescueUpgradeProperties();
+  }
+
+  /**
+   * Eigenschaften übernehmen, die Home Assistant diesem Element *vor* seinem Upgrade zugewiesen hat.
+   *
+   * **Der Fehler, den das verhindert** (leerer Editor, nur die Kopfzeile sichtbar, beim ersten
+   * Knopfdruck „Cannot read properties of undefined (reading 'callApi')“):
+   *
+   * `customElements.define` steht am Dateiende – also hinter den `await import(...)` der
+   * Nebenmodule ganz oben. Erzeugt HAs `ha-panel-custom` sein Panel in dem Moment, in dem die
+   * Definition noch nicht steht, liefert `document.createElement(ELEMENT_NAME)` ein noch **nicht
+   * aufgewertetes** Element. `setCustomPanelProperties` weicht dann auf `el[key] = wert` aus (auf
+   * `setProperties` prüft es zuerst, das gibt es hier nicht) und legt `hass` als **eigene**
+   * Eigenschaft ab. Eine eigene Dateneigenschaft verdeckt den Setter aus der Prototypkette
+   * dauerhaft: beim späteren Upgrade feuert `set hass` nie, `this._hass` bleibt `undefined`. Die
+   * Kopfzeile erscheint trotzdem, weil `_renderShell()` nicht an `hass` hängt. Und es heilt auch
+   * nicht von selbst – HA schreibt bei jedem State-Update weiter auf dieselbe eigene Eigenschaft.
+   *
+   * Deshalb: eigene Werte abräumen und neu setzen, erst dann greifen die Accessoren. Lit tut in
+   * `_saveInstanceProperties` genau das; ohne Framework muss es hier von Hand stehen. Die Liste
+   * umfasst alle vier Eigenschaften, die HA setzt – `narrow`/`route`/`panel` haben heute keinen
+   * Accessor, das Wiedersetzen kostet dort nichts und hält den Schutz vollständig.
+   */
+  _rescueUpgradeProperties() {
+    for (const name of ["hass", "narrow", "route", "panel"]) {
+      if (!Object.prototype.hasOwnProperty.call(this, name)) continue;
+      const wert = this[name];
+      delete this[name];
+      this[name] = wert;
+    }
   }
 
   // HA setzt `hass` bei *jedem* State-Update. Hier darf deshalb nichts neu gerendert werden –
@@ -1240,6 +1273,9 @@ class NsPanelUiConfigPanel extends PanelBase {
 
   async _boot() {
     this._booted = true;
+    // Kann aus dem Konstruktor heraus anlaufen (siehe _rescueUpgradeProperties), also bevor
+    // connectedCallback das Grundgerüst gebaut hat – deshalb hier nicht darauf verlassen.
+    if (!this.shadowRoot.firstChild) this._renderShell();
     try {
       const [schema, config] = await Promise.all([
         this._hass.callApi("GET", "nspanel_ui_config/schema"),
