@@ -94,6 +94,23 @@ Warum kein natives HA-Rendering ohne AppDaemon? Das würde ein großes, reifes P
 Der Config-Schicht-Ansatz liefert früh Nutzen und bleibt kompatibel mit Updates des Backends.
 → [docs/architecture.md](docs/architecture.md)
 
+## So sieht es aus
+
+<!--
+  Screenshots gehören nach docs/bilder/ und werden hier eingebunden. Sinnvoll sind vier:
+
+  ![Editor mit Kartenliste und Vorschau](docs/bilder/editor.png)
+  ![Live-Ansicht: was das Gerät zeigt](docs/bilder/live-ansicht.png)
+  ![Einrichtungsdialog mit erkannter Installationsart](docs/bilder/einrichtung.png)
+  ![YAML ansehen und bearbeiten](docs/bilder/yaml-dialog.png)
+
+  Bitte ohne echte Entity-Namen aus der eigenen Installation – die Beispielkonfiguration aus
+  docs/beispiel-apps.yaml eignet sich dafür.
+-->
+
+*Bilder folgen.* Bis dahin zeigt die [Beispielkonfiguration](docs/beispiel-apps.yaml), womit der
+Editor startet, und [funktionen.md](docs/funktionen.md) beschreibt jede Fläche im Detail.
+
 ## Voraussetzungen
 
 - Home Assistant 2024.4 oder neuer
@@ -184,13 +201,22 @@ NSPANEL_REAL_APPS_YAML=/pfad/zu/appdaemon/apps/apps.yaml pytest
 
 | | |
 | --- | --- |
+**Zum Einrichten und Bedienen:**
+
+| | |
+| --- | --- |
 | [Einrichtung](docs/einrichtung.md) | Schritt für Schritt – neu anfangen oder bestehende `apps.yaml` umstellen, Bind-Mount, Reload, Abnahme |
 | [Beispielkonfiguration](docs/beispiel-apps.yaml) | Startpunkt zum Importieren: Ruheanzeige, drei Karten, eine Unterseite |
-| [Funktionen im Detail](docs/funktionen.md) | Template-Editor, Icons, Farben, Reload-Wege, HTTP-API |
+| [Funktionen im Detail](docs/funktionen.md) | Vorschau, Live-Ansicht, Template-Editor, Icons, Farben, Sicherungen, Reload-Wege |
 | [Anzeigekapazität](docs/kapazitaet.md) | wie viele Entities je Karte und Modell wirklich sichtbar sind |
-| [Architektur](docs/architecture.md) | Transportweg, Datenmodell, Designentscheidungen |
-| [Panel-Vorschau](docs/vorschau-machbarkeit.md) | Machbarkeitsuntersuchung (noch nicht umgesetzt) |
 | [Änderungen](CHANGELOG.md) | Versionsverlauf |
+
+**Für alle, die mitbauen wollen:**
+
+| | |
+| --- | --- |
+| [Architektur](docs/architecture.md) | Transportweg, Datenmodell, Designentscheidungen, Herkunft der Vorschau-Geometrie |
+| [Entwicklung](docs/entwicklung.md) | HTTP-API, Brand-Bilder, Werkzeuge |
 
 ## Referenzen
 

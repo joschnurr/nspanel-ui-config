@@ -3,6 +3,24 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.21.1 – 2026-07-29
+
+### Die Dokumentation trennt jetzt Anwender von Mitbauern
+
+Wer die Integration einrichten will, musste sich bisher durch Abschnitte arbeiten, die ihn nichts
+angehen: die HTTP-API, die Maße der Brand-Bilder, das Werkzeug zum Optimieren von PNGs. Das steht
+jetzt in [`docs/entwicklung.md`](docs/entwicklung.md); `funktionen.md` beschreibt nur noch, was man
+im Editor tatsächlich benutzt. Die Verweisliste im README ist entsprechend zweigeteilt — *zum
+Einrichten und Bedienen* und *für alle, die mitbauen wollen*.
+
+**Entfernt: die Machbarkeitsuntersuchung zur Panel-Vorschau.** Sie hat ihren Zweck erfüllt — die
+Vorschau steht seit Wochen. Als Eintrag in einer Doku-Liste, die jemandem beim Einrichten helfen
+soll, war sie nur noch Ballast. Was daraus bleibenden Wert hat, ist in `architecture.md` gewandert:
+**woher die Vorschau-Geometrie kommt** und warum den Koordinaten zu trauen ist (Abgleich mit
+`CARD_CAPACITY`, Herleitung der Screensaver-Zuordnung aus den `spstr`-Aufrufen).
+
+Im README ist außerdem ein Platz für Screenshots vorbereitet.
+
 ## 0.21.0 – 2026-07-29
 
 ### Eine Beispielkonfiguration zum Anfangen

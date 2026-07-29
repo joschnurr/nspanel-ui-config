@@ -125,6 +125,38 @@ Einheiten wie `{{ … }} °C`. Ohne diese Nachbildung zeigte die Vorschau etwas 
 Welche Felder überhaupt Templates sind, steht in `schema.py` (`TEMPLATE_FIELDS`) und ist an den
 `render_template`-Aufrufen des Backends abgelesen, nicht geraten.
 
+## Woher die Vorschau-Geometrie kommt
+
+Die Vorschau zeichnet die Karten nicht nach Augenmaß: Die Koordinaten stammen aus den
+HMI-Seiten des Backends (`tools/extract_layouts.py` → `www/panel/layouts.js`). Was sich beim
+Herleiten gezeigt hat, steht hier — es erklärt, warum den Zahlen zu trauen ist:
+
+- **Die Dumps braucht man nicht als Repo-Kopie.** Einzelne Seiten lassen sich direkt über
+  `raw.githubusercontent.com/joBr99/nspanel-lovelace-ui/main/HMI/…` ziehen; für den Screensaver war
+  das der schnellste Weg zu belastbaren Koordinaten. Er ist deshalb bereits layout-treu, die übrigen
+  Karten sind nachempfunden.
+- **Der Aufwand steckt nicht im Zeichnen, sondern in der Zuordnung.** Bei den Karten reicht dafür
+  die Namenskonvention der Komponenten (`tEntity1…`, `bEntity1…`, `t0Icon…`) – `extract_layouts.py`
+  hält sie je Seite explizit fest und leitet daraus Symbol-, Namens- und Wertfläche jedes Platzes
+  ab. Dass die Muster stimmen, zeigt der Abgleich: **alle 18 Kombinationen aus Karte und Modell
+  ergeben genau die Platzzahl, die schon in `CARD_CAPACITY` stand** – zwei unabhängig hergeleitete
+  Wege mit demselben Ergebnis.
+- **Beim Screensaver reicht das nicht** – und der Seitencode liefert die Zuordnung trotzdem. Kein
+  Komponentenname verrät dort die Listenposition, aber jede holt sich ihr Feld mit
+  `spstr strCommand.txt,tForecast1.txt,"~",11`. Der `weatherUpdate~`-String trägt sechs Felder je
+  Eintrag, also folgen aus dem Index beides: `entity = (index-1) // 6` und
+  `rolle = (index-1) % 6` (2 = Symbol, 4 = Name, 5 = Wert). Wichtig ist dabei, nur den Block
+  `if(tInstruction.txt=="weatherUpdate")` auszuwerten – `tIcon1` etwa holt sich Feld 1 des
+  *statusUpdate*-Strings und wäre sonst fälschlich der erste Listeneintrag.
+- **Die Herleitung bestätigt das Schema und korrigiert es zugleich.** Sie ergibt für `screensaver`
+  6 Einträge und für `screensaver2` die Gruppen 1/3/6/5 – genau wie in `CAPACITY_LAYOUT_NOTES`.
+  Die Positionen zeigten aber, dass die Notiz zu `screensaver2` zu grob war: die reinen Symbole
+  stehen auf dem eu-Panel *über* den Kacheln, nicht darunter.
+- **Dabei ist ein echter Befund abgefallen:** im alternativen Screensaver-Layout blendet das HMI
+  quer die erste Vorhersagespalte aus und rückt die übrigen nach rechts – die 5. Entity verliert
+  ihren Platz. Hochkant passiert das nicht (`if(p0.w!=320)`). Das steht in keiner Dokumentation und
+  war auch in `CAPACITY_LAYOUT_NOTES` zu grob beschrieben; beides ist korrigiert.
+
 ## Datenmodell (aus dem Upstream-Schema abgeleitet)
 
 Basierend auf `luibackend/config.py` und docs.nspanel.pky.eu:
