@@ -26,6 +26,7 @@ const {
   entityKind,
   previewColor,
   previewContent,
+  wetterDarstellung,
   iconFromRendered,
   iconNameFromChar,
   istIconZeichen,
@@ -255,6 +256,47 @@ test("Sonderformen haben keinen Zustand und melden deshalb auch keinen fehlenden
   const nav = previewContent({ entity: "navigate.kueche", icon: "arrow-right" }, {});
   assert.equal(nav.zustandFehlt, false);
   assert.equal(nav.name, "navigate.kueche");
+});
+
+test("das Wettersymbol kommt aus dem Zustand, nicht aus einem Attribut", () => {
+  // weather.*-Entities tragen kein icon-Attribut. Ohne Nachbildung stand im Screensaver der
+  // Platzhalter, während das Gerät ein Wettersymbol zeigte – dort das größte Element überhaupt.
+  const states = { "weather.zuhause": { state: "sunny", attributes: { friendly_name: "Wetter" } } };
+  const inhalt = previewContent({ entity: "weather.zuhause" }, states);
+
+  assert.equal(inhalt.icon, "mdi:weather-sunny");
+  assert.equal(inhalt.iconAbgeleitet, true, "abgeleitet, nicht selbst gesetzt");
+  assert.equal(inhalt.color, "#ffff00", "die Sonne färbt das Backend gelb");
+});
+
+test("ein selbst gesetztes Symbol schlägt die Wetter-Ableitung", () => {
+  const states = { "weather.zuhause": { state: "rainy", attributes: {} } };
+  const inhalt = previewContent({ entity: "weather.zuhause", icon: "mdi:umbrella" }, states);
+  assert.equal(inhalt.icon, "mdi:umbrella");
+  assert.equal(inhalt.iconAbgeleitet, false);
+
+  // Ebenso die Farbe: eine eigene Angabe gewinnt.
+  const eigen = previewContent(
+    { entity: "weather.zuhause", color: [1, 2, 3] },
+    states
+  );
+  assert.equal(eigen.color, "#010203");
+});
+
+test("wetterDarstellung bildet die Tabellen des Backends nach", () => {
+  assert.deepEqual(wetterDarstellung("weather.x", "rainy"), {
+    icon: "mdi:weather-rainy",
+    color: "#6361ff",
+  });
+  // exceptional ist im Backend bewusst kein Wettersymbol, sondern ein Warnzeichen.
+  assert.equal(wetterDarstellung("weather.x", "exceptional").icon, "mdi:alert-circle-outline");
+  // windy-variant: im Backend steht dort `icon_color: …` statt `=` – die Zeile setzt nichts, das
+  // Gerät zeigt die Standardfarbe. Nachgebildet wird, was das Gerät tut.
+  assert.equal(wetterDarstellung("weather.x", "windy-variant").color, null);
+  // Unbekannter Zustand und andere Domains bleiben unangetastet.
+  assert.equal(wetterDarstellung("weather.x", "gibtesnicht"), null);
+  assert.equal(wetterDarstellung("sensor.x", "sunny"), null);
+  assert.equal(wetterDarstellung(undefined, undefined), null);
 });
 
 test("delete und leere Einträge markieren den Platz als frei", () => {

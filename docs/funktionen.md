@@ -88,6 +88,11 @@ abgetrennt werden muss (sonst stünde dort wörtlich `19¬2`).
 - **Symbole ohne eigene Angabe.** Die leitet das Backend aus Domain und Zustand ab
   (`icon_mapping.py`); nachgebaut wird das nicht. Ersatzweise steht das Symbol da, das Home
   Assistant selbst für die Entity führt – blasser dargestellt und im Tooltip als solches benannt.
+  **Ausgenommen ist das Wetter:** `weather.*`-Entities tragen gar kein Symbol-Attribut, aus dem sich
+  etwas borgen ließe – dort stand deshalb ein Platzhalter, während auf dem Screensaver das größte
+  Element der Anzeige hängt. Symbol und Farbe kommen dafür jetzt aus denselben Tabellen wie beim
+  Backend (`icons.py: weather_mapping`, Farben aus `pages.py`): `sunny` wird zur gelben Sonne,
+  `rainy` zum blauen Regen. Ein selbst gesetztes `icon` gewinnt weiterhin.
 - **Zustandsformate.** Ohne eigenes `value` steht der Zustand aus Home Assistant da; das Backend
   formatiert ihn teils anders.
 

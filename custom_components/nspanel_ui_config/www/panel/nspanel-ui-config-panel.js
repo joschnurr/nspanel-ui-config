@@ -555,6 +555,65 @@ function liveCardType(karte, nachricht) {
   return gemeldet;
 }
 
+/**
+ * Wetter: Symbol und Farbe ergeben sich aus dem **Zustand**, nicht aus einem Attribut.
+ *
+ * `weather.*`-Entities tragen in Home Assistant kein `icon`-Attribut — das Frontend leitet das
+ * Symbol selbst aus `sunny`, `rainy`, … ab, und das Backend tut dasselbe mit einer eigenen Tabelle
+ * (`luibackend/icons.py: weather_mapping`, Farben aus `pages.py`). Ohne diese Nachbildung stand im
+ * Screensaver der Platzhalter, während das Gerät ein Wettersymbol zeigte — und ausgerechnet dort ist
+ * es das größte Element der ganzen Anzeige.
+ *
+ * Die Farben sind die umgerechneten dec565-Werte des Backends (der Kommentar nennt das Original).
+ * `windy-variant` fehlt hier bewusst: Im Backend steht an dieser Stelle `icon_color: 64495` mit
+ * Doppelpunkt statt Zuweisung — die Zeile setzt also nichts, und das Gerät zeigt die Standardfarbe.
+ * Nachgebildet wird, was das Gerät tut, nicht was dort gemeint war.
+ */
+const WETTER_SYMBOLE = {
+  "clear-night": "weather-night",
+  cloudy: "weather-cloudy",
+  exceptional: "alert-circle-outline",
+  fog: "weather-fog",
+  hail: "weather-hail",
+  lightning: "weather-lightning",
+  "lightning-rainy": "weather-lightning-rainy",
+  partlycloudy: "weather-partly-cloudy",
+  pouring: "weather-pouring",
+  rainy: "weather-rainy",
+  snowy: "weather-snowy",
+  "snowy-rainy": "weather-snowy-rainy",
+  sunny: "weather-sunny",
+  windy: "weather-windy",
+  "windy-variant": "weather-windy-variant",
+};
+
+const WETTER_FARBEN = {
+  partlycloudy: [148, 150, 148], // 38066
+  windy: [148, 150, 148], // 38066
+  "clear-night": [148, 150, 99], // 38060
+  cloudy: [123, 125, 132], // 31728
+  exceptional: [255, 49, 49], // 63878
+  fog: [148, 150, 148], // 38066
+  hail: [255, 255, 255], // 65535
+  snowy: [255, 255, 255], // 65535
+  lightning: [255, 206, 0], // 65120
+  "lightning-rainy": [197, 158, 0], // 50400
+  pouring: [49, 49, 255], // 12703
+  rainy: [99, 97, 255], // 25375
+  "snowy-rainy": [148, 150, 255], // 38079
+  sunny: [255, 255, 0], // 65504
+};
+
+/** Symbol und Farbe, die das Backend für diese Wetter-Entity setzen würde – oder `null`. */
+function wetterDarstellung(id, zustand) {
+  if (typeof id !== "string" || !id.startsWith("weather.")) return null;
+  const state = typeof zustand === "string" ? zustand : "";
+  const symbol = WETTER_SYMBOLE[state];
+  if (!symbol) return null;
+  const farbe = WETTER_FARBEN[state];
+  return { icon: `mdi:${symbol}`, color: farbe ? rgbToHex(farbe) : null };
+}
+
 /** Beschriftung einer Karte in der Seitenleiste. */
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
@@ -847,6 +906,14 @@ function previewContent(entity, states = {}, cardType = null) {
     iconAbgeleitet = true;
   }
 
+  // Wetter trägt sein Symbol im Zustand, nicht im Attribut – deshalb *nach* attrs.icon, aber vor
+  // dem Platzhalter. Ein selbst gesetztes `icon` gewinnt weiterhin, wie beim Gerät.
+  const wetter = icon === null && !iconSonderform ? wetterDarstellung(id, zustand && zustand.state) : null;
+  if (wetter) {
+    icon = wetter.icon;
+    iconAbgeleitet = true;
+  }
+
   // Auf dem Raster steht bei Sensoren ohne eigenes Symbol der Messwert an dessen Stelle. Ohne diese
   // Nachbildung zeigte die Vorschau dort den Platzhalter-Kreis, während das Gerät die Zahl anzeigt.
   let iconText = null;
@@ -864,6 +931,10 @@ function previewContent(entity, states = {}, cardType = null) {
   let color = previewColor(entity.color, zustand && zustand.state);
   if (color === null && colorShape(entity.color) === "template") {
     templates.push({ feld: "color", text: entity.color });
+  } else if (color === null && wetter && wetter.color) {
+    // Dieselbe Quelle wie das Symbol: ohne eigene Farbe färbt das Backend das Wettersymbol nach
+    // Zustand – die Sonne gelb, der Regen blau. Grau wäre hier schlicht falsch.
+    color = wetter.color;
   }
 
   return {
@@ -3645,6 +3716,7 @@ export {
   entityKind,
   previewColor,
   previewContent,
+  wetterDarstellung,
   iconFromRendered,
   iconNameFromChar,
   rgb565ToHex,

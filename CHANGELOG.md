@@ -3,6 +3,27 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.22.0 – 2026-07-29
+
+### Das Wettersymbol fehlte in der Vorschau – ausgerechnet auf dem Screensaver
+
+Aus der Konfiguration gezeichnet stand dort ein Platzhalter, vom Gerät abgerufen ein richtiges
+Symbol. Der Grund: `weather.*`-Entities tragen in Home Assistant **kein `icon`-Attribut**. Die
+Vorschau borgt sich sonst das Symbol, das HA für eine Entity führt — beim Wetter gibt es nichts zu
+borgen, das Frontend leitet es selbst aus `sunny`, `rainy`, `cloudy` ab. Und das Backend tut
+dasselbe, mit einer eigenen Tabelle.
+
+Genau die ist jetzt nachgebildet, Symbol **und** Farbe, aus derselben Quelle wie beim Gerät
+(`luibackend/icons.py: weather_mapping`, Farbwerte aus `pages.py`): `sunny` wird zur gelben Sonne,
+`rainy` zum blauen Regen, `exceptional` zum Warnzeichen — das ist im Backend bewusst kein
+Wettersymbol. Ein selbst gesetztes `icon` gewinnt weiterhin, wie am Gerät.
+
+Eine Kleinigkeit wurde dabei mitgenommen, statt sie zu glätten: Bei `windy-variant` steht im
+Backend `icon_color: 64495` — mit Doppelpunkt statt Zuweisung. Die Zeile setzt also nichts, und das
+Gerät zeigt die Standardfarbe. Die Vorschau macht es genauso. **Nachgebildet wird, was das Gerät
+tut, nicht was dort gemeint war** — sonst zeigte die Vorschau ein Rot, das auf dem Display nie
+erscheint.
+
 ## 0.21.1 – 2026-07-29
 
 ### Die Dokumentation trennt jetzt Anwender von Mitbauern
