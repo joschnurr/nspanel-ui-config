@@ -3,6 +3,27 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.20.1 – 2026-07-29
+
+### `touch_module` braucht `production_mode: false` – sonst passiert nichts, und niemand sagt es
+
+An einer laufenden Anlage nachgemessen: Kartentitel im Editor geändert, YAML korrekt geschrieben,
+`apps.yaml` angetickt — und das Panel bekam beim Kartenaufruf trotzdem den **alten** Titel. Alle
+Glieder der Kette meldeten Erfolg.
+
+Der Grund lag eine Ebene tiefer, in AppDaemons eigener Konfiguration: Mit `production_mode: true`
+prüft es überhaupt nicht mehr auf geänderte Dateien (`app_management.py`). Die mtime kann sich
+beliebig oft ändern, es sieht gar nicht hin. **Damit ist `touch_module` wirkungslos — und zwar
+lautlos:** Das Schreiben gelingt, das Anticken gelingt, das Generieren meldet Erfolg. Sichtbar wird
+es allein daran, dass sich am Panel nichts tut.
+
+Das steht jetzt dort, wo man es sucht: in der Beschreibung des Feldes *Datei zum Anticken* (beide
+Sprachen), in `einrichtung.md` und im Modulkopf von `reload.py` — jeweils mit dem Ausweg:
+`restart_container` bzw. `restart_addon`, denn ein Neustart liest ohnehin alles neu.
+
+Nichts am Verhalten der Integration geändert; sie hatte sich korrekt verhalten. Was fehlte, war die
+Voraussetzung, die niemand nennt.
+
 ## 0.20.0 – 2026-07-29
 
 ### Zur Auswahl steht nur, was auf dieser Installation laufen kann

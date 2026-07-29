@@ -23,6 +23,16 @@ Die zwei Wege haben unterschiedliche Voraussetzungen, deshalb bleibt der Modus k
     am 2026-07-26: nach dem Anticken der ``.py`` fand das Backend eine neu vergebene ``key`` nicht,
     nach dem Anticken der ``apps.yaml`` sofort.
 
+    **Und AppDaemon darf nicht im ``production_mode`` laufen.** Steht in seiner ``appdaemon.yaml``
+    ``production_mode: true``, prüft es überhaupt nicht mehr auf geänderte Dateien
+    (``app_management.py``) — die mtime kann sich beliebig oft ändern, es sieht gar nicht hin. Dieser
+    Fall ist besonders tückisch, weil *hier* nichts fehlschlägt: Die YAML wird geschrieben, das
+    Anticken gelingt, das Generieren meldet Erfolg, und trotzdem läuft das Backend weiter mit seinem
+    alten Stand. Nachgemessen am 2026-07-29 an einer laufenden Anlage: Kartentitel im Editor
+    geändert, Datei korrekt geschrieben, ``apps.yaml`` angetickt — das Panel bekam beim Kartenaufruf
+    weiterhin den alten Titel. Wer ``production_mode`` braucht, nimmt ``restart_container`` bzw.
+    ``restart_addon``; ein Neustart liest ohnehin alles neu.
+
 ``restart_container``
     Startet den AppDaemon-Container über die Docker-API neu. Braucht keinen zusätzlichen Mount,
     dafür ``/var/run/docker.sock`` im HA-Container — und ist grob: alle AppDaemon-Apps starten neu.

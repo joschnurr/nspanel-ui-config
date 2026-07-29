@@ -109,6 +109,13 @@ Integrations-Optionen:
 `touch_module` lädt nur die eine betroffene App neu statt AppDaemon komplett; dafür muss Home
 Assistant die angetickte Datei sehen (`reload_touch_path`, z. B. `/appdaemon-apps/apps.yaml` – **die apps.yaml, nicht das App-Modul**).
 
+> **`touch_module` braucht `production_mode: false`.** Steht in AppDaemons `appdaemon.yaml`
+> `production_mode: true`, prüft es überhaupt nicht mehr auf geänderte Dateien — das Anticken bleibt
+> dann folgenlos, **ohne jede Fehlermeldung**: Die YAML wird geschrieben, der Reload meldet Erfolg,
+> und das Backend läuft weiter mit seinem alten Stand. Man merkt es nur daran, dass sich am Panel
+> nichts ändert. Wer `production_mode` braucht, nimmt `restart_container` bzw. `restart_addon` — ein
+> Neustart liest ohnehin alles neu.
+
 **Zur Auswahl steht nur, was auf der erkannten Installationsart laufen kann.** `restart_addon`
 spricht die Supervisor-API an, die es allein unter HA OS und Supervised gibt; `restart_container`
 braucht den Docker-Socket im Home-Assistant-Container, den weder die Add-on-Welt noch eine
