@@ -96,20 +96,22 @@ Der Config-Schicht-Ansatz liefert früh Nutzen und bleibt kompatibel mit Updates
 
 ## So sieht es aus
 
-<!--
-  Screenshots gehören nach docs/bilder/ und werden hier eingebunden. Sinnvoll sind vier:
+![Der Editor: Kartenliste als Baum, erklärte Felder, Entity-Liste mit Kapazitätsanzeige](docs/bilder/editor.png)
 
-  ![Editor mit Kartenliste und Vorschau](docs/bilder/editor.png)
-  ![Live-Ansicht: was das Gerät zeigt](docs/bilder/live-ansicht.png)
-  ![Einrichtungsdialog mit erkannter Installationsart](docs/bilder/einrichtung.png)
-  ![YAML ansehen und bearbeiten](docs/bilder/yaml-dialog.png)
+Links der **Navigationsbaum** — Unterseiten stehen eingerückt unter der Karte, die sie verlinkt, und
+ein eigener Abschnitt sammelt, was niemand verlinkt. Rechts das Formular: **jedes Feld mit dem, was
+es bewirkt** und den Werten, die es annehmen darf. Unten die Entity-Liste mit der Angabe, wie viele
+Einträge diese Karte auf diesem Panel-Modell wirklich zeigt — hier *4 von 4 Plätzen*.
 
-  Bitte ohne echte Entity-Namen aus der eigenen Installation – die Beispielkonfiguration aus
-  docs/beispiel-apps.yaml eignet sich dafür.
--->
+![Vorschau der Ruheanzeige in Originalgröße](docs/bilder/screensaver-vorschau.png)
 
-*Bilder folgen.* Bis dahin zeigt die [Beispielkonfiguration](docs/beispiel-apps.yaml), womit der
-Editor startet, und [funktionen.md](docs/funktionen.md) beschreibt jede Fläche im Detail.
+Die **Vorschau** zeichnet die Displayfläche in Originalgröße, mit den Einträgen an ihren Plätzen,
+echten Symbolen, Farben und gerenderten Templates. So sieht man vor dem Generieren, ob eine
+Beschriftung abgeschnitten wird oder eine Farbe auf Schwarz untergeht.
+
+Ein Umschalter darüber wechselt auf **vom Gerät (live)** — dann zeigt dieselbe Fläche, was das
+Backend zuletzt wirklich ans Display geschickt hat. Details zu beidem:
+[docs/funktionen.md](docs/funktionen.md#vorschau)
 
 ## Voraussetzungen
 

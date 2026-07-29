@@ -24,6 +24,12 @@ Gerät zeigt die Standardfarbe. Die Vorschau macht es genauso. **Nachgebildet wi
 tut, nicht was dort gemeint war** — sonst zeigte die Vorschau ein Rot, das auf dem Display nie
 erscheint.
 
+### Screenshots im README
+
+Zwei Bilder zeigen jetzt, worum es geht, statt es nur zu beschreiben: der Editor mit
+Navigationsbaum, erklärten Feldern und Kapazitätsanzeige — und die Vorschau der Ruheanzeige in
+Originalgröße. Sie liegen unter `docs/bilder/`.
+
 ## 0.21.1 – 2026-07-29
 
 ### Die Dokumentation trennt jetzt Anwender von Mitbauern
