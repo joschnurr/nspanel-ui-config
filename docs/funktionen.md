@@ -111,6 +111,18 @@ Backend. Zwei Feinheiten sind nachgebildet: `type: "0"` als **Text** ist keine S
 aktuelle Temperatur (das Backend verzweigt nach dem Python-Typ), und reicht die Vorhersage nicht so
 weit wie der Index, steht dort ebenfalls das aktuelle Wetter.
 
+**Auf `cardPower` laufen die Punkte mit.** Zwischen der Mitte und jedem der sechs Außenplätze liegt
+ein Balken, auf dem ein Punkt den Energiefluss anzeigt; sein Tempo kommt aus dem Feld `speed` des
+Eintrags. Im Dump sind das Nextion-**Slider** statt Textfelder, deshalb standen sie lange nicht in
+der Slot-Tabelle — jetzt schon, abgemessen wie alles andere. Die Vorschau bildet den Seitencode
+nach: alle 100 ms rückt der Punkt um `speed` weiter, der Bereich ist 0–1200, am Ende springt er auf
+die andere Seite. Ein Umlauf dauert also `1200 / |speed| · 0,1 s` — bei `speed: 20` sechs Sekunden.
+Zwei Eigenheiten sind übernommen, nicht geglättet: gedeckelt wird auf **±120** (die Upstream-Doku
+nennt ±100), und quer dreht der Seitencode das Vorzeichen für alle sechs Balken, wodurch die Punkte
+einheitlich über die Karte laufen. Steht im `speed` ein Template — der übliche Fall, es rechnet den
+Anteil an der Gesamtleistung aus —, geht es denselben Weg wie jedes andere Template. Ohne `speed`
+steht der Punkt still, der Tooltip sagt das auch.
+
 **Auf dem Raster steht bei Sensoren der Messwert, kein Symbol.** `cardGrid`/`cardGrid2` haben kein
 eigenes Wertfeld – deshalb setzt das Backend bei `sensor`-Entities ohne eigenes `icon` den Zustand an
 die Stelle des Symbols, gekürzt auf vier Zeichen (endet das auf einen Punkt, auf drei): `21.53` wird

@@ -366,3 +366,68 @@ test("navItem1/navItem2 ersetzen die Pfeile der Blättertasten", () => {
   const ohne = instanz._slotElement(rechts, karte, () => previewContent({}, {}), [], 1);
   assert.equal(ohne.textContent, "▶");
 });
+
+// --- cardPower: der Laufpunkt ------------------------------------------------------------------
+
+/** Zeichnet den ersten Laufbalken von cardPower für diese Entity. */
+function zeichneBalken(entity, auftraege = [], model = "eu") {
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model });
+  const slot = ergebnis.slots.find((eintrag) => eintrag.kind === "flow");
+  assert.ok(slot, "kein Laufbalken im Layout");
+  const element = panel()._flowSlot(
+    fakeElement("div"),
+    slot,
+    () => previewContent(entity, {}),
+    auftraege,
+    1
+  );
+  return { element, punkt: element.children[0] };
+}
+
+test("der Laufpunkt läuft so schnell wie das Display ihn laufen lässt", () => {
+  // Seitencode: alle 100 ms kommt `speed` auf den Sliderwert, Bereich 0…1200. Bei speed 20 sind
+  // das 60 Schritte, also 6 s je Umlauf.
+  const { punkt, element } = zeichneBalken({ entity: "sensor.pv", speed: 20 });
+
+  assert.match(punkt.style.animation, /ns-flow-h 6\.00s linear infinite/);
+  // Quer dreht der Seitencode das Vorzeichen – aus +20 wird ein Lauf in die Gegenrichtung.
+  assert.match(punkt.style.animation, /reverse/);
+  assert.match(element.title, /speed: 20/);
+});
+
+test("ohne speed steht der Punkt in der Ruhelage", () => {
+  const { punkt, element } = zeichneBalken({ entity: "sensor.pv" });
+
+  assert.equal(punkt.style.animation, "");
+  assert.equal(punkt.style.left, "50%", "der Slider startet in der Mitte seines Bereichs");
+  assert.match(element.title, /steht still/);
+});
+
+test("das Display deckelt auf ±120, nicht auf ±100", () => {
+  // Steht so im Dump. Nachgebildet wird, was das Gerät tut, nicht was die Doku sagt.
+  const { punkt, element } = zeichneBalken({ entity: "sensor.pv", speed: 500 });
+
+  assert.match(punkt.style.animation, /ns-flow-h 1\.00s/);
+  assert.match(element.title, /auf ±120 begrenzt/);
+});
+
+test("hochkant läuft der Punkt senkrecht und ohne Vorzeichendreher", () => {
+  const { punkt } = zeichneBalken({ entity: "sensor.pv", speed: 20 }, [], "us-p");
+
+  assert.match(punkt.style.animation, /ns-flow-v/);
+  assert.equal(/reverse/.test(punkt.style.animation), false);
+});
+
+test("ein speed-Template wird nachgerendert wie jedes andere Feld", () => {
+  // Genau hier steht in der Praxis meist ein Template: der Anteil an der Gesamtleistung.
+  const auftraege = [];
+  const { punkt } = zeichneBalken(
+    { entity: "sensor.pv", speed: "{{ 40 }}" },
+    auftraege
+  );
+
+  assert.equal(punkt.style.animation, "", "vor dem Rendern steht der Punkt still");
+  assert.equal(auftraege.length, 1);
+  auftraege[0].apply("40");
+  assert.match(punkt.style.animation, /ns-flow-h 3\.00s/);
+});

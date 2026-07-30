@@ -639,3 +639,48 @@ test("im Icon-Feld unterscheidet die Live-Ansicht Symbol und Text", () => {
   // Und kein falscher Alarm: das ist kein unbekanntes Symbol, sondern gewollter Text.
   assert.equal(messwert.iconUnbekannt, false);
 });
+
+// --- cardPower: die Laufbalken -----------------------------------------------------------------
+
+test("cardPower bekommt sechs Laufbalken, einen je Außenplatz", () => {
+  // Sie stehen im HMI-Dump als Slider, nicht als Textfeld – ohne sie bliebe die Fläche leer, auf
+  // der am Gerät das Auffälligste der Karte passiert.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const balken = ergebnis.slots.filter((slot) => slot.kind === "flow");
+
+  assert.equal(balken.length, 6);
+  assert.deepEqual(
+    balken.map((b) => b.zuSlot),
+    [2, 3, 4, 5, 6, 7],
+    "die ersten beiden Plätze sitzen in der Mitte und haben keinen Balken"
+  );
+  // Abgemessen: h0 liegt bei 78,105 auf 120×12 von 480×320.
+  const erster = balken[0];
+  assert.ok(Math.abs(erster.x - (78 / 480) * 100) < 0.01);
+  assert.ok(Math.abs(erster.w - (120 / 480) * 100) < 0.01);
+  assert.equal(erster.senkrecht, false);
+  assert.equal(erster.spanne, 1200);
+  assert.equal(erster.ruhe, 0.5, "der Slider startet in der Mitte seines Bereichs");
+  assert.equal(erster.invertiert, true, "quer dreht der Seitencode das Vorzeichen");
+
+  // Ein Balken zeigt keine eigene Entity – die Liste der Entity-Plätze bleibt bei acht.
+  assert.equal(entitySlots(ergebnis).length, 8);
+});
+
+test("hochkant stehen die Laufbalken senkrecht und ohne Vorzeichendreher", () => {
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "us-p" });
+  const balken = ergebnis.slots.filter((slot) => slot.kind === "flow");
+
+  assert.equal(balken.length, 6);
+  assert.equal(balken[0].senkrecht, true);
+  assert.equal(balken[0].invertiert, false, "der Dreher hängt an 320 px Displayhöhe");
+});
+
+test("weniger Plätze, weniger Balken", () => {
+  // Kapazität ist die einzige Quelle für die Zahl der Plätze – auch für die Balken.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 4, filled: 4, model: "eu" });
+  assert.deepEqual(
+    ergebnis.slots.filter((slot) => slot.kind === "flow").map((b) => b.zuSlot),
+    [2, 3]
+  );
+});

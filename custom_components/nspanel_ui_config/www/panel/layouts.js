@@ -12,6 +12,9 @@
 // Jeder Slot trägt die Rechtecke [x, y, w, h] seiner Bestandteile (icon/name/value); welche
 // es gibt, hängt von der Karte ab. Die Reihenfolge der Slots ist die der entities-Liste.
 //
+// `flow` (nur cardPower) sind die sechs Laufbalken – Nextion-Slider statt Textfelder, mit
+// `index` auf ihren Slot sowie Bereich und Startwert des Sliders.
+//
 // Nach einem Upstream-Update neu erzeugen. Das Werkzeug prüft dabei gegen CARD_CAPACITY.
 
 export const LAYOUTS = {
@@ -2646,6 +2649,86 @@ export const LAYOUTS = {
      "v": "c"
     }
    },
+   "flow": [
+    {
+     "dir": "h",
+     "index": 2,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      78,
+      105,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 3,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      78,
+      181,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 4,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      78,
+      258,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 5,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      258,
+      105,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 6,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      258,
+      181,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 7,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      258,
+      258,
+      120,
+      12
+     ],
+     "start": 600
+    }
+   ],
    "screen": [
     480,
     320
@@ -2969,6 +3052,86 @@ export const LAYOUTS = {
      "v": "c"
     }
    },
+   "flow": [
+    {
+     "dir": "h",
+     "index": 2,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      93,
+      105,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 3,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      93,
+      181,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 4,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      93,
+      258,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 5,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      273,
+      105,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 6,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      273,
+      181,
+      120,
+      12
+     ],
+     "start": 600
+    },
+    {
+     "dir": "h",
+     "index": 7,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      273,
+      258,
+      120,
+      12
+     ],
+     "start": 600
+    }
+   ],
    "screen": [
     480,
     320
@@ -3292,6 +3455,86 @@ export const LAYOUTS = {
      "v": "c"
     }
    },
+   "flow": [
+    {
+     "dir": "v",
+     "index": 2,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      61,
+      169,
+      44,
+      72
+     ],
+     "start": 600
+    },
+    {
+     "dir": "v",
+     "index": 3,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      139,
+      169,
+      44,
+      72
+     ],
+     "start": 600
+    },
+    {
+     "dir": "v",
+     "index": 4,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      217,
+      169,
+      44,
+      72
+     ],
+     "start": 600
+    },
+    {
+     "dir": "v",
+     "index": 5,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      61,
+      305,
+      44,
+      72
+     ],
+     "start": 600
+    },
+    {
+     "dir": "v",
+     "index": 6,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      139,
+      305,
+      44,
+      72
+     ],
+     "start": 600
+    },
+    {
+     "dir": "v",
+     "index": 7,
+     "max": 1200,
+     "min": 0,
+     "rect": [
+      217,
+      305,
+      44,
+      72
+     ],
+     "start": 600
+    }
+   ],
    "screen": [
     320,
     480

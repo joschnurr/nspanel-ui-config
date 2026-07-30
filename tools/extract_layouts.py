@@ -178,6 +178,54 @@ def _rollen(komponenten: dict, muster: dict[str, str], basis: int) -> list[dict]
     return slots
 
 
+def fluss_card_power(dump: str) -> list[dict]:
+    """Die sechs Laufbalken von ``cardPower`` – je einer zwischen Mitte und Außenplatz.
+
+    Es sind Nextion-**Slider** (``h0``…``h5``), keine Textfelder, deshalb fehlen sie in der
+    Slot-Tabelle. Gezeichnet werden sie trotzdem: auf dem Gerät läuft dort der Punkt, der den
+    Energiefluss anzeigt, und ohne ihn zeigt die Vorschau eine leere Fläche, wo das Auffälligste
+    der Karte passiert.
+
+    ``h<N>`` gehört zum Außenplatz ``t<N>``, also zu Slot ``N + 2`` (die ersten beiden Plätze sitzen
+    in der Mitte). Mitgenommen werden auch Bereich und Startwert des Sliders: der Seitencode addiert
+    im 100-ms-Takt ``speed`` auf ``h<N>.val`` und springt am Ende auf die andere Seite – daraus
+    ergibt sich die Umlaufzeit, die die Vorschau nachbildet.
+    """
+    balken = []
+    for block in re.split(r"\n(?=[A-Za-z]+ \S+\n)", dump):
+        kopf = block.split("\n", 1)[0].strip()
+        treffer = re.match(r"^Slider h(\d)$", kopf)
+        if not treffer:
+            continue
+        werte = {}
+        for schluessel, muster in (
+            ("x", r"x coordinate\s*:\s*(-?\d+)"),
+            ("y", r"y coordinate\s*:\s*(-?\d+)"),
+            ("w", r"Width\s*:\s*(\d+)"),
+            ("h", r"Height\s*:\s*(\d+)"),
+            ("start", r"Position\s*:\s*(\d+)"),
+            ("min", r"Lower range limit\s*:\s*(\d+)"),
+            ("max", r"Upper range limit\s*:\s*(\d+)"),
+        ):
+            gefunden = re.search(muster, block)
+            if gefunden:
+                werte[schluessel] = int(gefunden.group(1))
+        richtung = re.search(r"Direction\s*:\s*(\w+)", block)
+        if len(werte) != 7 or not richtung:
+            continue
+        balken.append(
+            {
+                "index": int(treffer.group(1)) + 2,
+                "rect": [werte["x"], werte["y"], werte["w"], werte["h"]],
+                "dir": "v" if richtung.group(1).startswith("vertical") else "h",
+                "start": werte["start"],
+                "min": werte["min"],
+                "max": werte["max"],
+            }
+        )
+    return sorted(balken, key=lambda b: b["index"])
+
+
 def slots_card_power(komponenten: dict) -> list[dict]:
     """``cardPower`` nummeriert anders: die ersten beiden Einträge sitzen in der Mitte.
 
@@ -357,6 +405,10 @@ def layout_fuer(dump: str, model: str, seite: str) -> dict:
         "slots": slots,
         "slotAttrs": [_attrs_zu(slot, komponenten, attribute) for slot in slots],
     }
+    if seite == "cardPower":
+        fluss = fluss_card_power(dump)
+        if fluss:
+            layout["flow"] = fluss
     if hintergrund is not None:
         layout["back"] = hintergrund
     return layout
@@ -416,6 +468,9 @@ def main(argv: list[str]) -> int:
         "//   f = Font-ID · h/v = Ausrichtung (l/c/r bzw. t/c/b) · c = Schriftfarbe (RGB565).\n"
         "// Jeder Slot trägt die Rechtecke [x, y, w, h] seiner Bestandteile (icon/name/value); welche\n"
         "// es gibt, hängt von der Karte ab. Die Reihenfolge der Slots ist die der entities-Liste.\n"
+        "//\n"
+        "// `flow` (nur cardPower) sind die sechs Laufbalken – Nextion-Slider statt Textfelder, mit\n"
+        "// `index` auf ihren Slot sowie Bereich und Startwert des Sliders.\n"
         "//\n"
         "// Nach einem Upstream-Update neu erzeugen. Das Werkzeug prüft dabei gegen CARD_CAPACITY.\n"
     )

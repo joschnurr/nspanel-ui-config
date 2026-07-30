@@ -352,6 +352,22 @@ const STYLES = `
     display: flex; align-items: center; justify-content: center;
     color: #7f8590; font-size: 20px;
   }
+  /* cardPower: die sechs Laufbalken zwischen Mitte und Außenplätzen. Auf dem Gerät ein
+     Nextion-Slider, dessen Cursor im 100-ms-Takt weiterrückt – hier die Spur und der Punkt. */
+  .screen .flow { border-radius: 999px; background: rgba(255,255,255,.08); }
+  .screen .flowdot {
+    position: absolute; width: 9px; height: 9px; border-radius: 50%;
+    background: #4fc3f7; box-shadow: 0 0 6px rgba(79,195,247,.85);
+  }
+  .screen .flow:not(.senkrecht) .flowdot { top: 50%; transform: translate(-50%, -50%); }
+  .screen .flow.senkrecht .flowdot { left: 50%; transform: translate(-50%, 50%); }
+  @keyframes ns-flow-h { from { left: 0%; } to { left: 100%; } }
+  @keyframes ns-flow-v { from { bottom: 0%; } to { bottom: 100%; } }
+  /* Wer Bewegung abgestellt hat, bekommt den Punkt in Ruhelage statt einer Dauerschleife. */
+  @media (prefers-reduced-motion: reduce) {
+    .screen .flowdot { animation: none !important; left: 50%; bottom: auto; }
+    .screen .flow.senkrecht .flowdot { bottom: 50%; left: 50%; }
+  }
 
   /* --- Schmale Bildschirme (Handy) -----------------------------------------------------------
      Der Editor war fürs Tablet gebaut: die Seitenleiste liegt mit festen 290 px neben dem Inhalt.
@@ -1015,6 +1031,16 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
     iconAbgeleitet = false;
   }
 
+  // `speed` (nur cardPower) wird nicht angezeigt, sondern gezeichnet: es treibt den Laufpunkt auf
+  // dem Balken zwischen Mitte und Außenplatz. Als Template muss es trotzdem durch dieselbe Mühle
+  // wie die übrigen Felder – gerade dort steht meist eines, das den Anteil an der Gesamtleistung
+  // ausrechnet.
+  let speed = entity.speed;
+  if (typeof speed === "string" && isTemplate(speed)) {
+    templates.push({ feld: "speed", text: speed });
+    speed = null;
+  }
+
   let color = previewColor(entity.color, zustand && zustand.state);
   if (color === null && colorShape(entity.color) === "template") {
     templates.push({ feld: "color", text: entity.color });
@@ -1033,6 +1059,8 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
     icon,
     // Abweichende Schriftgröße des Eintrags (Feld `font`) – gilt für das Symbolfeld.
     fontOverride: fontIdAus(entity.font),
+    // Tempo des Laufpunkts auf cardPower; `null`, solange ein Template dafür noch nicht gerendert ist.
+    speed: speed === undefined ? null : speed,
     // Text, der auf dem Raster an die Stelle des Symbols tritt (Messwert eines Sensors).
     iconText,
     iconAbgeleitet,
@@ -1099,6 +1127,9 @@ function liveContent(eintrag) {
     iconText: !symbol && eintrag.iconChar ? String(eintrag.iconChar) : null,
     // Die Schriftgröße hat das Backend mitgeschickt (¬<font> am Symbol, siehe protocol.py).
     fontOverride: typeof eintrag.font === "number" ? eintrag.font : null,
+    // Auf cardPower hängt hinter den sechs Standardfeldern noch `speed` – protocol.py hebt alles
+    // darüber hinaus in `extra` auf.
+    speed: Array.isArray(eintrag.extra) ? eintrag.extra[0] : null,
     iconAbgeleitet: false,
     iconSonderform: false,
     // Ein Zeichen, das nicht im mitgelieferten Mapping steht, kommt aus einer neueren
@@ -2529,6 +2560,8 @@ class NsPanelUiConfigPanel extends PanelBase {
       return element;
     }
 
+    if (slot.kind === "flow") return this._flowSlot(element, slot, inhaltFuer, auftraege, marke);
+
     const inhalt = inhaltFuer(slot);
 
     if (slot.kind === "status") return this._statusSlot(element, slot, inhalt, auftraege, marke);
@@ -2577,6 +2610,58 @@ class NsPanelUiConfigPanel extends PanelBase {
       element.appendChild(warnung);
     }
     return element;
+  }
+
+  /**
+   * Ein Laufbalken von `cardPower` – die Strecke zwischen der Kartenmitte und einem Außenplatz.
+   *
+   * Er trägt keine eigene Entity, sondern gehört zu einer: `zuSlot` sagt, zu welcher. Deshalb holt
+   * er seinen Inhalt über denselben `inhaltFuer`-Weg wie jeder andere Platz, nur mit dem Index
+   * seines Nachbarn — so funktioniert er in der Modell-Vorschau (`speed` aus der Konfiguration,
+   * ggf. als Template) genauso wie in der Live-Ansicht (`speed` als siebtes Feld der Nachricht).
+   */
+  _flowSlot(element, slot, inhaltFuer, auftraege, marke) {
+    element.className = `flow${slot.senkrecht ? " senkrecht" : ""}`;
+    const punkt = document.createElement("span");
+    punkt.className = "flowdot";
+    element.appendChild(punkt);
+
+    const inhalt = inhaltFuer({ ...slot, index: slot.zuSlot });
+    const setze = (wert) => this._flowLauf(element, punkt, slot, wert);
+    setze(inhalt.speed);
+    this._registerTemplate(inhalt, "speed", auftraege, marke, setze);
+    return element;
+  }
+
+  /**
+   * Punkt und Umlauf eines Laufbalkens – Nachbildung des Seitencodes, nicht einer Vorstellung davon.
+   *
+   * Das Display addiert alle 100 ms `speed` auf den Sliderwert und springt am Bereichsende auf die
+   * andere Seite. Ein Umlauf dauert also `spanne / |speed| · 0,1 s`, und das Vorzeichen bestimmt die
+   * Richtung. Zwei Eigenheiten stehen dabei so im Dump und werden nicht geglättet: gedeckelt wird
+   * auf **±120** (die Doku nennt ±100), und im Querformat dreht der Seitencode das Vorzeichen für
+   * alle sechs Balken — dadurch laufen die Punkte quer über die Karte in dieselbe Richtung.
+   */
+  _flowLauf(element, punkt, slot, wert) {
+    const zahl = Number.parseInt(String(wert ?? "").trim(), 10);
+    const gedeckelt = Number.isFinite(zahl) ? Math.max(-120, Math.min(120, zahl)) : 0;
+    const wirksam = slot.invertiert ? -gedeckelt : gedeckelt;
+    const achse = slot.senkrecht ? "bottom" : "left";
+    punkt.style.animation = "";
+    punkt.style[achse] = `${slot.ruhe * 100}%`;
+    if (!wirksam) {
+      element.title = Number.isFinite(zahl)
+        ? "speed: 0 – der Punkt steht still"
+        : "kein speed gesetzt – der Punkt steht still";
+      return;
+    }
+    const dauer = (slot.spanne / Math.abs(wirksam)) * 0.1;
+    punkt.style[achse] = "";
+    punkt.style.animation = `ns-flow-${slot.senkrecht ? "v" : "h"} ${dauer.toFixed(
+      2
+    )}s linear infinite${wirksam < 0 ? " reverse" : ""}`;
+    const begrenzt = gedeckelt !== zahl ? ` (gesetzt ${zahl}, auf ±120 begrenzt)` : "";
+    element.title = `speed: ${gedeckelt}${begrenzt} – ein Umlauf dauert ${dauer.toFixed(1)} s`;
   }
 
   /**

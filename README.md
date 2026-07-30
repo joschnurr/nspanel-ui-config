@@ -46,7 +46,8 @@ nicht erreichbar, in einer flachen Liste sieht man das nicht.
 Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Die Geometrie ist
 aus der Display-Firmware abgemessen, nicht geschätzt. Auf dem Screensaver auch das Wetter, wie es
 das Gerät zeigt: Temperatur statt Zustand, und in den vier Spalten die echte Vorhersage samt
-Wochentag. Man sieht, wie die Karte wirkt, bevor sie auf dem Panel landet.
+Wochentag; auf `cardPower` laufen die Punkte auf den Flussbalken mit — im Tempo, das `speed` am
+Gerät ergibt. Man sieht, wie die Karte wirkt, bevor sie auf dem Panel landet.
 → [docs/funktionen.md](docs/funktionen.md#vorschau)
 
 **Live-Ansicht** – wer ein laufendes NSPanel hat, schaltet die Vorschau auf *vom Gerät*: dann zeigt

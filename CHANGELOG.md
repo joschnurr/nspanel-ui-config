@@ -3,6 +3,34 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.24.0 – 2026-07-30
+
+### Auf cardPower fehlte das, was die Karte ausmacht
+
+Die Vorschau zeichnete acht Textfelder an abgemessenen Stellen — und dazwischen nichts. Auf dem
+Gerät liegt dort das Auffälligste der Karte: sechs Balken zwischen der Mitte und den Außenplätzen,
+auf denen je ein Punkt den Energiefluss anzeigt.
+
+Der Grund, warum sie fehlten, steckt im Dump: es sind Nextion-**Slider**, keine Textfelder, und die
+Slot-Tabelle sammelt Textfelder. `tools/extract_layouts.py` liest sie jetzt mit, samt Bereich,
+Startwert und Ausrichtung — die Balken sind damit **abgemessen wie alles andere**, nicht
+nachempfunden. Ein Kontrolllauf gegen die unveränderten Dumps hat vorher bestätigt, dass das
+Werkzeug den bisherigen Stand zeichengenau reproduziert; die neue Fassung unterscheidet sich also
+nur um die Balken.
+
+Der Laufpunkt bildet den Seitencode nach statt einer Vorstellung davon: alle 100 ms addiert das
+Display `speed` auf den Sliderwert, Bereich 0–1200, am Ende springt er auf die andere Seite. Ein
+Umlauf dauert deshalb `1200 / |speed| · 0,1 s` — bei `speed: 20` sechs Sekunden, und genau so lange
+läuft er auch in der Vorschau. Zwei Eigenheiten sind übernommen, nicht geglättet: gedeckelt wird auf
+**±120**, obwohl die Upstream-Doku ±100 nennt, und im Querformat dreht der Seitencode das Vorzeichen
+für alle sechs Balken (`if(p0.h==320)`), wodurch die Punkte einheitlich über die Karte laufen.
+Hochkant stehen die Balken senkrecht, dort entfällt der Dreher.
+
+`speed` ist in der Praxis fast immer ein Template — es rechnet den Anteil an der Gesamtleistung aus.
+Es geht deshalb durch dieselbe Sammelanfrage wie Name, Wert, Symbol und Farbe; bis die Antwort da
+ist, steht der Punkt still. Auch die Live-Ansicht kann ihn: `speed` ist das siebte Feld der
+Nachricht, `protocol.py` hebt es ohnehin auf.
+
 ## 0.23.1 – 2026-07-30
 
 ### Das Icon hatte Balken, wo es keine haben sollte

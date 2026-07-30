@@ -81,8 +81,40 @@ function platz(teile, index, breite, hoehe, attrs = {}) {
   return { kind: "measured", index, ...rahmen, parts };
 }
 
+/**
+ * Die Laufbalken einer Karte als eigene Plätze (`cardPower`, sonst nichts).
+ *
+ * Sie stehen im Dump als Nextion-**Slider** und nicht als Textfeld, tauchen deshalb nicht in der
+ * Slot-Tabelle auf – gezeichnet gehören sie trotzdem: dort läuft auf dem Gerät der Punkt, der den
+ * Energiefluss zeigt.
+ *
+ * Nachgebildet wird der Seitencode, nicht eine Vorstellung davon: alle 100 ms addiert das Display
+ * `speed` auf den Sliderwert und springt am Bereichsende auf die andere Seite. Daraus folgen
+ * Ruhelage (`ruhe`, der Startwert im Bereich) und Umlaufzeit (`spanne` Schritte weit).
+ */
+function flussPlaetze(layout, breite, hoehe, capacity, model) {
+  return (layout.flow || [])
+    .filter((balken) => balken.index < capacity)
+    .map((balken) => {
+      const spanne = Math.max(1, balken.max - balken.min);
+      return {
+        kind: "flow",
+        // Bewusst nicht `index`: das kennzeichnet einen Platz, der selbst eine Entity zeigt
+        // (`entitySlots`). Der Balken zeigt keine, er gehört nur zu einer.
+        zuSlot: balken.index,
+        ...proz(balken.rect, breite, hoehe),
+        senkrecht: balken.dir === "v",
+        spanne,
+        ruhe: (balken.start - balken.min) / spanne,
+        // Der Seitencode dreht das Vorzeichen bei 320 px Displayhöhe (`if(p0.h==320)`), also auf
+        // den beiden quer liegenden Modellen. Hier steht die Bedingung als das, was sie meint.
+        invertiert: !isPortrait(model),
+      };
+    });
+}
+
 /** Karten: Titel und Blättertasten oben, darunter die Plätze der Entity-Liste. */
-function kartenLayout(layout, capacity) {
+function kartenLayout(layout, capacity, model) {
   const [breite, hoehe] = layout.screen;
   const slots = [];
   const chrome = layout.chrome || {};
@@ -109,6 +141,7 @@ function kartenLayout(layout, capacity) {
     const eintrag = platz(teile, index, breite, hoehe, slotAttrs[index]);
     if (eintrag) slots.push(eintrag);
   });
+  slots.push(...flussPlaetze(layout, breite, hoehe, capacity, model));
   return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
@@ -233,7 +266,7 @@ export function previewSlots({ cardType, capacity, filled = 0, model = "eu" } = 
   if (gemessen) {
     return gemessen.special
       ? screensaverLayout(gemessen, anzahl, filled, model)
-      : kartenLayout(gemessen, anzahl);
+      : kartenLayout(gemessen, anzahl, model);
   }
 
   const widget = SINGLE_WIDGETS[cardType];
