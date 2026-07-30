@@ -3,6 +3,38 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.23.1 – 2026-07-30
+
+### Das Icon hatte Balken, wo es keine haben sollte
+
+Aufgefallen bei der Frage, warum HACS das Icon nicht zeigt (dazu unten). Beim Nachmessen der
+mitgelieferten Brand-Bilder: `icon.png` war das ganze, querformatige Motiv in ein Quadrat gelegt —
+mit 9 px einfarbigem Rand oben und 12 px unten, `icon@2x.png` entsprechend 19 px. Auch `logo.png`
+trug ringsum einen schwarzen Saum. Die Spezifikation von `home-assistant/brands` verlangt
+beschnittene Bilder ohne solche Leerflächen, und als Avatar wirkt ein randloses Motiv ohnehin
+kompakter.
+
+Alle vier Dateien sind deshalb neu aus `docs/brand-source.jpg` gerechnet: schwarzer Rand
+abgeschnitten, das Icon **mittig auf ein Quadrat beschnitten** statt mit Balken gefüllt, das Logo im
+ursprünglichen Seitenverhältnis. Maße wie gefordert — Icon 256×256 und 512×512, Logo mit kurzer
+Seite 256 bzw. 512 (314×256, 628×512).
+
+### Warum HACS das Icon trotzdem nicht anzeigt
+
+Nicht unsere Baustelle, aber die Erklärung gehört hierher, damit sie nicht immer wieder gesucht
+wird. Seit Home Assistant 2026.3 dürfen Custom Integrations ihre Brand-Bilder selbst mitbringen —
+genau das tut der `brand/`-Ordner hier, und Home Assistant liefert sie über
+`/api/brands/integration/nspanel_ui_config/icon.png` auch aus; unter *Geräte & Dienste* erscheint
+das Icon.
+
+HACS 2.0.5 nutzt diesen Weg nicht: Es baut die Adresse selbst gegen den CDN
+(`https://brands.home-assistant.io/_/<domain>/icon.png`, in `update.py` und noch einmal als eigene
+`brandsUrl`-Kopie im Frontend). Dort ist die Integration nicht hinterlegt, also kommt der
+Platzhalter „icon not available" zurück. Nachreichen lässt sich das nicht mehr: die PR-Vorlage von
+`home-assistant/brands` sagt ausdrücklich, dass Pull Requests für neue Custom Components nicht mehr
+angenommen werden, und kennt unter „Type of change" nur noch Core-Integrationen. Es bleibt also
+beim Warten auf HACS (offene Issues #5223, #5179; offene PRs #5228, #5339).
+
 ## 0.23.0 – 2026-07-30
 
 ### Im Screensaver stand „sunny“, wo das Gerät die Temperatur zeigt
