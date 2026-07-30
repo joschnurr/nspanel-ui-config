@@ -69,6 +69,10 @@ const STYLES = `
   header h1 { font-size: 18px; font-weight: 400; margin: 0; flex: 1; }
   header h1 .version { font-size: 12px; opacity: .7; margin-left: 6px; }
   header .dirty { font-size: 13px; opacity: .9; }
+  /* Etwas abgesetzt und dunkler als die Aktionen daneben – „Schließen“ soll nicht wie „Speichern“
+     aussehen und auch nicht versehentlich mitgetroffen werden. */
+  header .schliessen { margin-left: 10px; background: rgba(0,0,0,.18); }
+  header .schliessen:hover:not(:disabled) { background: rgba(0,0,0,.3); }
 
   button {
     font: inherit; font-size: 13px; cursor: pointer;
@@ -614,6 +618,68 @@ function wetterDarstellung(id, zustand) {
   return { icon: `mdi:${symbol}`, color: farbe ? rgbToHex(farbe) : null };
 }
 
+/** Wetter-Entity? Dieselbe Prüfung wie im Backend: die Domain der entity_id, sonst nichts. */
+const istWetter = (id) => typeof id === "string" && id.startsWith("weather.");
+
+/**
+ * Was das Backend bei einer Wetter-Entity in das **Wertfeld** schreibt: die Temperatur.
+ *
+ * `pages.py` setzt für `weather` fest `f'{temperature}{unit}'` – der Zustand („sunny“) landet dort
+ * nie, der steckt im Symbol. Ohne diese Nachbildung stand im Screensaver „sunny“, wo das Gerät
+ * „26.5°C“ zeigt. Die Einheit kommt aus dem Attribut `temperature_unit` der Entity, **nicht** aus
+ * `weatherUnit` des Screensavers: das gilt nur für cardThermo und die Klima-Zeilen.
+ *
+ * Kein Leerzeichen zwischen Zahl und Einheit – das ist im Backend genauso, und die schmale
+ * Vorhersagespalte hat auch keinen Platz dafür.
+ */
+const wetterTemperatur = (wert, einheit) => `${wert ?? ""}${einheit ?? ""}`;
+
+/**
+ * Vorhersage-Eintrag: welcher Tag, aus welcher Reihe – oder `null` für „aktuelles Wetter“.
+ *
+ * Auf dem Screensaver tragen die vier Vorhersagespalten dieselbe Entity wie das große Symbol und
+ * unterscheiden sich nur durch `type`: `type: 0` … `3` als Spaltennummer, wahlweise mit
+ * ausdrücklicher Reihe (`daily:1`, `hourly:2`). `pages.py` verzweigt streng nach dem Python-Typ –
+ * **nur eine echte Ganzzahl** ist ein Index, `type: "0"` als Text landet dort im Zweig für die
+ * aktuelle Temperatur. Genau diese Unterscheidung bildet die Prüfung hier nach.
+ */
+function wetterVorhersage(entity) {
+  const roh = isPlain(entity) ? entity.type : null;
+  if (typeof roh === "number" && Number.isInteger(roh)) return { reihe: null, index: roh };
+  if (typeof roh === "string" && roh.split(":").length === 2) {
+    const [reihe, index] = roh.split(":");
+    if (/^\d+$/.test(index.trim())) return { reihe, index: Number(index) };
+  }
+  return null;
+}
+
+/**
+ * Welche Vorhersagereihe das Backend abruft, wenn der Eintrag keine nennt.
+ *
+ * Dieselbe Reihenfolge wie in `pages.py`: das erste unterstützte Verfahren gewinnt, und ohne jede
+ * Angabe bleibt es bei `daily` (die Bits stammen aus `supported_features` der Entity).
+ */
+function wetterReihe(attrs) {
+  const bits = Number((attrs || {}).supported_features) || 0;
+  if (bits & 0b001) return "daily";
+  if (bits & 0b010) return "hourly";
+  if (bits & 0b100) return "twice_daily";
+  return "daily";
+}
+
+/**
+ * Der Wochentag über einer Vorhersagespalte.
+ *
+ * Näherung: das Backend formatiert mit babel (`E` → „Do“), hier macht es der Browser mit seiner
+ * eigenen Locale. Trägt der Eintrag ein `name`, ist das im Backend kein Name, sondern ein
+ * Formatmuster – die Vorschau zeigt es dann unverändert an, statt es nachzubilden.
+ */
+function wochentag(zeitpunkt) {
+  const zeit = new Date(zeitpunkt);
+  if (Number.isNaN(zeit.getTime())) return "";
+  return zeit.toLocaleDateString(undefined, { weekday: "short" });
+}
+
 /** Beschriftung einer Karte in der Seitenleiste. */
 function cardLabel(card) {
   if (!isPlain(card)) return "(ungültige Karte)";
@@ -851,7 +917,7 @@ function gridSensorText(zustand) {
   return text;
 }
 
-function previewContent(entity, states = {}, cardType = null) {
+function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
   if (!isPlain(entity)) {
     return { frei: true, kind: "empty", name: "", value: "", icon: "", templates: [] };
   }
@@ -860,6 +926,17 @@ function previewContent(entity, states = {}, cardType = null) {
   const zustand = kind === "state" ? states[id] : undefined;
   const attrs = (zustand && zustand.attributes) || {};
   const templates = [];
+
+  // Wetter: eine Spalte der Ruheanzeige zeigt nicht das aktuelle Wetter, sondern einen
+  // Vorhersagetag. Dessen Werte stehen seit HA 2024 in **keinem** Attribut mehr, sondern nur hinter
+  // `weather.get_forecasts` – deshalb kommen sie über `forecasts` von außen herein. Fehlen sie
+  // noch, meldet der Platz seinen Bedarf an (`vorhersageFehlt`) und wird nachgezeichnet.
+  const wetterEntity = kind === "state" && istWetter(id);
+  const vorhersage = wetterEntity ? wetterVorhersage(entity) : null;
+  const reihe = vorhersage ? vorhersage.reihe || wetterReihe(attrs) : null;
+  const tage = vorhersage ? forecasts[`${id}|${reihe}`] : null;
+  const tag = Array.isArray(tage) ? tage[vorhersage.index] || null : null;
+  const vorhersageFehlt = vorhersage && !Array.isArray(tage) ? { id, reihe } : null;
 
   const fest = (feld, wert) => {
     if (typeof wert === "string" && isTemplate(wert)) {
@@ -872,6 +949,8 @@ function previewContent(entity, states = {}, cardType = null) {
   let name = fest("name", entity.name);
   if (name === null && !templates.some((t) => t.feld === "name")) {
     if (kind === "text") name = "";
+    // Über einer Vorhersagespalte steht der Wochentag, nicht der Name der Wetter-Entity.
+    else if (tag) name = wochentag(tag.datetime);
     else if (kind === "state") name = attrs.friendly_name || id;
     else name = id;
   }
@@ -879,7 +958,13 @@ function previewContent(entity, states = {}, cardType = null) {
   let value = fest("value", entity.value);
   if (value === null && !templates.some((t) => t.feld === "value")) {
     if (kind === "text") value = id.slice("iText.".length);
-    else if (zustand) {
+    else if (wetterEntity && zustand) {
+      if (tag) value = wetterTemperatur(tag.temperature, attrs.temperature_unit);
+      // Reicht die Vorhersage nicht so weit, fällt auch das Backend auf das aktuelle Wetter
+      // zurück; ist sie nur noch nicht geladen, bleibt der Platz solange leer.
+      else if (vorhersage && !Array.isArray(tage)) value = "";
+      else value = wetterTemperatur(attrs.temperature, attrs.temperature_unit);
+    } else if (zustand) {
       value = attrs.unit_of_measurement
         ? `${zustand.state} ${attrs.unit_of_measurement}`
         : zustand.state;
@@ -907,8 +992,10 @@ function previewContent(entity, states = {}, cardType = null) {
   }
 
   // Wetter trägt sein Symbol im Zustand, nicht im Attribut – deshalb *nach* attrs.icon, aber vor
-  // dem Platzhalter. Ein selbst gesetztes `icon` gewinnt weiterhin, wie beim Gerät.
-  const wetter = icon === null && !iconSonderform ? wetterDarstellung(id, zustand && zustand.state) : null;
+  // dem Platzhalter. Ein selbst gesetztes `icon` gewinnt weiterhin, wie beim Gerät. Eine
+  // Vorhersagespalte zeigt das Wetter **ihres** Tages, nicht das aktuelle.
+  const wetterZustand = tag ? tag.condition : zustand && zustand.state;
+  const wetter = icon === null && !iconSonderform ? wetterDarstellung(id, wetterZustand) : null;
   if (wetter) {
     icon = wetter.icon;
     iconAbgeleitet = true;
@@ -955,6 +1042,9 @@ function previewContent(entity, states = {}, cardType = null) {
     color,
     // Fehlt eine echte entity_id in Home Assistant, ist das fast immer ein Tippfehler.
     zustandFehlt: kind === "state" && !zustand,
+    // Dieser Platz braucht eine Wettervorhersage, die noch nicht vorliegt – das Panel holt sie
+    // nach und zeichnet die Vorschau erneut (siehe _ladeVorhersagen).
+    vorhersageFehlt,
     templates,
   };
 }
@@ -1221,6 +1311,10 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._previewMode = "model";
     this._livePollTimer = null;
     this._liveTitle = "";
+    // Wettervorhersagen je `entity_id|reihe`. Sie stehen in keinem Attribut, kosten also einen
+    // Dienstaufruf – gespeichert bleiben sie deshalb bis zum Neuladen der Seite. Ein Fehlschlag
+    // wird als leere Liste vermerkt, damit die Vorschau ihn nicht bei jeder Zeichnung wiederholt.
+    this._forecasts = {};
     // Muss die letzte Anweisung im Konstruktor bleiben: sie kann `_boot()` auslösen, und das
     // erwartet ein fertig initialisiertes Objekt.
     this._rescueUpgradeProperties();
@@ -1317,6 +1411,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           <button id="btn-backups">Sicherungen…</button>
           <button id="btn-save">Speichern</button>
           <button id="btn-generate">YAML erzeugen</button>
+          <button id="btn-close" class="schliessen" title="Editor verlassen und dorthin zurück, wo man hergekommen ist">✕ Schließen</button>
         </header>
         <div class="body">
           <nav id="nav"></nav>
@@ -1335,6 +1430,36 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._$("btn-backups").addEventListener("click", () => this._openBackupDialog());
     this._$("btn-save").addEventListener("click", () => this._save());
     this._$("btn-generate").addEventListener("click", () => this._generate());
+    this._$("btn-close").addEventListener("click", () => this._verlassen());
+  }
+
+  /**
+   * Den Editor verlassen.
+   *
+   * Ein Panel ist keine Seite, die sich „zumachen“ ließe – der Knopf geht deshalb dorthin zurück,
+   * wo man hergekommen ist. **Warum es ihn überhaupt braucht:** ein Custom-Panel füllt die ganze
+   * Fläche und bringt keine eigene Kopfleiste von Home Assistant mit. Auf einem schmalen Bildschirm
+   * ist die Seitenleiste dort eingeklappt und es gibt kein Menü – ohne diesen Knopf kommt man nur
+   * über die Zurück-Taste des Browsers wieder heraus.
+   *
+   * Gibt es keinen Verlauf (Lesezeichen direkt auf den Editor), führt der Weg auf das
+   * Standard-Dashboard; die Navigation läuft dabei über `location-changed`, damit Home Assistant
+   * sie wie einen Klick in der Seitenleiste behandelt und die Seite nicht neu lädt.
+   */
+  _verlassen() {
+    if (
+      this._dirty &&
+      !window.confirm("Es gibt ungespeicherte Änderungen. Den Editor trotzdem verlassen?")
+    ) {
+      return;
+    }
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    const ziel = `/${(this._hass && this._hass.defaultPanel) || "lovelace"}`;
+    window.history.pushState(null, "", ziel);
+    window.dispatchEvent(new CustomEvent("location-changed"));
   }
 
   _$(id) {
@@ -1972,19 +2097,29 @@ class NsPanelUiConfigPanel extends PanelBase {
       screen.appendChild(nav);
     }
 
+    // Plätze, denen noch eine Wettervorhersage fehlt – eingesammelt beim Zeichnen, nachgeholt
+    // danach. Als Map, damit dieselbe Entity für vier Vorhersagespalten nur einmal abgefragt wird.
+    const wetterBedarf = new Map();
+
     // Die Zeichenschicht bekommt den Inhalt als Funktion – dieselbe Fläche zeigt so wahlweise das
     // Modell oder das, was das Gerät gerade anzeigt (siehe _renderLivePreview).
     const inhaltFuer = (slot) => {
       // Die beiden Status-Symbole stehen nicht in der Entity-Liste, sondern als eigene Felder am
       // Screensaver – sie werden über ihre Nummer geholt, nicht über einen Listenindex.
-      if (slot.kind === "status") {
-        return previewContent(card[`statusIcon${slot.nummer}`], states, info.shownType);
+      const inhalt =
+        slot.kind === "status"
+          ? previewContent(card[`statusIcon${slot.nummer}`], states, info.shownType, this._forecasts)
+          : previewContent(
+              slot.index === "flat" ? card : entities[slot.index],
+              states,
+              info.shownType,
+              this._forecasts
+            );
+      if (inhalt.vorhersageFehlt) {
+        const { id, reihe } = inhalt.vorhersageFehlt;
+        wetterBedarf.set(`${id}|${reihe}`, inhalt.vorhersageFehlt);
       }
-      return previewContent(
-        slot.index === "flat" ? card : entities[slot.index],
-        states,
-        info.shownType
-      );
+      return inhalt;
     };
     layout.slots.forEach((slot) => {
       const element = this._slotElement(slot, card, inhaltFuer, auftraege, marke);
@@ -2008,6 +2143,41 @@ class NsPanelUiConfigPanel extends PanelBase {
     host.appendChild(screen);
 
     if (auftraege.length) this._resolvePreviewTemplates(auftraege, marke);
+    if (wetterBedarf.size) this._ladeVorhersagen(wetterBedarf, marke);
+  }
+
+  /**
+   * Holt die Wettervorhersage für die Plätze, die eine brauchen – und zeichnet danach neu.
+   *
+   * **Warum ein Dienstaufruf und nicht `hass.states`:** seit Home Assistant 2024 trägt eine
+   * `weather.*`-Entity ihre Vorhersage in **keinem** Attribut mehr, sie kommt nur noch über
+   * `weather.get_forecasts`. Das ist ein Dienst mit Antwort, über die REST-API braucht er dafür
+   * `?return_response`. Ohne ihn blieben die vier Vorhersagespalten der Ruheanzeige leer, obwohl
+   * das Gerät dort Wochentag, Symbol und Temperatur zeigt.
+   *
+   * Die Endlosschleife verhindert der Zwischenspeicher: auch ein Fehlschlag wird als (leere) Liste
+   * vermerkt, die nächste Zeichnung fragt also nicht erneut und der zweite Durchlauf meldet keinen
+   * Bedarf mehr.
+   */
+  async _ladeVorhersagen(bedarf, marke) {
+    if (!this._hass) return;
+    await Promise.all(
+      [...bedarf].map(async ([schluessel, { id, reihe }]) => {
+        try {
+          const antwort = await this._hass.callApi(
+            "POST",
+            "services/weather/get_forecasts?return_response",
+            { entity_id: id, type: reihe }
+          );
+          const daten = ((antwort || {}).service_response || {})[id] || {};
+          this._forecasts[schluessel] = Array.isArray(daten.forecast) ? daten.forecast : [];
+        } catch (err) {
+          this._forecasts[schluessel] = [];
+        }
+      })
+    );
+    if (marke !== this._previewToken) return; // Die Vorschau zeigt inzwischen etwas anderes.
+    this._renderPreview();
   }
 
   /** Der Titel, der auf der Displayfläche steht – im Live-Modus der des Geräts. */

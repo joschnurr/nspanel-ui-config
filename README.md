@@ -44,8 +44,10 @@ nicht erreichbar, in einer flachen Liste sieht man das nicht.
 
 **Vorschau** – über jedem Formular eine Nachbildung der Displayfläche in Originalgröße: die
 Einträge an ihren Plätzen, mit echten Symbolen, Farben und gerenderten Werten. Die Geometrie ist
-aus der Display-Firmware abgemessen, nicht geschätzt. Man sieht, wie die Karte wirkt, bevor sie auf
-dem Panel landet. → [docs/funktionen.md](docs/funktionen.md#vorschau)
+aus der Display-Firmware abgemessen, nicht geschätzt. Auf dem Screensaver auch das Wetter, wie es
+das Gerät zeigt: Temperatur statt Zustand, und in den vier Spalten die echte Vorhersage samt
+Wochentag. Man sieht, wie die Karte wirkt, bevor sie auf dem Panel landet.
+→ [docs/funktionen.md](docs/funktionen.md#vorschau)
 
 **Live-Ansicht** – wer ein laufendes NSPanel hat, schaltet die Vorschau auf *vom Gerät*: dann zeigt
 sie, was das Backend zuletzt ans Display geschickt hat. Rein lesend über MQTT, nichts wird

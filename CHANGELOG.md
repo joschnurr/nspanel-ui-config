@@ -3,6 +3,50 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.23.0 – 2026-07-30
+
+### Im Screensaver stand „sunny“, wo das Gerät die Temperatur zeigt
+
+Das Symbol stimmte seit 0.22.0, der Text daneben nicht: die Vorschau setzte dort den **Zustand**
+der Wetter-Entity ein, weil sie das bei jeder Entity so macht — Zustand, notfalls mit Einheit.
+Beim Wetter ist das falsch. `pages.py` hat für `weather` einen eigenen Zweig und schreibt fest
+`f'{temperature}{unit}'`; „sunny“ landet nie im Textfeld, das steckt schon im Symbol. Die Einheit
+kommt dabei aus dem Attribut `temperature_unit` der Entity, **nicht** aus `weatherUnit` des
+Screensavers — das gilt nur für cardThermo und die Klima-Zeilen. Auch das Leerzeichen fehlt
+bewusst: das Backend setzt keines, und die schmale Vorhersagespalte hat dafür keinen Platz.
+
+### Und die vier Vorhersagespalten waren gar keine
+
+Dieselbe Entity steht auf dem Screensaver fünfmal; die vier Spalten unterscheiden sich allein
+durch `type: 0` … `3`, ihr Wert ist die Temperatur **dieses Vorhersagetages**, ihre Überschrift der
+Wochentag, ihr Symbol das Wetter von morgen oder übermorgen. Die Vorschau zeigte fünfmal dasselbe
+aktuelle Wetter.
+
+Das ließ sich bisher nicht besser machen: seit Home Assistant 2024 trägt eine `weather.*`-Entity
+ihre Vorhersage in **keinem** Attribut mehr — `hass.states` allein kann diese Plätze also gar nicht
+füllen. Sie kommt nur noch über `weather.get_forecasts`, einen Dienst mit Antwort, den die REST-API
+mit `?return_response` herausgibt. Genau den ruft die Vorschau jetzt auf, einmal je Entity und
+Reihe, und zeichnet sich danach selbst neu. Welche Reihe, entscheidet dieselbe Regel wie im Backend
+(`daily`/`hourly`/`twice_daily` nach `supported_features`, ausdrücklich wählbar als `daily:1`).
+
+Zwei Feinheiten sind nachgebildet, nicht geglättet. `pages.py` verzweigt nach dem **Python-Typ**:
+nur eine echte Ganzzahl ist ein Vorhersage-Index, `type: "0"` als Text zeigt die aktuelle
+Temperatur — die Vorschau unterscheidet das genauso. Und reicht die Vorhersage nicht so weit wie
+der Index, fällt auch das Backend auf das aktuelle Wetter zurück. Ein Fehlschlag beim Abruf wird
+als leere Vorhersage vermerkt, damit die Vorschau ihn nicht bei jeder Zeichnung wiederholt.
+
+Der Wochentag ist die eine Näherung, die bleibt: das Backend formatiert ihn mit babel, hier macht
+es der Browser mit seiner Locale. Trägt der Eintrag ein eigenes `name`, ist das im Backend kein
+Name, sondern ein Formatmuster — die Vorschau zeigt es dann unverändert an, statt zu raten.
+
+### Ein Weg aus dem Editor heraus
+
+Der Kopf hatte fünf Knöpfe und keinen zum Verlassen. Ein Custom-Panel füllt die ganze Fläche und
+bringt keine Kopfleiste von Home Assistant mit; auf einem schmalen Bildschirm ist die Seitenleiste
+eingeklappt und es gibt kein Menü — dann führt nur noch die Zurück-Taste des Browsers hinaus.
+„✕ Schließen“ geht dorthin zurück, wo man hergekommen ist, ohne Verlauf auf das Standard-Dashboard.
+Ungespeicherte Änderungen fragt er vorher ab: direkt neben „Speichern“ wäre er sonst eine Falle.
+
 ## 0.22.1 – 2026-07-29
 
 ### Manchmal blieb der Editor leer, und jeder Knopf meldete „callApi"

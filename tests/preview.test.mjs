@@ -299,6 +299,88 @@ test("wetterDarstellung bildet die Tabellen des Backends nach", () => {
   assert.equal(wetterDarstellung(undefined, undefined), null);
 });
 
+// --- Wetter: Temperatur und Vorhersagespalten --------------------------------------------------
+
+/** Eine Wetter-Entity, wie Home Assistant sie führt – mit Temperatur, aber ohne Vorhersage. */
+const wetterStates = (features) => ({
+  "weather.zuhause": {
+    state: "sunny",
+    attributes: {
+      friendly_name: "Wetter",
+      temperature: 26.5,
+      temperature_unit: "°C",
+      ...(features === undefined ? {} : { supported_features: features }),
+    },
+  },
+});
+
+test("Wetter zeigt die Temperatur, nicht den Zustand", () => {
+  // pages.py schreibt für weather fest f'{temperature}{unit}'. Vorher stand hier „sunny“ – der
+  // Zustand also, den das Gerät gar nicht als Text zeigt, sondern nur als Symbol.
+  const inhalt = previewContent({ entity: "weather.zuhause" }, wetterStates());
+
+  assert.equal(inhalt.value, "26.5°C", "ohne Leerzeichen dazwischen, wie im Backend");
+  assert.equal(inhalt.vorhersageFehlt, null, "das aktuelle Wetter braucht keinen Dienstaufruf");
+  // Ein eigener Wert schlägt die Ableitung weiterhin.
+  assert.equal(previewContent({ entity: "weather.zuhause", value: "warm" }, wetterStates()).value, "warm");
+});
+
+test("eine Vorhersagespalte bleibt leer, bis ihre Vorhersage geladen ist", () => {
+  // Die aktuelle Temperatur wäre hier schlicht falsch – die Spalte zeigt einen anderen Tag.
+  const inhalt = previewContent({ entity: "weather.zuhause", type: 1 }, wetterStates(2));
+
+  assert.equal(inhalt.value, "");
+  assert.deepEqual(inhalt.vorhersageFehlt, { id: "weather.zuhause", reihe: "hourly" },
+    "die Reihe kommt aus supported_features, genau wie im Backend");
+  // Ohne jede Angabe bleibt es bei daily.
+  assert.equal(
+    previewContent({ entity: "weather.zuhause", type: 0 }, wetterStates()).vorhersageFehlt.reihe,
+    "daily"
+  );
+  // `daily:1` nennt die Reihe ausdrücklich und schlägt supported_features.
+  assert.equal(
+    previewContent({ entity: "weather.zuhause", type: "daily:1" }, wetterStates(2)).vorhersageFehlt.reihe,
+    "daily"
+  );
+});
+
+test("mit geladener Vorhersage zeigt die Spalte den Tag, nicht das aktuelle Wetter", () => {
+  const forecasts = {
+    "weather.zuhause|daily": [
+      { datetime: "2026-07-30T10:00:00+00:00", condition: "sunny", temperature: 34.8 },
+      { datetime: "2026-07-31T10:00:00+00:00", condition: "rainy", temperature: 30.8 },
+    ],
+  };
+  const inhalt = previewContent({ entity: "weather.zuhause", type: 1 }, wetterStates(1), null, forecasts);
+
+  assert.equal(inhalt.value, "30.8°C");
+  assert.equal(inhalt.icon, "mdi:weather-rainy", "das Wetter des Vorhersagetages");
+  assert.equal(inhalt.color, "#6361ff");
+  assert.equal(inhalt.vorhersageFehlt, null, "geladen – kein weiterer Dienstaufruf");
+  assert.ok(inhalt.name && inhalt.name !== "Wetter", "über der Spalte steht der Wochentag");
+
+  // Reicht die Vorhersage nicht so weit, fällt auch das Backend auf das aktuelle Wetter zurück.
+  const zuWeit = previewContent({ entity: "weather.zuhause", type: 5 }, wetterStates(1), null, forecasts);
+  assert.equal(zuWeit.value, "26.5°C");
+  assert.equal(zuWeit.vorhersageFehlt, null, "abgefragt ist abgefragt – sonst fragte es endlos nach");
+});
+
+test("type als Text ist keine Vorhersagespalte", () => {
+  // pages.py verzweigt nach dem Python-Typ: nur eine echte Ganzzahl ist ein Index, `"0"` landet
+  // dort im Zweig für die aktuelle Temperatur.
+  const inhalt = previewContent({ entity: "weather.zuhause", type: "0" }, wetterStates(1));
+
+  assert.equal(inhalt.value, "26.5°C");
+  assert.equal(inhalt.vorhersageFehlt, null);
+  // Und bei Entities anderer Domains ändert `type` ohnehin nichts an der Anzeige.
+  const sensor = previewContent(
+    { entity: "sensor.x", type: 1 },
+    { "sensor.x": { state: "21", attributes: { unit_of_measurement: "°C" } } }
+  );
+  assert.equal(sensor.value, "21 °C");
+  assert.equal(sensor.vorhersageFehlt, null);
+});
+
 test("delete und leere Einträge markieren den Platz als frei", () => {
   assert.equal(previewContent({ entity: "delete" }, {}).frei, true);
   assert.equal(previewContent({ entity: "" }, {}).frei, true);

@@ -94,7 +94,22 @@ abgetrennt werden muss (sonst stünde dort wörtlich `19¬2`).
   Backend (`icons.py: weather_mapping`, Farben aus `pages.py`): `sunny` wird zur gelben Sonne,
   `rainy` zum blauen Regen. Ein selbst gesetztes `icon` gewinnt weiterhin.
 - **Zustandsformate.** Ohne eigenes `value` steht der Zustand aus Home Assistant da; das Backend
-  formatiert ihn teils anders.
+  formatiert ihn teils anders. **Ausgenommen ist wieder das Wetter:** dort schreibt `pages.py` fest
+  die Temperatur samt Einheit aus `temperature_unit` (nicht `weatherUnit`, das gilt nur für
+  cardThermo und die Klima-Zeilen) – die Vorschau macht es genauso, sonst stünde dort „sunny“.
+- **Der Wochentag über einer Vorhersagespalte.** Den formatiert das Backend mit babel, die Vorschau
+  mit der Locale des Browsers. Steht am Eintrag ein `name`, ist das im Backend kein Name, sondern
+  ein Formatmuster – die Vorschau zeigt es dann unverändert an, statt zu raten.
+
+**Die vier Vorhersagespalten des Screensavers zeigen echte Vorhersagen.** Sie tragen dieselbe
+Wetter-Entity wie das große Symbol und unterscheiden sich nur durch `type: 0` … `3` (oder
+ausdrücklich `daily:1`, `hourly:2`): Temperatur, Symbol und Wochentag gehören dann diesem
+Vorhersagetag. Seit Home Assistant 2024 steht die Vorhersage in keinem Attribut mehr, deshalb holt
+die Vorschau sie über den Dienst `weather.get_forecasts` nach und zeichnet sich neu – einmal je
+Entity und Reihe. Welche Reihe ohne Angabe gilt, entscheidet `supported_features`, genau wie im
+Backend. Zwei Feinheiten sind nachgebildet: `type: "0"` als **Text** ist keine Spalte, sondern die
+aktuelle Temperatur (das Backend verzweigt nach dem Python-Typ), und reicht die Vorhersage nicht so
+weit wie der Index, steht dort ebenfalls das aktuelle Wetter.
 
 **Auf dem Raster steht bei Sensoren der Messwert, kein Symbol.** `cardGrid`/`cardGrid2` haben kein
 eigenes Wertfeld – deshalb setzt das Backend bei `sensor`-Entities ohne eigenes `icon` den Zustand an
