@@ -20,7 +20,6 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
-from homeassistant.loader import async_get_integration
 
 from .const import (
     DOMAIN,
@@ -35,6 +34,7 @@ from .const import (
 )
 from . import live
 from .http_api import async_register_http_api
+from .panel_assets import panel_kennung
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,11 +54,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         [StaticPathConfig(STATIC_URL_BASE, str(www_dir), cache_headers=False)]
     )
 
+    # Version und Dateistand kommen von der Platte, nicht aus HAs Integrations-Zwischenspeicher —
+    # sonst zeigt die Adresse nach einem Dateiaustausch weiter auf die alte Fassung
+    # (siehe panel_assets.py). `stat`/`read_text` blockieren, gehören also in den Executor.
+    kennung = await hass.async_add_executor_job(panel_kennung, Path(__file__).parent)
+
     # Sidebar-Panel als Custom-Element registrieren. Anders als ein iFrame-Panel bekommt es das
     # `hass`-Objekt gesetzt — nur damit sind die authentifizierte API und `hass.states` (für den
     # Entity-Picker) aus dem Panel heraus erreichbar.
-    integration = await async_get_integration(hass, DOMAIN)
-    module_url = f"{PANEL_MODULE_URL}?v={integration.version or 'dev'}"
+    module_url = f"{PANEL_MODULE_URL}?{kennung}"
     frontend.async_register_built_in_panel(
         hass,
         component_name="custom",

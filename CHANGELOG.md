@@ -3,6 +3,39 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.24.1 – 2026-07-30
+
+### Ein Update konnte auf der Platte liegen und trotzdem nicht ankommen
+
+Gemeldet als „auf cardPower fehlen die Laufbalken". Sie fehlten nicht: Dateien, Layout-Daten, CSS
+und Zeichencode waren vollständig ausgeliefert, und der Weg vom Layout bis zum fertigen Element ist
+nachgemessen worden — sechs Balken, richtige Maße, laufender Punkt. Ausgeliefert wurde trotzdem die
+alte Fassung.
+
+Der Grund liegt daran, wie Home Assistant ein Custom-Panel anmeldet: Die Adresse steht fest, sobald
+der Config-Entry eingerichtet ist, und HA hängt von sich aus nichts daran. Die Version dafür kam aus
+`async_get_integration` — und die liest HA **einmal beim Start**. Wer die Dateien einer laufenden
+Instanz austauscht (hier der übliche Weg, weil HACS neue Fassungen stundenlang nicht anbietet),
+bekommt deshalb weiter die alte Adresse. Dazu kommt, dass die Assets **ohne `Cache-Control`**
+ausgeliefert werden; was der Browser damit macht, ist Auslegungssache. Das Ergebnis ist in beiden
+Fällen dasselbe Bild: Der Editor zeigt eine alte Versionsnummer in der Kopfzeile, und die neue
+Funktion ist nicht da.
+
+Version **und** Dateistand kommen jetzt von der Platte: die Nummer direkt aus `manifest.json`, dazu
+ein kurzer Fingerabdruck über Größe und Zeitstempel der Panel-Dateien (`v=0.24.1&b=1a2b3c4d`).
+Ändert sich eines von beidem, ändert sich die Adresse.
+
+**Praktische Folge: Ein Neuladen der Integration genügt jetzt für neue Editor-Dateien** — unter
+*Einstellungen → Geräte & Dienste → NSPanel UI Config → Neu laden*. Ein voller Neustart ist dafür
+nicht mehr nötig. Er bleibt nötig, wenn sich Python geändert hat.
+
+### Zwei Tests, die genau diese Lücke schließen
+
+Die Laufbalken waren getestet — aber nur, indem der Test `_flowSlot` direkt aufrief. Gezeichnet wird
+über `_slotElement`, wo eine Kette von `kind`-Abfragen entscheidet, wer welchen Zweig bekommt. Fiele
+„flow" dort durch, wäre auf dem Gerätebild nichts zu sehen und kein Test würde es merken. Der Weg
+ist jetzt abgedeckt, ebenso die Zuordnung jedes Balkens zu genau einem Außenplatz.
+
 ## 0.24.0 – 2026-07-30
 
 ### Auf cardPower fehlte das, was die Karte ausmacht

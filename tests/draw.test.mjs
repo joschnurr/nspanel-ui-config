@@ -431,3 +431,40 @@ test("ein speed-Template wird nachgerendert wie jedes andere Feld", () => {
   auftraege[0].apply("40");
   assert.match(punkt.style.animation, /ns-flow-h 3\.00s/);
 });
+
+test("die Laufbalken kommen auch über _slotElement heraus, nicht nur über _flowSlot", () => {
+  // Die Tests darüber rufen `_flowSlot` direkt auf. Gezeichnet wird aber über `_slotElement`, und
+  // dort entscheidet eine Kette von `kind`-Abfragen, wer welchen Zweig bekommt. Fiele „flow" dabei
+  // durch, wären die Balken auf dem Gerätebild weg — sichtbar nur im Browser, von keinem Test.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const inhaltFuer = () => previewContent({ entity: "sensor.pv", speed: 20 }, {});
+
+  const gezeichnet = ergebnis.slots
+    .map((slot) => ({ slot, element: panel()._slotElement(slot, {}, inhaltFuer, [], 1) }))
+    .filter(({ slot }) => slot.kind === "flow");
+
+  assert.equal(gezeichnet.length, 6, "cardPower hat sechs Laufbalken");
+  for (const { element } of gezeichnet) {
+    assert.match(element.className, /\bflow\b/);
+    assert.equal(element.children.length, 1, "genau ein Laufpunkt je Balken");
+    assert.match(element.children[0].style.animation, /ns-flow-h/);
+    // Ohne Maße bliebe der Balken ein Punkt ohne Ausdehnung – unsichtbar, aber im DOM vorhanden.
+    assert.ok(Number.parseFloat(element.style.width) > 0, element.style.width);
+    assert.ok(Number.parseFloat(element.style.height) > 0, element.style.height);
+  }
+});
+
+test("jeder Laufbalken gehört zu genau einem Außenplatz", () => {
+  // `zuSlot` statt `index`: der Balken zeigt keine eigene Entity, er holt `speed` beim Nachbarn.
+  // Zeigten zwei Balken auf denselben Platz, liefe die halbe Karte synchron falsch.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const balken = ergebnis.slots.filter((slot) => slot.kind === "flow");
+  assert.deepEqual(
+    balken.map((b) => b.zuSlot),
+    [2, 3, 4, 5, 6, 7]
+  );
+  assert.ok(
+    balken.every((b) => b.index === undefined),
+    "ein Balken darf keinen eigenen Entity-Index tragen"
+  );
+});
