@@ -67,6 +67,36 @@ def test_nebenmodule_bekommen_die_versions_query_mit() -> None:
     )
 
 
+def test_kein_panel_modul_laedt_ein_nachbarmodul_statisch() -> None:
+    """Die Kennung muss **durch die ganze Kette** reichen, nicht nur bis zur ersten Ebene.
+
+    Der Test darüber sah nur die Hauptdatei an — und genau daran ist es vorbeigelaufen:
+    ``preview-layouts.js`` wurde mit Kennung geladen, holte sich ``layouts.js`` daneben aber per
+    statischem ``import``. Ein statischer Import löst relativ zur importierenden Datei auf und
+    lässt die Query fallen; der Browser nahm also seine alte, zwischengespeicherte Geometrie. Das
+    Ergebnis war ein Panel, dem die Laufbalken von ``cardPower`` fehlten, obwohl alle Dateien
+    aktuell auf der Platte lagen — ein Fehlerbild, das wie ein nicht installiertes Update aussieht
+    und keinem Test auffiel.
+    """
+    for modul in sorted(PANEL_DIR.glob("*.js")):
+        quelle = modul.read_text(encoding="utf-8")
+        statisch = re.findall(r'^import\s.*?\sfrom\s+["\']\./([^"\']+)["\']', quelle, re.MULTILINE)
+        assert not statisch, (
+            f"{modul.name} lädt {statisch} statisch – ohne Kennung, also womöglich aus dem "
+            f"Zwischenspeicher. Dynamisch laden und die Query aus import.meta.url anhängen."
+        )
+
+
+def test_jedes_dynamisch_geladene_modul_bekommt_eine_kennung() -> None:
+    """Ein dynamischer Import ohne Query wäre genauso still veraltet wie ein statischer."""
+    for modul in sorted(PANEL_DIR.glob("*.js")):
+        quelle = modul.read_text(encoding="utf-8")
+        for treffer in re.findall(r"await import\(`\./([^`]+)`\)", quelle):
+            pfad, _, query = treffer.partition("$")
+            assert query, f"{modul.name}: import von {pfad} ohne Versions-Query"
+            assert (PANEL_DIR / pfad).is_file(), f"{modul.name}: geladene Datei fehlt: {pfad}"
+
+
 def test_icon_liste_ist_plausibel_gross() -> None:
     """Das Mapping des Backends hat ~6900 Einträge; ein Bruchteil davon wäre ein Extraktionsfehler."""
     namen = _icon_names()

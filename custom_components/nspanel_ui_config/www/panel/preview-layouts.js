@@ -17,7 +17,12 @@
 // für das quer liegende EU-/US-L-Panel und das hochkant stehende US-P-Panel. Die Pixel bleiben
 // nur dort erhalten, wo die Zeichenschicht sie braucht (Schriftgröße).
 
-import { LAYOUTS } from "./layouts.js";
+// **Dynamisch, nicht `import … from "./layouts.js"`.** Ein statischer Import löst den Pfad relativ
+// zu dieser Datei auf und lässt die Query dabei fallen — der Browser fragt also `layouts.js` *ohne*
+// Kennung an und nimmt seine zwischengespeicherte Fassung. Das Panel wäre dann neu, die Geometrie
+// alt. Genau so fehlten die Laufbalken von `cardPower`: `preview-layouts.js` kam frisch, das
+// `layouts.js` daneben stammte noch aus der Zeit davor und kannte `flow` nicht.
+const { LAYOUTS } = await import(`./layouts.js${new URL(import.meta.url).search}`);
 
 /** Displaygröße je Modell. Nur us-p steht hochkant. */
 export const SCREEN = {

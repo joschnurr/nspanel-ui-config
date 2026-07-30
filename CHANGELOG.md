@@ -3,6 +3,31 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.24.3 – 2026-07-30
+
+### Die Laufbalken fehlten wirklich – ein statischer Import hat die Kennung fallen lassen
+
+Der Editor lief nachweislich auf der neuen Fassung (die Kopfzeile zeigte sie), die Balken blieben
+trotzdem weg. Die Ursache liegt eine Ebene tiefer, als bisher gesucht wurde:
+
+`preview-layouts.js` wurde **mit** Kennung geladen, holte sich die Geometrie daneben aber per
+`import { LAYOUTS } from "./layouts.js"`. Ein statischer Import löst den Pfad relativ zur
+importierenden Datei auf und **lässt die Query dabei fallen**. Der Browser fragte also
+`layouts.js` ohne Kennung an und bekam seine zwischengespeicherte Fassung — eine aus der Zeit vor
+0.24.0, die `flow` noch nicht kannte. `LAYOUTS.cardPower.eu.flow` war damit `undefined`, die Liste
+der Balken leer. Alles andere sah richtig aus, weil die übrige Geometrie seit Wochen unverändert
+ist.
+
+`layouts.js` wird jetzt dynamisch geladen, mit der Query aus `import.meta.url`. Die Kennung reicht
+damit durch die **ganze** Kette, nicht nur bis zur ersten Ebene.
+
+### Der Test sah nur die Hauptdatei an
+
+Es gab bereits eine Prüfung gegen statische Importe — sie las aber ausschließlich
+`nspanel-ui-config-panel.js`. Genau daran ist das hier vorbeigelaufen. Geprüft werden jetzt **alle**
+Panel-Module, auf statische Nachbarimporte ebenso wie auf dynamische ohne Query. Gegenprobe
+gemacht: Mit dem alten Import schlägt der Test fehl.
+
 ## 0.24.2 – 2026-07-30
 
 ### Die Laufbalken waren da – nur kaum zu sehen
