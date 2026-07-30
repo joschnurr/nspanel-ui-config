@@ -3,6 +3,20 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.24.2 – 2026-07-30
+
+### Die Laufbalken waren da – nur kaum zu sehen
+
+Nachgemessen mit der echten Karte und dem echten Schema einer laufenden Anlage: Das Layout liefert
+sechs Balken, `_slotElement` zeichnet alle siebzehn Plätze ohne Ausnahme, und die vier
+`speed`-Templates werden zum Rendern angemeldet. Fehlte also nichts — die Spur war nur mit 8 % Weiß
+gezeichnet und auf dem fast schwarzen Displaygrund praktisch unsichtbar.
+
+Der Dump gibt keine Farbe her: Der Slider ist mit einem Bild gefüllt (`Fill: image`,
+Back. Picture ID 20). Er nennt aber `Opacity: 127` — auf dem Gerät ist die Spur halbtransparent
+hell. 20 % Weiß mit einer feinen Kante ist damit **näher am Original** als der bisherige Wert und
+zugleich das, wozu eine Vorschau da ist.
+
 ## 0.24.1 – 2026-07-30
 
 ### Ein Update konnte auf der Platte liegen und trotzdem nicht ankommen

@@ -353,8 +353,14 @@ const STYLES = `
     color: #7f8590; font-size: 20px;
   }
   /* cardPower: die sechs Laufbalken zwischen Mitte und Außenplätzen. Auf dem Gerät ein
-     Nextion-Slider, dessen Cursor im 100-ms-Takt weiterrückt – hier die Spur und der Punkt. */
-  .screen .flow { border-radius: 999px; background: rgba(255,255,255,.08); }
+     Nextion-Slider, dessen Cursor im 100-ms-Takt weiterrückt – hier die Spur und der Punkt.
+     Eine Farbe gibt der Dump nicht her (Fill: image, Back. Picture ID 20), wohl aber
+     Opacity: 127 – die Spur ist dort also halbtransparent hell. Mit den früheren 8 % Weiß war
+     sie auf dem fast schwarzen Grund praktisch unsichtbar; das ist weder treu noch brauchbar. */
+  .screen .flow {
+    border-radius: 999px; background: rgba(255,255,255,.2);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+  }
   .screen .flowdot {
     position: absolute; width: 9px; height: 9px; border-radius: 50%;
     background: #4fc3f7; box-shadow: 0 0 6px rgba(79,195,247,.85);
