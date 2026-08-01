@@ -241,13 +241,39 @@ def fluss_card_power(dump: str) -> list[dict]:
 def slots_card_power(komponenten: dict) -> list[dict]:
     """``cardPower`` nummeriert anders: die ersten beiden Einträge sitzen in der Mitte.
 
-    ``tHome`` und ``tHome2`` tragen Eintrag 1 und 2, die sechs Außenplätze liegen in ``t0…t5`` mit
-    Symbol (``t<N>Icon``), oberer Zeile (``t<N>o``) und unterer Zeile (``t<N>u``).
+    **Die Mitte war falsch zugeordnet.** ``tHome`` und ``tHome2`` sahen wie zwei Einträge aus, sind
+    aber Zahl und Einheit *desselben* Werts. Der Seitencode sagt es genau::
+
+        spstr strCommand.txt, t1.txt,     "~", 16   # Symbol von Eintrag 0
+        spstr strCommand.txt, tHome.txt,  "~", 19   # Wert  von Eintrag 0
+        spstr tHome.txt, tHome2.txt, " ", 1         #   … am ersten Leerzeichen getrennt:
+        spstr tHome.txt, tHome.txt,  " ", 0         #   Zahl nach tHome, Einheit nach tHome2
+        spstr strCommand.txt, tHomeO.txt, "~", 26   # Wert  von Eintrag 1 (ebenso getrennt)
+
+    Die Feldnummern gehen auf: 12 Navigationsfelder (zwei Tasten à 6) und 7 Felder je Eintrag
+    (``generate_entities_item`` liefert 6, ``cardPower`` hängt ``speed`` an). Eintrag 0 liegt damit
+    auf 14…20 — Symbol 16, Wert 19 —, Eintrag 1 auf 21…27 mit Wert 26.
+
+    ``t1`` ist dabei **Rahmen und Symbol in einem**: ein 60×230 hohes Feld mit ``Style: border``,
+    dessen Text die Symbolglyphe ist (``Font ID 3``). Auf dem Gerät steht das Haussymbol deshalb
+    mittig in der umrandeten Mittelsäule, mit dem Wert von Eintrag 1 darüber und dem von Eintrag 0
+    darunter. Eintrag 1 hat kein eigenes Symbol.
+
+    Die sechs Außenplätze liegen in ``t0…t5`` mit Symbol (``t<N>Icon``), oberer Zeile (``t<N>o``)
+    und unterer Zeile (``t<N>u``).
     """
+
+    def rect(name: str) -> list | None:
+        treffer = komponenten.get(f"Text {name}")
+        return list(treffer) if treffer else None
+
     slots: list[dict] = []
-    for name in ("^Text tHome$", "^Text tHome2$"):
-        treffer = [rect for k, rect in komponenten.items() if re.match(name, k)]
-        slots.append({"value": list(treffer[0])} if treffer else {})
+    for rollen in (
+        {"icon": "t1", "value": "tHome", "unit": "tHome2"},
+        {"value": "tHomeO", "unit": "tHomeO2"},
+    ):
+        slot = {rolle: rect(name) for rolle, name in rollen.items()}
+        slots.append({rolle: r for rolle, r in slot.items() if r})
     slots.extend(
         _rollen(
             komponenten,

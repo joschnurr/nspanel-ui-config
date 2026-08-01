@@ -355,6 +355,9 @@ test("navItem1/navItem2 ersetzen die Pfeile der Blättertasten", () => {
     navItem1: { entity: "navigate.regenwasser", name: "regen", icon: "gesture-tap-button" },
   };
   const instanz = panel();
+  // Der Pfeil hängt an der Blätterkette: Er erscheint nur, wenn es mehr als eine sichtbare Karte
+  // gibt (config.py vergibt uuid_prev/uuid_next erst dann).
+  instanz._model = { cards: [karte, { type: "cardGrid2", key: "b" }], hiddenCards: [] };
 
   const mitEigenem = instanz._slotElement(links, karte, () => previewContent({}, {}), [], 1);
   const [symbol] = mitEigenem.finde("icon");
@@ -484,9 +487,11 @@ test("die Symbole von cardPower stehen in ihrem umrandeten Feld", () => {
   for (const index of [2, 3, 4, 5, 6, 7]) {
     assert.equal(rahmenVon(index), "2px solid #42719c", `Platz ${index}`);
   }
-  for (const index of [0, 1]) {
-    assert.ok(!rahmenVon(index), `Platz ${index} soll keinen Rahmen haben`);
-  }
+  // Platz 0 ist die Mittelsäule: dasselbe Symbolfeld, nur 60×230 statt 60×60 – auch umrandet.
+  assert.equal(rahmenVon(0), "2px solid #42719c", "die Mittelsäule ist ebenfalls eingefasst");
+  // Platz 1 hat am Gerät gar kein Symbolfeld, nur eine Zahl.
+  const oben = ergebnis.slots.find((s) => s.index === 1);
+  assert.ok(!oben.parts.icon, "Eintrag 1 hat kein Symbol");
 });
 
 test("eine konfigurierte Farbe färbt das Symbol, nicht den Rahmen", () => {
@@ -501,4 +506,99 @@ test("eine konfigurierte Farbe färbt das Symbol, nicht den Rahmen", () => {
 
   assert.equal(symbol.style.border, "2px solid #42719c");
   assert.match(symbol.style.color, /#ff0000/i);
+});
+
+// --- Blättertasten: wann das Gerät dort nichts zeigt ---------------------------------------------
+
+/** Ein Panel mit Modell und Modus – `_navTaste` fragt beides ab. */
+function panelMit(model, modus = "model") {
+  const p = panel();
+  p._model = model;
+  p._previewMode = modus;
+  return p;
+}
+
+function tastenVon(panelObj, card) {
+  const ergebnis = previewSlots({ cardType: "cardGrid", capacity: 6, filled: 1, model: "eu" });
+  const inhaltFuer = () => previewContent(null, {});
+  return ergebnis.slots
+    .filter((s) => s.kind === "navbtn")
+    .map((s) => panelObj._slotElement(s, card, inhaltFuer, [], 1).textContent);
+}
+
+test("eine Unterseite zeigt links navUp und rechts nichts", () => {
+  // Genau so steht es in pages.py: `if card.hidden: leftBtn = navUp; rightBtn = "delete~~~~~"`.
+  // Die Vorschau malte hier ein ▶ – einen Weg, den es am Gerät nicht gibt.
+  const unterseite = { type: "cardPower", key: "energie" };
+  const model = { cards: [{ type: "cardGrid", key: "a" }], hiddenCards: [unterseite] };
+  assert.deepEqual(tastenVon(panelMit(model), unterseite), ["↑", ""]);
+});
+
+test("zwischen mehreren sichtbaren Karten stehen beide Pfeile", () => {
+  const a = { type: "cardGrid", key: "a" };
+  const model = { cards: [a, { type: "cardGrid", key: "b" }], hiddenCards: [] };
+  assert.deepEqual(tastenVon(panelMit(model), a), ["◀", "▶"]);
+});
+
+test("bei einer einzigen sichtbaren Karte bleiben beide Tasten leer", () => {
+  // config.py vergibt uuid_prev/uuid_next nur bei `len(card_uuids) > 1` – sonst bleibt beides None
+  // und render_card lässt es bei `delete~~~~~`.
+  const a = { type: "cardGrid", key: "a" };
+  assert.deepEqual(tastenVon(panelMit({ cards: [a], hiddenCards: [] }), a), ["", ""]);
+});
+
+test("im Mitschnitt wird nichts abgeleitet", () => {
+  // Dort steht, was das Gerät bekommen hat. Ohne Eintrag zeigt es nichts – auch wenn die Karte
+  // im Modell sichtbar ist und Nachbarn hätte.
+  const a = { type: "cardGrid", key: "a" };
+  const model = { cards: [a, { type: "cardGrid", key: "b" }], hiddenCards: [] };
+  const p = panelMit(model, "live");
+  p._liveNavigation = [];
+  assert.deepEqual(tastenVon(p, a), ["", ""]);
+});
+
+test("navItem schlägt die Regel – auch auf einer Unterseite", () => {
+  const unterseite = { type: "cardGrid", key: "x", navItem2: { entity: "navigate.a", icon: "mdi:home" } };
+  const model = { cards: [{ type: "cardGrid", key: "a" }], hiddenCards: [unterseite] };
+  const ergebnis = previewSlots({ cardType: "cardGrid", capacity: 6, filled: 1, model: "eu" });
+  const rechts = ergebnis.slots.filter((s) => s.kind === "navbtn")[1];
+  const element = panelMit(model)._slotElement(rechts, unterseite, () => previewContent(null, {}), [], 1);
+  assert.equal(element.textContent, "", "statt eines Zeichens steht dort ein Symbol");
+  assert.equal(element.children.length, 1);
+});
+
+// --- cardPower: Zahl und Einheit stehen getrennt -------------------------------------------------
+
+test("der Wert der Mitte wird am ersten Leerzeichen geteilt", () => {
+  // `spstr tHome.txt,tHome2.txt," ",1` – die Zahl steht groß in der Säule, die Einheit darunter.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const slot = ergebnis.slots.find((s) => s.index === 0);
+  const inhaltFuer = () => previewContent({ entity: "sensor.haus", value: "764 W" }, {});
+  const element = panel()._slotElement(slot, {}, inhaltFuer, [], 1);
+
+  const texte = element.children.filter((k) => k.className === "val").map((k) => k.textContent);
+  assert.deepEqual(texte, ["764", "W"]);
+});
+
+test("ein Wert ohne Leerzeichen lässt die Einheitszeile leer", () => {
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const slot = ergebnis.slots.find((s) => s.index === 1);
+  const inhaltFuer = () => previewContent({ entity: "sensor.netz", value: "88" }, {});
+  const element = panel()._slotElement(slot, {}, inhaltFuer, [], 1);
+
+  assert.deepEqual(
+    element.children.filter((k) => k.className === "val").map((k) => k.textContent),
+    ["88", ""]
+  );
+});
+
+test("außerhalb von cardPower bleibt ein Wert mit Leerzeichen ganz", () => {
+  // Ohne `unit` im Layout darf nicht geteilt werden – „21.5 °C" gehört auf cardGrid in ein Feld.
+  const ergebnis = previewSlots({ cardType: "cardEntities", capacity: 4, filled: 1, model: "eu" });
+  const slot = ergebnis.slots.find((s) => s.index === 0);
+  const inhaltFuer = () => previewContent({ entity: "sensor.t", value: "21.5 °C" }, {});
+  const element = panel()._slotElement(slot, {}, inhaltFuer, [], 1);
+
+  const wert = element.children.find((k) => k.className === "val");
+  assert.equal(wert.textContent, "21.5 °C");
 });

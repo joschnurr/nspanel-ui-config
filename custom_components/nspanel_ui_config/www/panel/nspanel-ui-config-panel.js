@@ -2559,7 +2559,10 @@ class NsPanelUiConfigPanel extends PanelBase {
         this._faerbe(element, eigenes, auftraege, marke);
         element.title = eigenes.name || eigenes.id || "";
       } else {
-        element.textContent = slot.taste === "prev" ? "◀" : "▶";
+        const taste = this._navTaste(card, slot.taste);
+        element.textContent = taste.zeichen;
+        element.title = taste.titel;
+        if (!taste.zeichen) element.className = "navbtn leer";
       }
       return element;
     }
@@ -2727,7 +2730,7 @@ class NsPanelUiConfigPanel extends PanelBase {
       if (rand) knoten.style.border = rand;
     };
 
-    const { icon, name, value } = slot.parts;
+    const { icon, name, value, unit } = slot.parts;
     let symbol = null;
     if (icon) {
       symbol = this._slotIcon(inhalt, auftraege, marke);
@@ -2758,15 +2761,36 @@ class NsPanelUiConfigPanel extends PanelBase {
       element.appendChild(text);
     }
     if (value) {
+      // **Zahl und Einheit stehen auf cardPower in zwei Feldern.** Der Seitencode trennt den Wert
+      // am *ersten* Leerzeichen (`spstr tHome.txt,tHome2.txt," ",1`) und legt die Zahl groß in die
+      // Mitte, die Einheit klein darunter. Wo das Layout kein `unit` kennt, bleibt der Wert ganz.
+      const zerlege = (text) => {
+        const roh = text === undefined || text === null ? "" : String(text);
+        if (!unit) return [roh, null];
+        const luecke = roh.indexOf(" ");
+        return luecke === -1 ? [roh, ""] : [roh.slice(0, luecke), roh.slice(luecke + 1)];
+      };
+
       const wert = document.createElement("span");
       wert.className = "val";
-      wert.textContent = inhalt.value;
+      let einheit = null;
+      if (unit) {
+        einheit = document.createElement("span");
+        einheit.className = "val";
+        setze(einheit, unit);
+        richteAus(einheit, unit);
+      }
+      const setzeText = (text) => {
+        const [zahl, rest] = zerlege(text);
+        wert.textContent = zahl;
+        if (einheit) einheit.textContent = rest;
+      };
+      setzeText(inhalt.value);
       setze(wert, value);
       richteAus(wert, value);
-      this._registerTemplate(inhalt, "value", auftraege, marke, (gerendert) => {
-        wert.textContent = gerendert;
-      });
+      this._registerTemplate(inhalt, "value", auftraege, marke, setzeText);
       element.appendChild(wert);
+      if (einheit) element.appendChild(einheit);
     } else if (!name && inhalt.value) {
       // Karten wie cardMedia haben nur eine Symbolfläche – der Wert bekommt dann keinen Platz.
       element.title = `${inhalt.name}${inhalt.value ? `: ${inhalt.value}` : ""}`;
@@ -2884,6 +2908,44 @@ class NsPanelUiConfigPanel extends PanelBase {
       element.style.border = rand;
       element.style.boxSizing = "border-box";
     }
+  }
+
+  /**
+   * Was ohne eigenes `navItem` auf einer Blättertaste steht — und wann dort **nichts** steht.
+   *
+   * Die Vorschau hat bisher immer ◀ und ▶ gemalt. Das Gerät tut das nicht: `render_card` in
+   * `pages.py` beginnt für beide Tasten mit `delete~~~~~`, also leer, und füllt sie nur unter
+   * Bedingungen:
+   *
+   * - **Versteckte Karte:** links `navUp` (↑), rechts ausdrücklich wieder leer. Eine Unterseite hat
+   *   keine Nachbarn zum Blättern, nur den Weg zurück.
+   * - **Sichtbare Karte:** die Pfeile hängen an `uuid_prev`/`uuid_next`, und die vergibt
+   *   `config.py` nur bei **mehr als einer** sichtbaren Karte (`if len(card_uuids) > 1`). Bei genau
+   *   einer bleiben beide Tasten leer.
+   *
+   * Eine gezeichnete Taste, die es am Gerät nicht gibt, ist kein Schönheitsfehler: Sie sieht aus
+   * wie ein Weg, den es gibt, und lässt einen an der falschen Stelle nach dem Fehler suchen.
+   */
+  _navTaste(card, taste) {
+    // Im Mitschnitt ist nichts abzuleiten: Dort steht, was das Gerät bekommen hat. Hat `_navItem`
+    // nichts geliefert, war der Eintrag `delete` — dann zeigt das Display dort auch nichts.
+    if (this._previewMode === "live") {
+      return { zeichen: "", titel: "Das Gerät hat für diese Taste nichts geschickt" };
+    }
+    // Beim ersten Zeichnen steht das Modell noch nicht; dann ist nichts abzuleiten.
+    const model = this._model || {};
+    if ((model.hiddenCards || []).includes(card)) {
+      return taste === "prev"
+        ? { zeichen: "↑", titel: "navUp – zurück zur Karte, die hierher verlinkt" }
+        : { zeichen: "", titel: "Auf einer Unterseite bleibt diese Taste leer" };
+    }
+    const sichtbare = (model.cards || []).length;
+    if (sichtbare < 2) {
+      return { zeichen: "", titel: "Nur eine sichtbare Karte – es gibt nichts zum Blättern" };
+    }
+    return taste === "prev"
+      ? { zeichen: "◀", titel: "vorherige Karte" }
+      : { zeichen: "▶", titel: "nächste Karte" };
   }
 
   /**

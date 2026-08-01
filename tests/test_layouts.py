@@ -155,10 +155,10 @@ def test_cardpower_symbole_tragen_die_abgemessene_umrandung() -> None:
             icon = attrs[index].get("icon") or {}
             assert icon.get("bw") == 2, f"cardPower/{model}: Platz {index} ohne Rahmenbreite"
             assert icon.get("bc") == 17299, f"cardPower/{model}: Platz {index} mit fremder Farbe"
-        for index in (0, 1):
-            assert "bc" not in (attrs[index].get("icon") or {}), (
-                f"cardPower/{model}: der mittlere Platz {index} hat auf dem Gerät keinen Rahmen"
-            )
+        # Platz 0 ist die Mittelsäule – dasselbe umrandete Symbolfeld, nur hoch statt quadratisch.
+        assert (attrs[0].get("icon") or {}).get("bw") == 2, f"cardPower/{model}: Säule ohne Rahmen"
+        # Platz 1 hat am Gerät gar kein Symbolfeld, also auch keinen Rahmen.
+        assert "icon" not in attrs[1], f"cardPower/{model}: Eintrag 1 hat kein Symbol"
 
 
 def test_nur_cardpower_hat_umrandete_felder() -> None:
@@ -177,3 +177,41 @@ def test_nur_cardpower_hat_umrandete_felder() -> None:
                     assert "bc" not in (attr or {}), (
                         f"{seite}/{model}: Platz {index}/{rolle} hat unerwartet einen Rahmen"
                     )
+
+
+def test_cardpower_mitte_ist_ein_eintrag_mit_zahl_und_einheit() -> None:
+    """Die Mitte trägt **zwei** Einträge, nicht vier Felder — jeder mit Zahl und Einheit getrennt.
+
+    Vorher galten ``tHome`` und ``tHome2`` als Eintrag 1 und 2. Der Seitencode sagt etwas anderes:
+    Feld 19 geht nach ``tHome`` und wird am ersten Leerzeichen geteilt (Zahl nach ``tHome``,
+    Einheit nach ``tHome2``); Feld 26 ebenso nach ``tHomeO``/``tHomeO2``. Aus der Feldarithmetik
+    folgt: 19 ist der Wert von Eintrag 0, 26 der von Eintrag 1.
+
+    ``t1`` ist Rahmen und Symbol in einem — die umrandete Mittelsäule mit dem Haussymbol. Eintrag 1
+    hat kein eigenes Symbol; auf dem Gerät steht dort nur eine Zahl.
+    """
+    for model, layout in _layouts()["cardPower"].items():
+        mitte, oben = layout["slots"][0], layout["slots"][1]
+        assert set(mitte) == {"icon", "value", "unit"}, f"cardPower/{model}: Platz 0 {sorted(mitte)}"
+        assert set(oben) == {"value", "unit"}, f"cardPower/{model}: Platz 1 {sorted(oben)}"
+
+        # Das Symbolfeld von Platz 0 ist die Säule: es umschließt beide Wertefelder.
+        ix, iy, iw, ih = mitte["icon"]
+        for rolle in ("value", "unit"):
+            x, y, w, h = mitte[rolle]
+            assert ix <= x and iy <= y, f"cardPower/{model}: {rolle} liegt außerhalb der Säule"
+            assert x + w <= ix + iw and y + h <= iy + ih, f"cardPower/{model}: {rolle} ragt heraus"
+
+        rand = layout["slotAttrs"][0]["icon"]
+        assert rand.get("bw") == 2 and rand.get("bc") == 17299, "die Säule ist umrandet"
+        assert "icon" not in layout["slotAttrs"][1], "Eintrag 1 hat kein Symbolfeld"
+
+
+def test_nur_cardpower_kennt_die_einheit_als_eigenes_feld() -> None:
+    """Sonst würde anderswo ein Wert an einem Leerzeichen zerschnitten, wo das Gerät ihn ganz zeigt."""
+    for seite, modelle in _layouts().items():
+        if seite == "cardPower":
+            continue
+        for model, layout in modelle.items():
+            for index, slot in enumerate(layout.get("slots") or []):
+                assert "unit" not in slot, f"{seite}/{model}: Platz {index} hat unerwartet ein unit-Feld"

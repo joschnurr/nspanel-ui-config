@@ -3,6 +3,61 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.26.0 – 2026-08-01
+
+Aus einem Vergleich von Gerätefoto und Vorschau nebeneinander — drei Befunde, einer davon betrifft
+**alle** Karten.
+
+### Die Vorschau zeigte Blättertasten, die es am Gerät nicht gibt
+
+Auf einer Unterseite steht am Panel oben links ↑ und oben rechts **nichts**. Die Vorschau malte
+dort ein ▶. `render_card` in `pages.py` ist eindeutig: Beide Tasten beginnen mit `delete~~~~~`, also
+leer, und werden nur unter Bedingungen gefüllt.
+
+| Lage | links | rechts |
+| --- | --- | --- |
+| versteckte Karte (Unterseite) | ↑ `navUp` | leer |
+| sichtbare Karte, mehrere davon | ◀ | ▶ |
+| sichtbare Karte, die einzige | leer | leer |
+| `navItem1`/`navItem2` gesetzt | das konfigurierte Symbol | dito |
+
+Der letzte Fall galt schon, die anderen drei nicht. Dass bei **einer** sichtbaren Karte gar nichts
+steht, liegt an `config.py`: `uuid_prev`/`uuid_next` werden nur bei `len(card_uuids) > 1` vergeben.
+Im Mitschnitt wird nichts abgeleitet — dort steht, was das Gerät bekommen hat.
+
+Eine Taste, die es nicht gibt, ist kein Schönheitsfehler: Sie sieht aus wie ein Weg, den es gibt.
+
+### Die Mitte von cardPower war falsch zugeordnet
+
+`tHome` und `tHome2` sahen wie zwei Einträge aus. Der Seitencode sagt etwas anderes:
+
+```
+spstr strCommand.txt, t1.txt,     "~", 16   # Symbol von Eintrag 0
+spstr strCommand.txt, tHome.txt,  "~", 19   # Wert  von Eintrag 0
+spstr tHome.txt, tHome2.txt, " ", 1         #   am ersten Leerzeichen geteilt:
+spstr tHome.txt, tHome.txt,  " ", 0         #   Zahl nach tHome, Einheit nach tHome2
+spstr strCommand.txt, tHomeO.txt, "~", 26   # Wert  von Eintrag 1 (ebenso)
+```
+
+Die Feldnummern gehen auf: 12 Navigationsfelder (zwei Tasten à 6) und 7 Felder je Eintrag
+(`generate_entities_item` liefert 6, `cardPower` hängt `speed` an). Eintrag 0 liegt damit auf
+14…20 — Symbol 16, Wert 19 —, Eintrag 1 auf 21…27 mit Wert 26.
+
+Es sind also **zwei Einträge mit je Zahl und Einheit**, nicht vier Felder. Die Vorschau teilt den
+Wert jetzt am ersten Leerzeichen und setzt die Zahl groß, die Einheit klein darunter. Außerhalb von
+`cardPower` bleibt ein Wert ganz — „21.5 °C" gehört auf `cardGrid` in ein Feld.
+
+### Der Rahmen des Home-Feldes und sein Symbol
+
+`t1` ist **Rahmen und Symbol in einem**: ein 60×230 hohes Feld mit `Style: border`, dessen Text die
+Symbolglyphe trägt (`Font ID 3`). Genau deshalb steht das Haussymbol am Gerät mittig in der
+umrandeten Mittelsäule — mit dem Wert von Eintrag 1 darüber und dem von Eintrag 0 darunter. In der
+Vorschau fehlte beides, weil `t1` keinem Platz zugeordnet war. Eintrag 1 hat kein eigenes Symbol;
+dort steht auch am Gerät nur eine Zahl.
+
+`layouts.js` ist neu erzeugt. Kontrolllauf: Von den 24 Kombinationen haben sich **genau die drei
+cardPower-Layouts** geändert, alle anderen sind unverändert.
+
 ## 0.25.0 – 2026-07-31
 
 ### Die Symbole von cardPower stehen jetzt in ihrem Feld, wie auf dem Gerät
