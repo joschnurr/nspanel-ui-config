@@ -468,3 +468,37 @@ test("jeder Laufbalken gehört zu genau einem Außenplatz", () => {
     "ein Balken darf keinen eigenen Entity-Index tragen"
   );
 });
+
+test("die Symbole von cardPower stehen in ihrem umrandeten Feld", () => {
+  // Auf dem Gerät sitzt jedes der sechs äußeren Symbole in einem 60×60-Feld mit 2 px Rahmen
+  // (`Style: border`, Farbe 17299 im Dump). Ohne ihn schweben sie frei — gemeldet als „die
+  // Umrandung wie im Original fehlt". Die Mitte hat auf dem Gerät keinen Rahmen.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const inhaltFuer = () => previewContent({ entity: "sensor.pv", name: "PV", value: "27 W" }, {});
+  const rahmenVon = (index) => {
+    const slot = ergebnis.slots.find((s) => s.index === index);
+    const element = panel()._slotElement(slot, {}, inhaltFuer, [], 1);
+    return element.children[0].style.border;
+  };
+
+  for (const index of [2, 3, 4, 5, 6, 7]) {
+    assert.equal(rahmenVon(index), "2px solid #42719c", `Platz ${index}`);
+  }
+  for (const index of [0, 1]) {
+    assert.ok(!rahmenVon(index), `Platz ${index} soll keinen Rahmen haben`);
+  }
+});
+
+test("eine konfigurierte Farbe färbt das Symbol, nicht den Rahmen", () => {
+  // Der Rahmen gehört zum Feld des Geräts; die Farbe aus der Konfiguration gehört zum Inhalt.
+  // Liefen beide zusammen, würde ein rot eingefärbter Eintrag ein rotes Kästchen zeichnen, das
+  // auf dem Display nie erscheint.
+  const ergebnis = previewSlots({ cardType: "cardPower", capacity: 8, filled: 8, model: "eu" });
+  const slot = ergebnis.slots.find((s) => s.index === 2);
+  const inhaltFuer = () =>
+    previewContent({ entity: "sensor.pv", name: "PV", color: [255, 0, 0] }, {});
+  const symbol = panel()._slotElement(slot, {}, inhaltFuer, [], 1).children[0];
+
+  assert.equal(symbol.style.border, "2px solid #42719c");
+  assert.match(symbol.style.color, /#ff0000/i);
+});

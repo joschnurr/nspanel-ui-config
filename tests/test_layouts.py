@@ -136,3 +136,44 @@ def test_screensaver_kennt_uhrzeit_datum_und_das_alternative_layout() -> None:
     for model, layout in LAYOUTS["screensaver2"].items():
         assert "tTime" in layout["special"], f"{model}: Uhrzeit fehlt"
         assert not layout.get("alt"), f"{model}: screensaver2 hat kein alternatives Layout"
+
+
+def test_cardpower_symbole_tragen_die_abgemessene_umrandung() -> None:
+    """Auf dem Gerät sitzt jedes äußere Symbol von ``cardPower`` in einem eingefassten Feld.
+
+    Im Dump steht das als ``Style: border`` mit ``Border Color: 17299`` und ``Border Width: 2``.
+    Ohne diese Angaben schweben die Symbole in der Vorschau frei, während das Gerät sie umrandet
+    zeigt — nach den Laufbalken der auffälligste Unterschied, und er ist gemeldet worden.
+
+    Die beiden mittleren Plätze haben keinen Rahmen; stünde dort einer, wäre die Zuordnung der
+    Attribute zu den Komponenten verrutscht.
+    """
+    layouts = _layouts()
+    for model, layout in layouts["cardPower"].items():
+        attrs = layout["slotAttrs"]
+        for index in range(2, 8):
+            icon = attrs[index].get("icon") or {}
+            assert icon.get("bw") == 2, f"cardPower/{model}: Platz {index} ohne Rahmenbreite"
+            assert icon.get("bc") == 17299, f"cardPower/{model}: Platz {index} mit fremder Farbe"
+        for index in (0, 1):
+            assert "bc" not in (attrs[index].get("icon") or {}), (
+                f"cardPower/{model}: der mittlere Platz {index} hat auf dem Gerät keinen Rahmen"
+            )
+
+
+def test_nur_cardpower_hat_umrandete_felder() -> None:
+    """Gegenprobe: Der Rahmen darf nicht überall auftauchen, sonst ist das Muster zu grob.
+
+    Name- und Wertfelder stehen im Dump als ``Style: flat`` — sie tragen zwar eine ``Border Color``,
+    benutzen sie aber nicht. Würde die nur nach der Farbe gelesen, bekäme die halbe Karte Kästchen.
+    """
+    layouts = _layouts()
+    for seite, modelle in layouts.items():
+        if seite == "cardPower":
+            continue
+        for model, layout in modelle.items():
+            for index, attrs in enumerate(layout.get("slotAttrs") or []):
+                for rolle, attr in (attrs or {}).items():
+                    assert "bc" not in (attr or {}), (
+                        f"{seite}/{model}: Platz {index}/{rolle} hat unerwartet einen Rahmen"
+                    )

@@ -3,6 +3,40 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.25.0 – 2026-07-31
+
+### Die Symbole von cardPower stehen jetzt in ihrem Feld, wie auf dem Gerät
+
+Gemeldet nach den Laufbalken: „die Umrandung wie im Original fehlt auch noch". Sie fehlte
+tatsächlich — und sie war die ganze Zeit im Dump abgemessen vorhanden, nur nicht ausgelesen:
+
+```
+Text t0Icon
+    Width : 60    Height : 60
+    Style        : border
+    Border Color : 17299
+    Border Width : 2
+```
+
+`tools/extract_layouts.py` liest `Style: border` samt Farbe und Breite jetzt mit, dort wo auch
+Font, Ausrichtung und Schriftfarbe herkommen. Die Vorschau zeichnet daraus `2px solid #42719c`
+(RGB565 17299) um jedes der sechs äußeren Symbolfelder. **Abgemessen, nicht nachempfunden.**
+
+Zwei Feinheiten, die sonst falsch geworden wären:
+
+- **`Style` muss mitgeprüft werden.** Auch Name- und Wertfelder tragen eine `Border Color`, stehen
+  aber auf `flat` und benutzen sie nie. Wer nur die Farbe liest, malt der halben Karte Kästchen an.
+- **Der Rahmen gehört zum Feld, die Farbe zum Inhalt.** Eine konfigurierte Farbe färbt weiterhin
+  das Symbol; der Rahmen bleibt der des Geräts. Sonst zeichnete ein rot eingefärbter Eintrag ein
+  rotes Kästchen, das auf dem Display nie erscheint.
+
+Die beiden mittleren Plätze bekommen keinen Rahmen — das Gerät hat dort auch keinen. Ein Test
+prüft beides, und ein zweiter hält fest, dass **außer cardPower keine Karte** umrandete Felder hat.
+
+`layouts.js` ist dafür neu erzeugt worden. Kontrolllauf wie beim letzten Mal: Bis auf die neuen
+`bc`/`bw` ist die Datei zeichengleich mit der vorigen, alle 24 Kombinationen stimmen weiter mit
+`CARD_CAPACITY`.
+
 ## 0.24.3 – 2026-07-30
 
 ### Die Laufbalken fehlten wirklich – ein statischer Import hat die Kennung fallen lassen

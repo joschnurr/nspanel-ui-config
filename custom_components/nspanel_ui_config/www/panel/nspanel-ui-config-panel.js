@@ -1319,6 +1319,20 @@ function vertikal(attr) {
   return { t: "flex-start", c: "center", b: "flex-end" }[(attr && attr.v) || "c"] || "center";
 }
 
+/**
+ * Die Umrandung einer HMI-Komponente als CSS – oder `null`, wenn sie keine hat.
+ *
+ * Im Dump steht sie als `Style: border` mit Farbe und Breite (`bc`/`bw`). Bisher hat sie nur
+ * `cardPower`: Dort sitzt jedes der sechs äußeren Symbole in einem 60×60-Feld mit 2 px Rahmen —
+ * ohne ihn schweben die Symbole frei, während das Gerät sie eingefasst zeigt. Die Werte sind
+ * abgemessen, nicht gewählt; taucht der Rahmen nach einem Upstream-Update woanders auf, kommt er
+ * von selbst mit.
+ */
+function randAus(attr) {
+  const farbe = attr && typeof attr.bc === "number" ? rgb565ToHex(attr.bc) : null;
+  return farbe && attr.bw > 0 ? `${attr.bw}px solid ${farbe}` : null;
+}
+
 // --- Panel -----------------------------------------------------------------------------------
 
 // Im Browser ist das schlicht HTMLElement. Der Fallback existiert nur, damit sich das Modul auch
@@ -2706,6 +2720,11 @@ class NsPanelUiConfigPanel extends PanelBase {
       // sie später (nur beim Symbol, siehe _faerbe).
       const rgb = attr && typeof attr.c === "number" ? rgb565ToHex(attr.c) : null;
       if (rgb) knoten.style.color = rgb;
+      // Die Umrandung gehört zum Feld, nicht zum Inhalt: eine konfigurierte Farbe färbt das
+      // Symbol, der Rahmen bleibt der des Geräts. `setze` hat die Maße schon gesetzt, und mit
+      // `border-box` wächst das Feld durch den Rahmen nicht über sein abgemessenes Rechteck.
+      const rand = randAus(attr);
+      if (rand) knoten.style.border = rand;
     };
 
     const { icon, name, value } = slot.parts;
@@ -2860,6 +2879,11 @@ class NsPanelUiConfigPanel extends PanelBase {
     element.style.fontSize = `${fontGroesse(attr, slot.h * 3, faktor)}px`;
     const farbe = typeof attr.c === "number" ? rgb565ToHex(attr.c) : null;
     if (farbe) element.style.color = farbe;
+    const rand = randAus(attr);
+    if (rand) {
+      element.style.border = rand;
+      element.style.boxSizing = "border-box";
+    }
   }
 
   /**

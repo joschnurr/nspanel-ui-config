@@ -2752,6 +2752,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 1024,
       "f": 3,
       "h": "c",
@@ -2772,6 +2774,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 65504,
       "f": 3,
       "h": "c",
@@ -2792,6 +2796,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -2812,6 +2818,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -2832,6 +2840,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -2852,6 +2862,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3155,6 +3167,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 1024,
       "f": 3,
       "h": "c",
@@ -3175,6 +3189,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 65504,
       "f": 3,
       "h": "c",
@@ -3195,6 +3211,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3215,6 +3233,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3235,6 +3255,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3255,6 +3277,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3558,6 +3582,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 1024,
       "f": 3,
       "h": "c",
@@ -3572,6 +3598,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 65504,
       "f": 3,
       "h": "c",
@@ -3586,6 +3614,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3600,6 +3630,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3614,6 +3646,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",
@@ -3628,6 +3662,8 @@ export const LAYOUTS = {
     },
     {
      "icon": {
+      "bc": 17299,
+      "bw": 2,
       "c": 17299,
       "f": 3,
       "h": "c",

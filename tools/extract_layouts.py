@@ -127,6 +127,18 @@ def parse_attributes(text: str) -> dict[str, dict[str, object]]:
         farbe = re.search(r"Font Color(?:\s*\(Unpressed\))?\s*:\s*(\d+)", block)
         if farbe:
             eintrag["c"] = int(farbe.group(1))
+        # Umrandung: auf ``cardPower`` sitzt jedes Symbol in einem 60×60-Feld mit 2 px Rahmen
+        # (``Style: border``), ebenso die Mittelsäule. Ohne ihn schweben die Symbole frei, während
+        # das Gerät sie eingefasst zeigt — der auffälligste Unterschied nach den Laufbalken.
+        # ``Style`` muss mitgeprüft werden: ``Border Color`` steht auch an Komponenten, die als
+        # ``flat`` gezeichnet werden und den Wert schlicht nicht benutzen.
+        stil = re.search(r"Style\s*:\s*(\w+)", block)
+        if stil and stil.group(1).lower() == "border":
+            rand = re.search(r"Border Color\s*:\s*(\d+)", block)
+            breite = re.search(r"Border Width\s*:\s*(\d+)", block)
+            if rand and breite and int(breite.group(1)) > 0:
+                eintrag["bc"] = int(rand.group(1))
+                eintrag["bw"] = int(breite.group(1))
         if eintrag:
             attribute[kopf] = eintrag
     return attribute
