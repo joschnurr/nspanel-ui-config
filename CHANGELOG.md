@@ -3,6 +3,58 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.29.0 – 2026-08-07
+
+Von zehn Kartentypen zeigten drei in der Vorschau nur einen grauen Kasten, und vier lieferten in
+der Live-Ansicht nichts. Diese Fassung schließt den größten Teil davon — und korrigiert dabei eine
+Annahme, die seit der ersten Live-Ansicht falsch war.
+
+### cardMedia war nie „unstrukturiert"
+
+Die Karte stand in `UNSTRUCTURED_PAGES`, also unter denen, die das Backend *nicht* aus
+Eintragsblöcken baut. Das stimmt nicht: Nach der Navigation stehen neun eigene Felder (Titel,
+Interpret, Lautstärke, Play/Pause, Ein/Aus, Zufallswiedergabe), und **danach folgen die ganz
+normalen 6er-Blöcke** ab Feld 23. Belegt ist das doppelt — über die `spstr`-Nummern des
+Seitencodes und über den f-String in `generate_media_page`.
+
+Zwei Dinge sieht man der Nachricht dabei nicht an, und sie stehen deshalb im Code:
+
+- **Der erste Block ist der Medienplayer selbst, der letzte die Lautsprecherauswahl.** Die Rolle
+  folgt der *Position*, nicht dem `type`-Feld: Ist an der Karte `status:` gesetzt, trägt der
+  letzte Block eine ganz andere Domäne.
+- **`disable` heißt „am Gerät unsichtbar", ein leeres Feld heißt „vorhanden, ohne Wert".** Der
+  Fehlerfall („Not found") schickt leer — wer beides gleich behandelt, blendet dort fälschlich aus.
+
+### cardAlarm ist abgemessen — und cardUnlock gleich mit
+
+`cardUnlock` hat **keine eigene Display-Seite**: Das Backend schreibt sie in `page_type()` auf
+`cardAlarm` um, bevor der Kartentyp ans Panel geht. Beide teilen sich damit Geometrie und Parser.
+
+Die Namen der zwölf Tastaturtasten führen in die Irre: `b0`…`b8` sind die Ziffern 1–9, `b10` die
+Null, `b11` löscht — und **`b9` ist keine Ziffer**, sondern die Zusatztaste unten links. Sie ist
+die einzige der zwölf, die das Backend überhaupt füllt.
+
+Wie viele Aktionstasten erscheinen, entscheidet die Anlage: unscharf so viele, wie
+`supported_features` meldet, in jedem anderen Zustand genau eine („Deaktivieren"). Die
+Zifferntastatur entfällt nur, wenn die Anlage unscharf ist *und* zum Scharfschalten keinen Code
+verlangt. Beides bildet die Vorschau nach, statt vier Tasten zu zeigen, die es nicht gibt.
+
+### Die Formatprüfung, die vorher gefehlt hat
+
+`entity` ist auf einer Ein-Entity-Karte ein reiner Text, in `entities:` dagegen ein Objekt.
+Verwechselt man das, bricht das Backend beim Registrieren der Callbacks ab — **bevor irgendetwas
+gezeichnet wird**, das Panel bleibt also komplett dunkel. Die Validierung meldet das jetzt als
+Fehler, statt es bis zum nächsten Erzeugen unbemerkt zu lassen.
+
+### Was bewusst offen bleibt: cardChart
+
+Die Seite hat **gar keine Diagramm-Bauteile**. Das Display malt die Balken beim Eintreffen der
+Nachricht mit Zeichenbefehlen (`fill`, `line`, `xstr`) direkt auf die Fläche — es gibt nichts, was
+sich vermessen oder einem Bauteil zuordnen ließe. Die Karte bleibt deshalb bei der
+Flächen-Darstellung.
+
+**Testlage: 199 Python + 152 Node.**
+
 ## 0.28.0 – 2026-08-07
 
 Die Vorschau aus der Konfiguration zeigte den Thermostat seit v0.27 – die **Live-Ansicht** blieb
