@@ -119,7 +119,7 @@ function flussPlaetze(layout, breite, hoehe, capacity, model) {
 }
 
 /** Karten: Titel und Blättertasten oben, darunter die Plätze der Entity-Liste. */
-function kartenLayout(layout, capacity, model) {
+function kartenLayout(layout, capacity, model, filled = 0) {
   const [breite, hoehe] = layout.screen;
   const slots = [];
   const chrome = layout.chrome || {};
@@ -147,6 +147,14 @@ function kartenLayout(layout, capacity, model) {
     if (eintrag) slots.push(eintrag);
   });
   slots.push(...flussPlaetze(layout, breite, hoehe, capacity, model));
+
+  // `cardQR`: der Code rückt in die Mitte, sobald die Karte keine Einträge hat — so steht es im
+  // Seitencode (`if(type2 leer){ if(type1 leer){ qrcode m1 } } else { qrcode m0 }`). Die Bedingung
+  // hängt an den *gefüllten* Einträgen, nicht an der Kapazität.
+  if (layout.qr) {
+    const rechteck = filled > 0 ? layout.qr.mitEintraegen : layout.qr.allein;
+    if (rechteck) slots.push({ kind: "qr", ...proz(rechteck, breite, hoehe) });
+  }
   return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
@@ -454,7 +462,7 @@ export function previewSlots({
     if (gemessen.fixed) return thermoLayout(gemessen, model, zielwerte, betriebsarten);
     return gemessen.special
       ? screensaverLayout(gemessen, anzahl, filled, model)
-      : kartenLayout(gemessen, anzahl, model);
+      : kartenLayout(gemessen, anzahl, model, filled);
   }
 
   const widget = SINGLE_WIDGETS[cardType];

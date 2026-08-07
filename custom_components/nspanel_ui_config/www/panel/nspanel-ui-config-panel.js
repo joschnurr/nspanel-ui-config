@@ -37,6 +37,7 @@ const { ICON_NAMES } = await import(`./icon-names.js${MODUL_VERSION}`);
 // Zu jedem Namen das Zeichen, mit dem das Backend dieses Icon überträgt. Gebraucht für die
 // Live-Vorschau: über MQTT kommt nur das Zeichen an, <ha-icon> will den Namen.
 const { ICON_CHARS } = await import(`./icon-chars.js${MODUL_VERSION}`);
+const { qrSvg } = await import(`./qr.js${MODUL_VERSION}`);
 // Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
 // Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
 const { previewSlots } = await import(`./preview-layouts.js${MODUL_VERSION}`);
@@ -368,6 +369,13 @@ const STYLES = `
   }
   .screen .thermo.modus.aktiv { box-shadow: inset 0 0 0 2px currentColor; }
   .screen .thermo.modus ha-icon { --mdc-icon-size: 26px; }
+  /* cardQR: der Code wird gezeichnet, nicht angedeutet – man soll ihn scannen können. */
+  .screen .qr { display: flex; align-items: center; justify-content: center; }
+  .screen .qr svg { width: 100%; height: 100%; }
+  .screen .qr.leer {
+    border: 1px dashed #3a3f47; border-radius: 6px; color: #7f8590;
+    font-size: 12px; text-align: center; padding: 4px;
+  }
   /* cardAlarm/cardUnlock: Zifferntastatur, Aktionstasten, Zustandssymbol. */
   .screen .alarm { display: flex; align-items: center; justify-content: center; }
   .screen .alarm.taste, .screen .alarm.extra {
@@ -2701,6 +2709,8 @@ class NsPanelUiConfigPanel extends PanelBase {
       return this._alarmSlot(element, slot, card);
     }
 
+    if (slot.kind === "qr") return this._qrSlot(element, slot, card, auftraege, marke);
+
     const inhalt = inhaltFuer(slot);
 
     if (slot.kind === "status") return this._statusSlot(element, slot, inhalt, auftraege, marke);
@@ -2935,6 +2945,53 @@ class NsPanelUiConfigPanel extends PanelBase {
    * Zustand und `supported_features` bestimmen, **welche und wie viele** Aktionstasten das Gerät
    * anbietet, und `code_arm_required` entscheidet über die Zifferntastatur.
    */
+  /**
+   * Der QR-Code von `cardQR` — wirklich gezeichnet, nicht als Kasten angedeutet.
+   *
+   * **Warum das mehr ist als Kosmetik:** Der Inhalt ist typischerweise ein WLAN-Zugang
+   * (`WIFI:S:…;T:WPA;P:…;;`) und darf Templates enthalten. Ob der Code am Ende *funktioniert*,
+   * sieht man einem Textfeld nicht an — wohl aber einem Code, den man mit dem Telefon scannen
+   * kann. Genau das geht hier: Die Vorschau zeichnet denselben Code, den das Display malt
+   * (Byte-Modus, Fehlerkorrektur L), nur größer.
+   */
+  _qrSlot(element, slot, card, auftraege, marke) {
+    element.className = "qr";
+    const zeichne = (text) => {
+      element.innerHTML = "";
+      const inhalt = String(text ?? "").trim();
+      if (!inhalt) {
+        element.classList.add("leer");
+        element.textContent = "kein qrCode gesetzt";
+        return;
+      }
+      element.classList.remove("leer");
+      // Das Display malt weiß auf den Kartenhintergrund; hier ebenso, damit der Kontrast stimmt.
+      const svg = qrSvg(inhalt, 200, "#ffffff", "transparent");
+      if (!svg) {
+        element.classList.add("leer");
+        element.textContent = "Text zu lang für einen lesbaren Code";
+        element.title = `${inhalt.length} Zeichen – das Gerät zeigt hier nichts Lesbares mehr`;
+        return;
+      }
+      element.innerHTML = svg;
+      element.title = inhalt;
+    };
+
+    const roh = isPlain(card) ? card.qrCode : null;
+    if (this._previewMode === "live") {
+      // Im Mitschnitt steht der fertige Text (Templates sind dort schon gerendert).
+      zeichne((this._liveQr ?? roh) || "");
+      return element;
+    }
+    zeichne(roh || "");
+    // Templates werden wie überall über HAs eigene Engine gerendert – ein `{{ }}` im WLAN-Passwort
+    // ist auf dieser Karte ausdrücklich vorgesehen.
+    if (typeof roh === "string" && roh.includes("{{")) {
+      this._registerTemplate({ templates: [{ feld: "qrCode", text: roh }] }, "qrCode", auftraege, marke, zeichne);
+    }
+    return element;
+  }
+
   _alarmSlot(element, slot, card) {
     element.className = `alarm ${slot.kind.slice(6)}`;
     this._nachAttributen(element, slot, slot.kind === "alarm-zustand" ? ICON_FAKTOR : 1);

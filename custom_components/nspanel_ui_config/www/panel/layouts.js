@@ -4826,6 +4826,20 @@ export const LAYOUTS = {
      "v": "c"
     }
    },
+   "qr": {
+    "allein": [
+     128,
+     91,
+     200,
+     200
+    ],
+    "mitEintraegen": [
+     13,
+     91,
+     200,
+     200
+    ]
+   },
    "screen": [
     480,
     320
@@ -4957,6 +4971,20 @@ export const LAYOUTS = {
      "v": "c"
     }
    },
+   "qr": {
+    "allein": [
+     143,
+     91,
+     200,
+     200
+    ],
+    "mitEintraegen": [
+     28,
+     91,
+     200,
+     200
+    ]
+   },
    "screen": [
     480,
     320
@@ -5087,6 +5115,20 @@ export const LAYOUTS = {
      "h": "c",
      "v": "c"
     }
+   },
+   "qr": {
+    "allein": [
+     57,
+     144,
+     200,
+     200
+    ],
+    "mitEintraegen": [
+     57,
+     77,
+     200,
+     200
+    ]
    },
    "screen": [
     320,

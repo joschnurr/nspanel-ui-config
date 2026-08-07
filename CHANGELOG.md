@@ -3,6 +3,42 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.30.0 – 2026-08-07
+
+### Der QR-Code wird gezeichnet, nicht angedeutet
+
+Auf `cardQR` stand in der Vorschau bisher ein Kasten mit der Aufschrift „QR-Code". Das beantwortet
+die einzige Frage nicht, die man an dieser Karte hat: **Funktioniert der Code?** Ein WLAN-String
+(`WIFI:S:…;T:WPA;P:…;;`) kann ein Semikolon zu wenig haben oder ein Template, das ins Leere
+rendert — dem Text sieht man das nicht an, dem Code schon. Jetzt steht dort der echte QR-Code,
+und man kann ihn mit dem Telefon scannen.
+
+Dafür ist ein eigener Erzeuger dazugekommen (`www/panel/qr.js`, Byte-Modus, Fehlerkorrektur L,
+Versionen 1–10). **Warum nicht `ha-qr-code`:** Das Element gibt es im HA-Frontend, es liegt aber in
+einem nachgeladenen Bündel und ist nur definiert, wenn eine HA-Ansicht es zuvor gebraucht hat —
+darauf kann sich ein Custom Panel nicht verlassen, und der Bündelname ändert sich mit jeder
+HA-Fassung.
+
+**Geprüft wurde bitgenau gegen fremde Umsetzungen:** libqrencode 4.1.1 (die C-Referenz), nayukis
+`qrcodegen` und `python-qrcode` stimmen über 67 Texte und die Versionen 1–10 hinweg überein — und
+mit dieser Umsetzung ebenfalls, in allen 67 Fällen. ZXing dekodiert die erzeugten Codes fehlerfrei
+zum Ausgangstext.
+
+Der Code rückt in die Mitte, sobald die Karte keine Einträge hat — auch das steht so im
+Seitencode (`if(type2 leer){ if(type1 leer){ qrcode m1 } } else { qrcode m0 }`) und ist nicht
+geschätzt. Templates im `qrCode`-Feld werden wie überall über HAs eigene Engine gerendert, die
+Vorschau zeigt also den Code mit den echten Werten.
+
+### cardChart ist aus der Testkonfiguration entfernt
+
+Die Karte lässt sich nicht sinnvoll darstellen (das Display malt die Balken mit Zeichenbefehlen,
+es gibt keine Bauteile) — und sie ist mit aktuellem Home Assistant ohnehin defekt:
+`generate_chart_page` im Backend reicht `last_updated` an `datetime.fromisoformat`, bekommt dort
+inzwischen aber bereits ein `datetime` und bricht mit `TypeError` ab. Das ist ein Fehler des
+Backends, nicht dieser Integration; der Kartentyp bleibt wählbar, taugt derzeit aber nicht.
+
+**Testlage: 200 Python + 160 Node.**
+
 ## 0.29.0 – 2026-08-07
 
 Von zehn Kartentypen zeigten drei in der Vorschau nur einen grauen Kasten, und vier lieferten in

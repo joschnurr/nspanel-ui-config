@@ -442,6 +442,26 @@ THERMO_ROLLEN = {
 }
 
 
+def qr_flaechen(komponenten: dict) -> dict:
+    """Die beiden möglichen Plätze des QR-Codes auf ``cardQR``.
+
+    Der Code ist kein Bauteil, sondern wird mit dem Nextion-Befehl
+    ``qrcode <x>,<y>,200,…`` auf eine Fläche **gemalt** — deshalb steht er in keiner Slot-Tabelle.
+    Die Fläche selbst gibt es zweimal als Hotspot: ``m0`` links (wenn daneben Einträge stehen) und
+    ``m1`` mittig (wenn die Karte keine Einträge hat). Welcher gilt, entscheidet der Seitencode:
+
+        if(type2.txt=="delete"||type2.txt=="") { if(type1.txt=="delete"||type1.txt=="")
+            { qrcode m1.x,m1.y,… } } else { qrcode m0.x,m0.y,… }
+    """
+    flaechen = {}
+    for rolle, name in (("mitEintraegen", "Hotspot m0"), ("allein", "Hotspot m1")):
+        if name in komponenten:
+            x, y, w, h = komponenten[name]
+            # Der Befehl zeichnet immer 200 Punkte Kantenlänge, unabhängig von der Hotspot-Größe.
+            flaechen[rolle] = [x, y, 200, 200]
+    return flaechen
+
+
 def fixed_card_thermo(komponenten: dict) -> tuple[dict, list]:
     """Benannte Flächen und die acht Betriebsartentasten von ``cardThermo``.
 
@@ -581,6 +601,10 @@ def layout_fuer(dump: str, model: str, seite: str) -> dict:
         fluss = fluss_card_power(dump)
         if fluss:
             layout["flow"] = fluss
+    if seite == "cardQR":
+        flaechen = qr_flaechen(komponenten)
+        if flaechen:
+            layout["qr"] = flaechen
     if hintergrund is not None:
         layout["back"] = hintergrund
     return layout
