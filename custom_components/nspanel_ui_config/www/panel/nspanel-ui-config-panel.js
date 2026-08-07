@@ -352,6 +352,22 @@ const STYLES = `
     display: flex; align-items: center; justify-content: center;
     color: #7f8590; font-size: 20px;
   }
+  /* cardThermo: feste Flächen statt Liste. Größe, Ausrichtung und Farbe kommen aus den
+     Dump-Attributen (_nachAttributen), hier stehen nur die Dinge, die der Dump nicht hergibt:
+     die gestrichelte Andeutung der Tasten und die Hervorhebung der aktiven Betriebsart. */
+  .screen .thermo { display: flex; align-items: center; justify-content: center; }
+  .screen .thermo.label { color: #7f8590; }
+  .screen .thermo.wert { color: #d7d9dd; text-align: center; }
+  .screen .thermo.ziel { font-variant-numeric: tabular-nums; }
+  .screen .thermo.taste {
+    border: 1px dashed #3a3f47; border-radius: 8px; color: #7f8590;
+  }
+  .screen .thermo.modus {
+    border-radius: 8px; color: #50545c;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .screen .thermo.modus.aktiv { box-shadow: inset 0 0 0 2px currentColor; }
+  .screen .thermo.modus ha-icon { --mdc-icon-size: 26px; }
   /* cardPower: die sechs Laufbalken zwischen Mitte und Außenplätzen. Auf dem Gerät ein
      Nextion-Slider, dessen Cursor im 100-ms-Takt weiterrückt – hier die Spur und der Punkt.
      Eine Farbe gibt der Dump nicht her (Fill: image, Back. Picture ID 20), wohl aber
@@ -1301,6 +1317,32 @@ const FONT_PX = { 0: 15, 1: 20, 2: 24, 3: 32, 4: 46, 5: 92 };
 /** Symbole füllen die Zeilenhöhe stärker aus als Ziffern – dieselbe Font-ID wirkt größer. */
 const ICON_FAKTOR = 1.2;
 
+// Betriebsarten von `cardThermo`: Symbol und Farbe je Modus.
+//
+// **Beides steht so im Backend** (`generate_thermo_page` in pages.py): Die Farbe wird dort je
+// hvac_mode fest vergeben und als RGB565 mitgeschickt, das Symbol holt `get_icon_ha` aus dem
+// HA-Zustand. Nachgebildet statt neu erfunden — sonst zeigte die Vorschau andere Farben als das
+// Gerät. Unbekannte Betriebsarten bekommen den Standardwert des Backends (64512, orange).
+const THERMO_MODUS_ICONS = {
+  auto: "mdi:calendar-sync",
+  heat_cool: "mdi:calendar-sync",
+  heat: "mdi:fire",
+  cool: "mdi:snowflake",
+  dry: "mdi:water-percent",
+  fan_only: "mdi:fan",
+  off: "mdi:power",
+};
+
+const THERMO_MODUS_FARBEN = {
+  auto: 1024,
+  heat_cool: 1024,
+  heat: 64512,
+  off: 35921,
+  cool: 11487,
+  dry: 60897,
+  fan_only: 35921,
+};
+
 function fontGroesse(attr, ersatzHoehe, faktor = 1) {
   // `attr && …` ergäbe bei fehlendem Attribut `null` – und `null !== undefined`, die Vorgabe hätte
   // also nie gegriffen und jede Schrift wäre auf den Mindestwert gefallen.
@@ -2118,11 +2160,14 @@ class NsPanelUiConfigPanel extends PanelBase {
     const model = (this._model.global || {}).model || "eu";
     const entities = Array.isArray(card.entities) ? card.entities : [];
     const info = capacityInfo(this._schema, card.type, entities.length, model);
+    const thermo = this._thermoInfo(card);
     const layout = previewSlots({
       cardType: info.shownType,
       capacity: info.limit === null ? 0 : info.limit,
       filled: entities.length,
       model,
+      zielwerte: thermo.zielwerte,
+      betriebsarten: thermo.arten.length,
     });
 
     // Jede Neuzeichnung bekommt eine Marke: Antworten auf Template-Anfragen einer *älteren*
@@ -2235,6 +2280,34 @@ class NsPanelUiConfigPanel extends PanelBase {
   _previewTitle(card) {
     if (this._previewMode === "live") return this._liveTitle || "";
     return isPlain(card) && card.title !== undefined ? String(card.title) : "";
+  }
+
+  /**
+   * Was `cardThermo` am Gerät zeigt – abgelesen an der Entity, nicht geraten.
+   *
+   * Das Backend (`generate_thermo_page`) entscheidet nach denselben Attributen:
+   *   * `temperature` gesetzt  → **ein** Sollwert, große Tasten
+   *   * sonst `target_temp_high`/`_low` → **zwei** Sollwerte, zwei kleine Tastenpaare
+   *   * `hvac_modes` bestimmt, wie viele der acht Betriebsartentasten überhaupt erscheinen;
+   *     `hvacModes` auf der Karte überschreibt die Liste (`overwrite_supported_modes`).
+   *
+   * Fehlt die Entity (noch nicht gewählt, oder sie existiert in dieser Instanz nicht), bleibt es
+   * bei einem Sollwert und ohne Betriebsarten – das ist der ehrlichere Nullzustand, als acht
+   * Tasten zu zeigen, die es vielleicht nie gibt.
+   */
+  _thermoInfo(card) {
+    const leer = { zielwerte: 1, arten: [], attrs: null };
+    if (!isPlain(card) || card.type !== "cardThermo") return leer;
+    const id = card.entity && typeof card.entity === "object" ? card.entity.entity : card.entity;
+    const zustand = ((this._hass && this._hass.states) || {})[id];
+    if (!zustand) return leer;
+    const attrs = zustand.attributes || {};
+    const ueberschrieben = Array.isArray(card.hvacModes) ? card.hvacModes : null;
+    const arten = ueberschrieben || (Array.isArray(attrs.hvac_modes) ? attrs.hvac_modes : []);
+    const zwei =
+      attrs.temperature === undefined &&
+      (attrs.target_temp_high !== undefined || attrs.target_temp_low !== undefined);
+    return { zielwerte: zwei ? 2 : 1, arten, attrs, zustand };
   }
 
   /**
@@ -2585,6 +2658,10 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     if (slot.kind === "flow") return this._flowSlot(element, slot, inhaltFuer, auftraege, marke);
 
+    if (slot.kind.startsWith("thermo-")) {
+      return this._thermoSlot(element, slot, card, auftraege, marke);
+    }
+
     const inhalt = inhaltFuer(slot);
 
     if (slot.kind === "status") return this._statusSlot(element, slot, inhalt, auftraege, marke);
@@ -2643,6 +2720,88 @@ class NsPanelUiConfigPanel extends PanelBase {
    * seines Nachbarn — so funktioniert er in der Modell-Vorschau (`speed` aus der Konfiguration,
    * ggf. als Template) genauso wie in der Live-Ansicht (`speed` als siebtes Feld der Nachricht).
    */
+  /**
+   * Ein Platz auf `cardThermo`.
+   *
+   * Die Werte kommen **aus der Entity**, nicht aus dem Modell: Auf dieser Karte konfiguriert man
+   * nur, *welche* Entity gezeigt wird — alles Sichtbare (Ist-Temperatur, Sollwert, Zustand,
+   * Betriebsarten) holt das Backend zur Laufzeit von Home Assistant. Fehlt die Entity, bleiben die
+   * Felder leer statt erfunden.
+   */
+  _thermoSlot(element, slot, card, auftraege, marke) {
+    const { attrs, arten, zustand } = this._thermoInfo(card);
+    element.className = `thermo ${slot.kind.slice(7)}`;
+    this._nachAttributen(element, slot, slot.kind === "thermo-modus" ? ICON_FAKTOR : 1);
+
+    const einheit = (attrs && attrs.temperature_unit) || "";
+    const zahl = (wert) =>
+      wert === undefined || wert === null || wert === "" ? "" : String(wert);
+
+    if (slot.kind === "thermo-label") {
+      // Feste Beschriftungen; das Backend schickt sie übersetzt mit (`currently`/`state`).
+      element.textContent = slot.rolle === "curTempLbl" ? "Aktuell" : "Zustand";
+      return element;
+    }
+
+    if (slot.kind === "thermo-wert") {
+      if (slot.feld === "current") {
+        const wert = attrs ? attrs.current_temperature : undefined;
+        element.textContent = wert === undefined ? "" : `${wert} ${einheit}`.trim();
+      } else {
+        // Am Gerät steht hier die Betriebsart, bei laufender Regelung mit der Aktion darüber.
+        const aktion = attrs && attrs.hvac_action ? `${attrs.hvac_action}\n(${zustand.state})` : null;
+        element.textContent = aktion || (zustand ? zustand.state : "");
+        element.style.whiteSpace = "pre-line";
+      }
+      return element;
+    }
+
+    if (slot.kind === "thermo-ziel") {
+      const wert =
+        slot.feld === "target"
+          ? attrs && attrs.temperature
+          : slot.feld === "high"
+            ? attrs && attrs.target_temp_high
+            : attrs && attrs.target_temp_low;
+      // Das Display zeigt eine Nachkommastelle (XFloat auf dem zehnfachen Ganzzahlwert).
+      element.textContent =
+        wert === undefined || wert === null ? "" : Number(wert).toFixed(1).replace(".", ",");
+      return element;
+    }
+
+    if (slot.kind === "thermo-einheit") {
+      element.textContent = einheit || "°C";
+      return element;
+    }
+
+    if (slot.kind === "thermo-taste") {
+      element.textContent = slot.zeichen;
+      element.title =
+        slot.zeichen === "…" ? "Detailseite (nur bei Preset-/Lüfter-/Schwenkmodi)" : "Sollwert ändern";
+      return element;
+    }
+
+    if (slot.kind === "thermo-modus") {
+      const modus = arten[slot.modus];
+      if (!modus) return element;
+      const symbol = document.createElement("ha-icon");
+      symbol.setAttribute("icon", THERMO_MODUS_ICONS[modus] || "mdi:thermostat");
+      element.appendChild(symbol);
+      // Aktiv ist die Betriebsart, in der die Entity gerade steht — das Gerät färbt nur diese.
+      const aktiv = zustand && zustand.state === modus;
+      const farbe = rgb565ToHex(THERMO_MODUS_FARBEN[modus] ?? 64512);
+      if (aktiv && farbe) {
+        element.style.color = farbe;
+        element.style.setProperty("--icon-primary-color", farbe);
+      }
+      element.classList.toggle("aktiv", Boolean(aktiv));
+      element.title = `${modus}${aktiv ? " (aktiv)" : ""}`;
+      return element;
+    }
+
+    return element;
+  }
+
   _flowSlot(element, slot, inhaltFuer, auftraege, marke) {
     element.className = `flow${slot.senkrecht ? " senkrecht" : ""}`;
     const punkt = document.createElement("span");

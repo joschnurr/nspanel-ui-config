@@ -223,6 +223,93 @@ function screensaverLayout(layout, capacity, filled, model) {
   return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
+// --- Karten mit festem Aufbau ------------------------------------------------------------------
+
+/**
+ * `cardThermo`: eine Entity, aber fest aufgeteilte Fläche statt Liste.
+ *
+ * Gezeichnet wird **eines von zwei Bedienbildern**, weil das Gerät genau eines zeigt
+ * (`vis`-Befehle im Seitencode, siehe `fixed_card_thermo` im Extraktor):
+ *   * ein Sollwert  → große Zahl mittig, große Plus/Minus-Tasten
+ *   * zwei Sollwerte → zwei Zahlen nebeneinander, je ein kleines Tastenpaar
+ * Welches gilt, weiß nur die aufrufende Seite (es hängt an den Attributen der Entity), deshalb
+ * kommt `zielwerte` von außen und wird hier nicht geraten.
+ *
+ * Die acht Betriebsartentasten sind **immer alle** im Layout, aber nur so viele werden gezeichnet,
+ * wie die Entity Betriebsarten hat — der Rest bleibt am Gerät unsichtbar (`vis btN,0`).
+ */
+function thermoLayout(layout, model, zielwerte, betriebsarten) {
+  const [breite, hoehe] = layout.screen;
+  const fest = layout.fixed || {};
+  const attrs = layout.fixedAttrs || {};
+  const slots = [];
+
+  const nimm = (rolle, kind, extra = {}) => {
+    if (!fest[rolle]) return;
+    slots.push({
+      kind,
+      rolle,
+      ...proz(fest[rolle], breite, hoehe),
+      px: fest[rolle].slice(2),
+      attr: attrs[rolle] || null,
+      ...extra,
+    });
+  };
+
+  const chrome = layout.chrome || {};
+  const chromeAttrs = layout.chromeAttrs || {};
+  if (chrome.title) {
+    slots.push({ kind: "title", ...proz(chrome.title, breite, hoehe), attr: chromeAttrs.title || null });
+  }
+  for (const taste of ["prev", "next"]) {
+    if (chrome[taste]) {
+      slots.push({
+        kind: "navbtn",
+        taste,
+        ...proz(chrome[taste], breite, hoehe),
+        attr: chromeAttrs[taste] || null,
+      });
+    }
+  }
+
+  // Linke Spalte: zwei feste Beschriftungen mit je einem Wert darunter.
+  nimm("curTempLbl", "thermo-label");
+  nimm("curTemp", "thermo-wert", { feld: "current" });
+  nimm("stateLbl", "thermo-label");
+  nimm("state", "thermo-wert", { feld: "state" });
+
+  if (zielwerte >= 2) {
+    nimm("destHigh", "thermo-ziel", { feld: "high" });
+    nimm("destHighUnit", "thermo-einheit");
+    nimm("destLow", "thermo-ziel", { feld: "low" });
+    nimm("destLowUnit", "thermo-einheit");
+    nimm("upHigh", "thermo-taste", { zeichen: "+" });
+    nimm("downHigh", "thermo-taste", { zeichen: "−" });
+    nimm("upLow", "thermo-taste", { zeichen: "+" });
+    nimm("downLow", "thermo-taste", { zeichen: "−" });
+  } else {
+    nimm("dest", "thermo-ziel", { feld: "target" });
+    nimm("destUnit", "thermo-einheit");
+    nimm("up", "thermo-taste", { zeichen: "+" });
+    nimm("down", "thermo-taste", { zeichen: "−" });
+  }
+  nimm("detail", "thermo-taste", { zeichen: "…" });
+
+  const modeAttrs = layout.modeAttrs || {};
+  const anzahl = Math.max(0, Math.min(betriebsarten, (layout.modes || []).length));
+  (layout.modes || []).slice(0, anzahl).forEach((rect, index) => {
+    slots.push({
+      kind: "thermo-modus",
+      modus: index,
+      ...proz(rect, breite, hoehe),
+      px: rect.slice(2),
+      attr: modeAttrs[String(index)] || null,
+    });
+  });
+
+  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
+}
+
 // --- Notlösung für Karten ohne abgemessenes Layout ---------------------------------------------
 
 /** Kopfzeile und Fußzeile, wenn nichts Abgemessenes vorliegt. */
@@ -263,12 +350,20 @@ const SINGLE_WIDGETS = {
  * Titel- und Navigationsleiste selbst ergänzt — das ist nur beim Rückfall nötig, im abgemessenen
  * Fall stehen sie als eigene Plätze in der Liste.
  */
-export function previewSlots({ cardType, capacity, filled = 0, model = "eu" } = {}) {
+export function previewSlots({
+  cardType,
+  capacity,
+  filled = 0,
+  model = "eu",
+  zielwerte = 1,
+  betriebsarten = 8,
+} = {}) {
   const screen = screenFor(model);
   const anzahl = Math.max(0, Number(capacity) || 0);
 
   const gemessen = LAYOUTS[cardType] && LAYOUTS[cardType][model];
   if (gemessen) {
+    if (gemessen.fixed) return thermoLayout(gemessen, model, zielwerte, betriebsarten);
     return gemessen.special
       ? screensaverLayout(gemessen, anzahl, filled, model)
       : kartenLayout(gemessen, anzahl, model);

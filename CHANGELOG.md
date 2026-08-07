@@ -3,6 +3,50 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.27.0 – 2026-08-07
+
+Der Thermostat war die letzte häufig genutzte Karte, die in der Vorschau nur als grauer Kasten mit
+der Aufschrift „Thermostat-Bedienung" dastand. Jetzt ist auch sie abgemessen — und dabei kam ein
+Fehler im Extraktor ans Licht, der ihn seit jeher blind für einen ganzen Bauteiltyp machte.
+
+### Der Dump-Parser übersah jeden „Dual-state Button"
+
+Getrennt wurden die Bauteile des HMI-Dumps bisher am Muster `[A-Za-z]+ \S+` — also „ein Wort, ein
+Name". Der Nextion-Typ heißt aber **`Dual-state Button`**: mit Bindestrich und zwei Leerzeichen.
+Sein Attributblock landete deshalb beim jeweils vorherigen Bauteil, wo die zweite Koordinatenangabe
+schlicht ignoriert wurde.
+
+Auf `cardThermo` sind das **15 von 35 Bauteilen**: die acht Betriebsartentasten, beide
+Plus/Minus-Paare und die Detailtaste — alle spurlos verschwunden. Getrennt wird jetzt an jeder
+nicht eingerückten Zeile; das ist unabhängig davon, wie der Typ heißt. Für die bereits
+abgemessenen Karten ändert sich dadurch nichts (nachgewiesen: `layouts.js` blieb bis auf den neuen
+Abschnitt zeichengleich).
+
+### cardThermo zeigt jetzt, was das Gerät zeigt
+
+Statt eines Platzhalters stehen die echten Flächen da: links Ist-Temperatur und Zustand, mittig der
+Sollwert, unten die Betriebsarten — auf allen drei Modellen.
+
+Gefüllt werden sie **aus der Entity**, denn genau das tut das Backend auch: Konfiguriert wird auf
+dieser Karte nur, welche Entity gilt. Drei Dinge entscheidet sie, und die Vorschau liest sie
+genauso ab wie `generate_thermo_page`:
+
+| Was | Woran es hängt |
+| --- | --- |
+| ein oder zwei Sollwerte | `temperature` gesetzt → einer, sonst `target_temp_high`/`_low` → zwei |
+| welche Tasten dazu | ein Sollwert: die großen Plus/Minus; zwei: zwei kleine Paare |
+| wie viele Betriebsarten | `hvac_modes`, überschreibbar per `hvacModes` auf der Karte |
+
+Beide Bedienbilder gleichzeitig gibt es am Gerät nie — der Seitencode blendet das jeweils andere
+aus (`vis btUp1,0` …). Ohne gewählte Entity bleiben die Betriebsartentasten leer, statt acht zu
+zeigen, die es vielleicht nie gibt: Eine Taste, die es nicht gibt, sieht aus wie eine Möglichkeit,
+die es nicht gibt.
+
+Farben und Symbole der Betriebsarten sind die des Backends (`heat` orange, `cool` blau, `auto`
+grün, `off` grau); hervorgehoben wird die, in der die Entity gerade steht.
+
+**Testlage: 186 Python + 148 Node.**
+
 ## 0.26.0 – 2026-08-01
 
 Aus einem Vergleich von Gerätefoto und Vorschau nebeneinander — drei Befunde, einer davon betrifft

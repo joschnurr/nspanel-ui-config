@@ -74,9 +74,16 @@ def parse_components(text: str) -> dict[str, tuple[int, int, int, int]]:
     Der Dump listet jede Komponente als ``<Typ> <Name>`` mit eingerücktem Attributblock. Der Name
     allein wäre mehrdeutig (es gibt ``Text t1`` und ``Button t1`` auf verschiedenen Seiten), deshalb
     ist der Schlüssel ``"<Typ> <Name>"`` – genau die Form, die auch die Muster unten verwenden.
+
+    **Getrennt wird an jeder nicht eingerückten Zeile**, nicht an einem Typmuster. Ein Muster wie
+    ``[A-Za-z]+ \\S+`` übersieht den Typ ``Dual-state Button`` – der Bindestrich passt nicht, das
+    zweite Leerzeichen erst recht nicht. Dessen Attributblock landete dadurch beim *vorherigen*
+    Bauteil, wo die zweite Koordinatenangabe schlicht ignoriert wurde: Auf ``cardThermo`` fehlten so
+    sämtliche Tasten (die acht Betriebsarten, Plus/Minus, Detail) spurlos. Die Einrückung ist das
+    einzige verlässliche Merkmal, weil sie unabhängig vom Namen des Typs gilt.
     """
     komponenten: dict[str, tuple[int, int, int, int]] = {}
-    for block in re.split(r"\n(?=[A-Za-z]+ \S+\n)", text):
+    for block in re.split(r"\n(?=\S)", text):
         kopf = block.split("\n", 1)[0].strip()
         if " " not in kopf:
             continue
@@ -106,10 +113,14 @@ def parse_attributes(text: str) -> dict[str, dict[str, object]]:
 
     Buttons benennen dieselben Dinge anders (``Font Color (Unpressed)``) – die Muster decken beide
     Schreibweisen ab.
+
+    Getrennt wird an nicht eingerückten Zeilen, aus demselben Grund wie in ``parse_components``:
+    sonst fehlen alle ``Dual-state Button`` – auf ``cardThermo`` also Schriftgröße und Farbe jeder
+    Taste.
     """
     ausrichtung = {"left": "l", "center": "c", "right": "r", "top": "t", "bottom": "b"}
     attribute: dict[str, dict[str, object]] = {}
-    for block in re.split(r"\n(?=[A-Za-z]+ \S+\n)", text):
+    for block in re.split(r"\n(?=\S)", text):
         kopf = block.split("\n", 1)[0].strip()
         if " " not in kopf:
             continue
@@ -396,6 +407,66 @@ SEITEN = {
 SCREENSAVER_SEITEN = ("screensaver", "screensaver2")
 
 
+# --- Karten mit festem Aufbau statt Entity-Liste -----------------------------------------------
+#
+# `cardThermo` zeigt **eine** Entity, aber nicht als Listeneintrag: Die Fläche ist fest aufgeteilt
+# in Ist-Temperatur, Soll-Temperatur, Zustand und die Betriebsartentasten. Deshalb gibt es hier
+# keine nummerierten Plätze, sondern benannte Rollen — `CARD_CAPACITY` kennt die Seite folgerichtig
+# gar nicht.
+#
+# **Zwei Bedienbilder in einer Seite**, umgeschaltet über `vis` (Zeile 53–60 des Seitencodes
+# blendet den zweiten Satz zunächst aus):
+#   * ein Sollwert  → `xTempDest` mittig, dazu die großen Tasten `btUp`/`btDown`
+#   * zwei Sollwerte (`target_temp_high`/`_low`, z. B. Heizen/Kühlen) → `xTempDest1` + `xTempDest2`
+#     nebeneinander, dazu die kleinen Tastenpaare `btUp1`/`btDown1` und `bUp2`/`bDown2`
+# Welches gilt, entscheidet das Backend daran, ob die Entity `temperature` liefert oder nicht
+# (`generate_thermo_page` in pages.py). Die Vorschau zeichnet deshalb immer nur eines von beiden.
+THERMO_ROLLEN = {
+    "curTempLbl": r"^Text tCurTempLbl$",
+    "curTemp": r"^Text tCurTemp$",
+    "stateLbl": r"^Text tStateLbl$",
+    "state": r"^Text tStatus$",
+    "dest": r"^XFloat xTempDest$",
+    "destUnit": r"^Text tCF$",
+    "destHigh": r"^XFloat xTempDest1$",
+    "destHighUnit": r"^Text tCF1$",
+    "destLow": r"^XFloat xTempDest2$",
+    "destLowUnit": r"^Text tCF2$",
+    "up": r"^Dual-state Button btUp$",
+    "down": r"^Dual-state Button btDown$",
+    "upHigh": r"^Dual-state Button btUp1$",
+    "downHigh": r"^Dual-state Button btDown1$",
+    "upLow": r"^Dual-state Button bUp2$",
+    "downLow": r"^Dual-state Button bDown2$",
+    "detail": r"^Dual-state Button btDetail$",
+}
+
+
+def fixed_card_thermo(komponenten: dict) -> tuple[dict, list]:
+    """Benannte Flächen und die acht Betriebsartentasten von ``cardThermo``.
+
+    Die Tasten kommen als eigene Liste zurück, weil sie – anders als die übrigen Rollen – eine
+    *Reihenfolge* haben: Das Backend füllt sie ab Feld 21 in Viererschritten
+    (``spstr … bt0.txt,"~",21``, dann 25, 29 …), also genau in der Reihenfolge der `hvac_modes`.
+    """
+    fest = {}
+    for rolle, muster in THERMO_ROLLEN.items():
+        for name, rect in komponenten.items():
+            if re.match(muster, name):
+                fest[rolle] = list(rect)
+                break
+
+    tasten = []
+    for nummer in range(8):
+        name = f"Dual-state Button bt{nummer}"
+        if name in komponenten:
+            tasten.append(list(komponenten[name]))
+    return fest, tasten
+
+
+FESTE_SEITEN = {"cardThermo": fixed_card_thermo}
+
+
 def _attrs_zu(rechtecke: dict, komponenten: dict, attribute: dict) -> dict:
     """Ordnet jedem Rechteck die Attribute seiner Komponente zu – über die Position.
 
@@ -435,6 +506,23 @@ def layout_fuer(dump: str, model: str, seite: str) -> dict:
             if re.match(muster, name):
                 chrome[rolle] = list(rect)
                 break
+    if seite in FESTE_SEITEN:
+        fest, tasten = FESTE_SEITEN[seite](komponenten)
+        layout = {
+            "screen": list(SCREENS[model]),
+            "chrome": chrome,
+            "chromeAttrs": _attrs_zu(chrome, komponenten, attribute),
+            # Leer, damit jede Auswertung, die Plätze erwartet, nichts findet statt zu stolpern.
+            "slots": [],
+            "fixed": fest,
+            "fixedAttrs": _attrs_zu(fest, komponenten, attribute),
+            "modes": tasten,
+            "modeAttrs": _attrs_zu({str(i): r for i, r in enumerate(tasten)}, komponenten, attribute),
+        }
+        if hintergrund is not None:
+            layout["back"] = hintergrund
+        return layout
+
     slots = SEITEN[seite](komponenten)
     layout = {
         "screen": list(SCREENS[model]),
@@ -462,7 +550,7 @@ def main(argv: list[str]) -> int:
 
     layouts: dict[str, dict] = {}
     abweichungen = 0
-    for seite in list(SEITEN) + list(SCREENSAVER_SEITEN):
+    for seite in list(SEITEN) + list(SCREENSAVER_SEITEN) + list(FESTE_SEITEN):
         layouts[seite] = {}
         for model, unterordner in MODEL_DIRS.items():
             datei = repo / unterordner / f"{seite}.txt"
@@ -471,6 +559,14 @@ def main(argv: list[str]) -> int:
                 abweichungen += 1
                 continue
             layout = layout_fuer(datei.read_text(encoding="utf-8", errors="replace"), model, seite)
+            if seite in FESTE_SEITEN:
+                # Keine Plätze, sondern feste Rollen — CARD_CAPACITY kennt diese Seiten nicht.
+                print(
+                    f"  ok  {seite:<14} {model:<5} {len(layout['fixed'])} Rollen,"
+                    f" {len(layout['modes'])} Betriebsartentasten"
+                )
+                layouts[seite][model] = layout
+                continue
             erwartet = CARD_CAPACITY.get(seite, {}).get(model)
             gefunden = len(layout["slots"])
             status = "ok "

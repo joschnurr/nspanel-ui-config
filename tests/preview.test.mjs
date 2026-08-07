@@ -155,7 +155,8 @@ test("Screensaver haben keinen Rahmen, Karten schon", () => {
   assert.equal(gemessen.gemessen, true);
   assert.equal(gemessen.slots.some((slot) => slot.kind === "title"), true);
   assert.equal(gemessen.slots.filter((slot) => slot.kind === "navbtn").length, 2);
-  assert.equal(previewSlots({ cardType: "cardThermo", capacity: 0 }).chrome, true);
+  // cardAlarm hat kein abgemessenes Layout – dort zeichnet die Vorschau den Rahmen selbst.
+  assert.equal(previewSlots({ cardType: "cardAlarm", capacity: 0 }).chrome, true);
 });
 
 test("abgemessene Plätze tragen ihre Bestandteile mit sich", () => {
@@ -188,11 +189,70 @@ test("us-p steht hochkant, eu und us-l liegen quer", () => {
 });
 
 test("Karten ohne Entity-Liste zeigen die Fläche des Backends, nicht erfundene Plätze", () => {
-  for (const cardType of ["cardThermo", "cardAlarm", "cardUnlock", "cardChart"]) {
+  // cardThermo ist seit v0.27 abgemessen und steht deshalb nicht mehr in dieser Liste.
+  for (const cardType of ["cardAlarm", "cardUnlock", "cardChart"]) {
     const ergebnis = previewSlots({ cardType, capacity: 0, filled: 0 });
     assert.equal(entitySlots(ergebnis).length, 0, `${cardType} sollte keine Listenplätze haben`);
     assert.equal(ergebnis.slots.length, 1);
     assert.equal(ergebnis.slots[0].index, "flat");
+  }
+});
+
+test("cardThermo ist abgemessen und hat keine Listenplätze", () => {
+  const ergebnis = previewSlots({ cardType: "cardThermo", capacity: 0, filled: 0 });
+  assert.equal(ergebnis.gemessen, true);
+  assert.equal(ergebnis.chrome, false, "der Rahmen steht als eigene Plätze in der Liste");
+  // Die Karte zeigt eine Entity, aber nicht als Listeneintrag – `entitySlots` bleibt leer.
+  assert.equal(entitySlots(ergebnis).length, 0);
+  assert.equal(ergebnis.slots.some((slot) => slot.kind === "title"), true);
+  assert.equal(ergebnis.slots.filter((slot) => slot.kind === "navbtn").length, 2);
+});
+
+test("cardThermo zeigt ein Bedienbild – entweder einen Sollwert oder zwei", () => {
+  const einer = previewSlots({ cardType: "cardThermo", zielwerte: 1, betriebsarten: 0 });
+  const rollen = (e) => e.slots.map((s) => s.rolle).filter(Boolean);
+  assert.ok(rollen(einer).includes("dest"), "ein Sollwert: die mittige Zahl");
+  assert.ok(rollen(einer).includes("up") && rollen(einer).includes("down"));
+  // Die Tasten des Zwei-Sollwert-Bildes dürfen daneben nicht auftauchen – das Gerät blendet
+  // sie aus (`vis btUp1,0` …), beides gleichzeitig gibt es dort nie.
+  assert.equal(rollen(einer).includes("destHigh"), false);
+  assert.equal(rollen(einer).includes("upHigh"), false);
+
+  const zwei = previewSlots({ cardType: "cardThermo", zielwerte: 2, betriebsarten: 0 });
+  assert.ok(rollen(zwei).includes("destHigh") && rollen(zwei).includes("destLow"));
+  assert.ok(["upHigh", "downHigh", "upLow", "downLow"].every((r) => rollen(zwei).includes(r)));
+  assert.equal(rollen(zwei).includes("dest"), false);
+  assert.equal(rollen(zwei).includes("up"), false);
+});
+
+test("cardThermo zeigt nur so viele Betriebsarten, wie die Entity hat", () => {
+  const modi = (n) =>
+    previewSlots({ cardType: "cardThermo", betriebsarten: n }).slots.filter(
+      (s) => s.kind === "thermo-modus"
+    );
+  assert.equal(modi(0).length, 0, "ohne Entity keine Tasten – nicht acht erfundene");
+  assert.equal(modi(3).length, 3);
+  assert.equal(modi(8).length, 8);
+  // Mehr als acht kann das Display nicht: der Rest wird abgeschnitten, nicht gestapelt.
+  assert.equal(modi(12).length, 8);
+  assert.deepEqual(
+    modi(4).map((s) => s.modus),
+    [0, 1, 2, 3],
+    "die Tasten stehen in der Reihenfolge der hvac_modes"
+  );
+});
+
+test("cardThermo passt auf alle drei Displays", () => {
+  for (const model of ["eu", "us-l", "us-p"]) {
+    const ergebnis = previewSlots({ cardType: "cardThermo", model, betriebsarten: 8 });
+    const { w, h } = ergebnis.screen;
+    assert.deepEqual({ w, h }, SCREEN[model]);
+    for (const slot of ergebnis.slots) {
+      assert.ok(
+        slot.x >= -0.01 && slot.y >= -0.01 && slot.x + slot.w <= 100.01 && slot.y + slot.h <= 100.01,
+        `${model}: ${slot.kind}/${slot.rolle ?? slot.modus} ragt über die Fläche hinaus`
+      );
+    }
   }
 });
 

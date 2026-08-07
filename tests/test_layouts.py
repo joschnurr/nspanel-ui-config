@@ -40,8 +40,16 @@ def test_datei_ist_vorhanden_und_lesbar() -> None:
     assert LAYOUTS_JS.read_text(encoding="utf-8").startswith("//"), "Kopfkommentar fehlt"
 
 
+# Karten mit festem Aufbau statt Entity-Liste: Sie zeigen genau eine Entity, aber auf fest
+# aufgeteilter Fläche (Ist-Temperatur, Sollwert, Zustand, Betriebsarten). `CARD_CAPACITY` zählt
+# Listenplätze und kennt sie deshalb bewusst nicht — ihre Prüfungen stehen weiter unten.
+FESTE = ("cardThermo",)
+
+
 def test_jede_abgemessene_karte_hat_genau_so_viele_plaetze_wie_das_schema_sagt() -> None:
     for card_type, je_modell in LAYOUTS.items():
+        if card_type in FESTE:
+            continue
         for model, layout in je_modell.items():
             erwartet = schema.CARD_CAPACITY.get(card_type, {}).get(model)
             assert erwartet is not None, f"{card_type}/{model} steht nicht in CARD_CAPACITY"
@@ -49,6 +57,38 @@ def test_jede_abgemessene_karte_hat_genau_so_viele_plaetze_wie_das_schema_sagt()
                 f"{card_type}/{model}: {len(layout['slots'])} Plätze in layouts.js, "
                 f"{erwartet} laut Schema – tools/extract_layouts.py erneut ausführen"
             )
+
+
+def test_feste_karten_haben_rollen_statt_plaetze() -> None:
+    """`cardThermo` bringt benannte Flächen mit – und keine Listenplätze, die es nicht hat."""
+    for card_type in FESTE:
+        assert card_type in LAYOUTS, f"{card_type} fehlt in layouts.js"
+        for model, layout in LAYOUTS[card_type].items():
+            assert layout["slots"] == [], f"{card_type}/{model} sollte keine Listenplätze haben"
+            assert layout["fixed"], f"{card_type}/{model}: keine benannten Flächen"
+            assert card_type not in schema.CARD_CAPACITY, (
+                f"{card_type} steht in CARD_CAPACITY – dann gehört es nicht zu den festen Karten"
+            )
+
+
+def test_cardthermo_hat_beide_bedienbilder_und_acht_betriebsarten() -> None:
+    """Ein und zwei Sollwerte, dazu die acht Tasten – auf jedem Modell vollständig.
+
+    Die acht Tasten sind der Grund, warum der Dump-Parser an jeder nicht eingerückten Zeile
+    trennen muss: Sie heißen ``Dual-state Button btN``, und ein Muster wie ``[A-Za-z]+ \\S+``
+    übersieht diesen Typ samt Bindestrich. Vor dieser Korrektur fehlten sie hier spurlos.
+    """
+    ein_sollwert = ("dest", "destUnit", "up", "down")
+    zwei_sollwerte = ("destHigh", "destLow", "upHigh", "downHigh", "upLow", "downLow")
+    for model, layout in LAYOUTS["cardThermo"].items():
+        fest = layout["fixed"]
+        for rolle in ein_sollwert + zwei_sollwerte + ("curTemp", "state", "detail"):
+            assert rolle in fest, f"cardThermo/{model}: Rolle {rolle} fehlt"
+        assert len(layout["modes"]) == 8, (
+            f"cardThermo/{model}: {len(layout['modes'])} Betriebsartentasten statt 8"
+        )
+        # Jede Taste braucht ihre Darstellungsattribute, sonst steht das Symbol falsch im Feld.
+        assert len(layout["modeAttrs"]) == 8, f"cardThermo/{model}: Attribute fehlen"
 
 
 def test_alle_modelle_sind_abgedeckt() -> None:
@@ -63,6 +103,9 @@ def test_kein_rechteck_liegt_ausserhalb_des_displays() -> None:
             rechtecke = list(layout.get("chrome", {}).values())
             for slot in layout["slots"]:
                 rechtecke.extend(slot.values())
+            # Feste Karten: die benannten Flächen und die Betriebsartentasten zählen genauso.
+            rechtecke.extend(layout.get("fixed", {}).values())
+            rechtecke.extend(layout.get("modes", []))
             for x, y, w, h in rechtecke:
                 assert 0 <= x and 0 <= y, f"{card_type}/{model}: negative Position"
                 assert w > 0 and h > 0, f"{card_type}/{model}: leere Fläche"

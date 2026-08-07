@@ -78,13 +78,37 @@ das Backend hängt sie als `¬<nummer>` an das Symbol, und das Display wählt da
 Vorschau macht dasselbe – auch in der Live-Ansicht, wo diese Angabe mitgeliefert wird und vom Symbol
 abgetrennt werden muss (sonst stünde dort wörtlich `19¬2`).
 
+### Der Thermostat zeigt, was das Gerät zeigt
+
+`cardThermo` ist die einzige Karte, die genau **eine** Entity zeigt und trotzdem eine feste
+Aufteilung hat: links Ist-Temperatur und Zustand, mittig der Sollwert, unten die Betriebsarten.
+Die Vorschau nimmt diese Flächen aus dem HMI-Dump und füllt sie aus der Entity – konfiguriert wird
+hier ja nur, *welche* Entity gilt.
+
+Drei Dinge entscheidet dabei die Entity, nicht die Konfiguration, und die Vorschau liest sie
+genauso ab wie `generate_thermo_page` im Backend:
+
+| Was | Woran es hängt |
+| --- | --- |
+| ein oder zwei Sollwerte | `temperature` gesetzt → einer, sonst `target_temp_high`/`_low` → zwei |
+| welche Tasten dazu | ein Sollwert: die großen Plus/Minus; zwei: zwei kleine Paare |
+| wie viele Betriebsarten | `hvac_modes` der Entity, überschreibbar per `hvacModes` auf der Karte |
+
+Beide Bedienbilder gleichzeitig gibt es am Gerät nie – der Seitencode blendet das jeweils andere
+aus (`vis btUp1,0` …), und die Vorschau zeichnet deshalb auch nur eines. Ohne gewählte Entity
+bleiben die Betriebsarten leer statt acht Tasten zu zeigen, die es vielleicht nie gibt.
+
+Farben und Symbole der Betriebsarten sind die des Backends (`heat` orange, `cool` blau, `auto`
+grün …); hervorgehoben wird die, in der die Entity gerade steht.
+
 **Was Näherung bleibt:**
 
 - **Schriftart und Umbruch.** Das Nextion nutzt eingebackene Bitmap-Fonts; ob ein langer Name dort
   an derselben Stelle umbricht, ist eine Aussage mit Restunschärfe. Die Schriftgröße leitet die
   Vorschau aus der abgemessenen Höhe des Textfeldes ab.
-- **Karten mit nur einer Entity** (`cardThermo`, `cardAlarm`, `cardChart`, `cardUnlock`) zeigen nur
-  ihre Fläche – deren Innenleben gestaltet das Backend.
+- **Karten mit nur einer Entity** (`cardAlarm`, `cardChart`, `cardUnlock`) zeigen nur
+  ihre Fläche – deren Innenleben gestaltet das Backend. **`cardThermo` nicht mehr:** Seine Aufteilung
+  ist seit v0.27 abgemessen (siehe oben).
 - **Symbole ohne eigene Angabe.** Die leitet das Backend aus Domain und Zustand ab
   (`icon_mapping.py`); nachgebaut wird das nicht. Ersatzweise steht das Symbol da, das Home
   Assistant selbst für die Entity führt – blasser dargestellt und im Tooltip als solches benannt.
