@@ -104,11 +104,17 @@ def test_cardpower_haengt_jedem_eintrag_die_geschwindigkeit_an() -> None:
 
 
 def test_karten_mit_eigenem_aufbau_liefern_keine_erfundenen_eintraege() -> None:
-    payload = "entityUpd~Heizung~nav~nav~~~~~~~~~~~~climate.wohnzimmer~21.5 °C~22~heat"
-    ergebnis = protocol.parse_message(payload, "cardThermo")
-    assert ergebnis["strukturiert"] is False
-    assert ergebnis["entities"] == []
-    assert ergebnis["title"] == "Heizung"
+    """Für Karten ohne Eintragsblöcke gibt es Titel, aber keine Liste.
+
+    `cardThermo` steht hier seit v0.28 nicht mehr dabei – sein Format ist inzwischen bekannt und
+    wird gelesen (siehe `test_thermo_wird_zerlegt_statt_uebergangen`).
+    """
+    for card_type in ("cardMedia", "cardAlarm", "cardChart", "cardUnlock"):
+        payload = "entityUpd~Wohnzimmer~nav~nav~~~~~~~~~~~~media_player.tv~an"
+        ergebnis = protocol.parse_message(payload, card_type)
+        assert ergebnis["strukturiert"] is False, card_type
+        assert ergebnis["entities"] == [], card_type
+        assert ergebnis["title"] == "Wohnzimmer", card_type
 
 
 def test_der_screensaver_kommt_ohne_titel_und_navigation() -> None:
@@ -255,3 +261,59 @@ def test_die_schriftgroesse_wird_vom_symbol_getrennt() -> None:
     # Ohne Angabe bleibt das Feld unangetastet und ohne Schriftgröße.
     assert eintraege[1]["iconChar"] == "100"
     assert "font" not in eintraege[1] or eintraege[1]["font"] is None
+
+
+def test_thermo_wird_zerlegt_statt_uebergangen() -> None:
+    """Die Thermostatkarte hat ein eigenes Format – und wird trotzdem vollständig gelesen.
+
+    Die Feldnummern stammen aus dem Seitencode des HMI-Dumps (``spstr … "~",15`` für die
+    Ist-Temperatur, 17 für den Zustand, 21 + n·4 für die Betriebsarten), nicht aus einer Zählung
+    am Beispiel.
+    """
+    nav = "~".join(["delete"] + [""] * 5 + ["delete"] + [""] * 5)
+    modi = ""
+    for name, farbe, aktiv in (("off", 35921, 0), ("heat", 64512, 1), ("cool", 11487, 0)):
+        modi += f"~\ue000~{farbe}~{aktiv}~{name}"
+    modi += "~~~~" * 5
+    roh = (
+        f"entityUpd~Heizung~{nav}~climate.wohnzimmer~21.4 \u00b0C~225~heizt\r\n(heat)"
+        f"~50~300~5{modi}~Aktuell~Zustand~Betrieb~\ue001~~0"
+    )
+    d = protocol.parse_message(roh, "cardThermo")
+    assert d["strukturiert"] is True, "cardThermo darf nicht mehr als unstrukturiert gelten"
+    assert d["title"] == "Heizung"
+    assert d["entity"] == "climate.wohnzimmer"
+    t = d["thermo"]
+    assert t["current"] == "21.4 \u00b0C", "die Ist-Temperatur kommt fertig samt Einheit"
+    assert t["target"] == 22.5, "Sollwerte kommen als Ganzzahl mal zehn"
+    assert t["state"] == "heizt\r\n(heat)"
+    assert (t["min"], t["max"], t["step"]) == (5.0, 30.0, 0.5)
+    assert t["target2"] is None, "ohne zweiten Sollwert bleibt das Feld leer, nicht 0"
+    assert t["detailPage"] == "0"
+    assert t["labels"] == {"currently": "Aktuell", "state": "Zustand", "action": "Betrieb"}
+
+
+def test_thermo_meldet_nur_die_belegten_betriebsarten() -> None:
+    """Acht Bloecke kommen immer – gezeigt werden nur die belegten.
+
+    Das Backend fuellt die Nachricht stets auf acht Tasten auf; die ungenutzten sind vier leere
+    Felder und am Geraet ausgeblendet. Als leere Kaestchen zu erscheinen waere eine Behauptung.
+    """
+    nav = "~".join(["delete"] + [""] * 5 + ["delete"] + [""] * 5)
+    modi = "~\ue000~35921~0~off" + "~\ue001~64512~1~heat" + "~~~~" * 6
+    roh = f"entityUpd~T~{nav}~climate.x~20 C~200~an~50~300~5{modi}~a~b~c~~~1"
+    t = protocol.parse_message(roh, "cardThermo")["thermo"]
+    assert len(t["modes"]) == 2
+    assert [m["modus"] for m in t["modes"]] == ["off", "heat"]
+    assert [m["aktiv"] for m in t["modes"]] == [False, True]
+    # Die Farbe kommt als RGB565 und wird zurueckgerechnet – das ist die Farbe, die das Geraet zeigt.
+    assert t["modes"][1]["rgb"] == protocol.rgb565_to_rgb(64512)
+
+
+def test_thermo_mit_zwei_sollwerten() -> None:
+    """Ein gesetzter zweiter Sollwert ist das Kennzeichen des Bereichsthermostats."""
+    nav = "~".join(["delete"] + [""] * 5 + ["delete"] + [""] * 5)
+    roh = f"entityUpd~T~{nav}~climate.x~20 C~240~an~50~300~5{'~~~~' * 8}~a~b~c~~180~1"
+    t = protocol.parse_message(roh, "cardThermo")["thermo"]
+    assert t["target"] == 24.0
+    assert t["target2"] == 18.0

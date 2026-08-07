@@ -3,6 +3,39 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.28.0 – 2026-08-07
+
+Die Vorschau aus der Konfiguration zeigte den Thermostat seit v0.27 – die **Live-Ansicht** blieb
+leer. Sie kannte das Format der Karte nicht und lieferte nur den Titel.
+
+### cardThermo hat ein eigenes Nachrichtenformat, und das wird jetzt gelesen
+
+Alle anderen Karten bestehen aus 6er-Blöcken je Eintrag. Der Thermostat nicht: Er schickt
+Ist-Temperatur, Sollwert, Zustand, Grenzen, acht Betriebsarten zu je vier Feldern, drei
+übersetzte Beschriftungen, das Einheitensymbol, den zweiten Sollwert und ein Kennzeichen für die
+Detailseite – alles am Stück.
+
+**Die Feldnummern sind abgelesen, nicht gezählt.** Der Seitencode des HMI-Dumps holt sich seine
+Werte mit `spstr strCommand.txt,<ziel>,"~",<nummer>`: `tCurTemp` steht auf 15, `tStatus` auf 17,
+`bt0.txt` auf 21 und jede weitere Taste vier Felder später. Das bestätigt zugleich, dass die
+Navigation genau zwölf Felder belegt.
+
+Was dadurch in der Live-Ansicht steht, ist **gemessen statt hergeleitet**: die Beschriftungen in
+der Sprache des Geräts, der Zustandstext so, wie das Backend ihn übersetzt und um die Aktion
+ergänzt hat, und die Betriebsarten mit dem Symbolzeichen des Nextion-Fonts und der Farbe, die das
+Display wirklich bekommen hat.
+
+Zwei Kleinigkeiten, die dabei nicht geraten wurden:
+
+- **Ungenutzte Betriebsartentasten bleiben weg.** Das Backend füllt die Nachricht immer auf acht
+  Tasten auf; die überzähligen sind vier leere Felder und am Gerät ausgeblendet. Als leere
+  Kästchen zu erscheinen wäre eine Behauptung.
+- **Die Detailtaste folgt dem Seitencode.** `if(tTmp.txt!="1") vis btDetail,1` – sie erscheint
+  genau dann, wenn das letzte Feld *nicht* "1" ist, also wenn die Entity Preset-, Schwenk- oder
+  Lüftermodi kennt.
+
+**Testlage: 189 Python + 148 Node.**
+
 ## 0.27.0 – 2026-08-07
 
 Der Thermostat war die letzte häufig genutzte Karte, die in der Vorschau nur als grauer Kasten mit

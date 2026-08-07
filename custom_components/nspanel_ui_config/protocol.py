@@ -63,12 +63,27 @@ PAGE_FORMATS: Final[dict[str, dict[str, int]]] = {
 
 # Karten, die das Backend aus eigenen Feldern zusammensetzt statt aus Einträgen.
 UNSTRUCTURED_PAGES: Final[tuple[str, ...]] = (
-    "cardThermo",
     "cardMedia",
     "cardAlarm",
     "cardChart",
     "cardUnlock",
 )
+
+# --- cardThermo ---------------------------------------------------------------------------------
+#
+# Eigenes Format, kein 6er-Block (``generate_thermo_page`` in pages.py):
+#
+#   entityUpd~<titel>~<navigation: 2 Eintraege a 6>~<entityId>~<ist>~<soll>~<zustand>
+#           ~<min>~<max>~<schritt>~<8x je 4 Felder Betriebsart>~<3 Beschriftungen>
+#           ~<einheitensymbol>~<soll2>~<detailseite>
+#
+# **Die Feldnummern sind nicht gezählt, sondern abgelesen:** Der Seitencode des HMI-Dumps holt sich
+# seine Werte mit ``spstr strCommand.txt,<ziel>,"~",<nummer>`` — dort steht ``tCurTemp`` auf 15,
+# ``tStatus`` auf 17 und ``bt0.txt`` auf 21, die weiteren Tasten je vier Felder später. Das deckt
+# sich mit dem Aufbau oben und bestätigt zugleich, dass die Navigation genau zwölf Felder belegt.
+THERMO_TEMP_TEILER: Final = 10  # Temperaturen kommen als Ganzzahl mal zehn (XFloat-Komponente)
+THERMO_MODI: Final = 8
+THERMO_MODUS_FELDER: Final = 4  # Symbol, Farbe, aktiv, Name der Betriebsart
 
 
 def rgb565_to_rgb(value: Any) -> list[int] | None:
@@ -118,6 +133,79 @@ def _eintrag(felder: list[str]) -> dict[str, Any]:
     return eintrag
 
 
+def _thermo_zahl(wert: str) -> float | None:
+    """Eine Temperatur aus der Nachricht: Ganzzahl mal zehn, oder leer.
+
+    Leer ist keine Ausnahme, sondern der Normalfall für den zweiten Sollwert — den schickt das
+    Backend nur bei Thermostaten mit Bereich (``target_temp_high``/``_low``).
+    """
+    text = (wert or "").strip()
+    if not text:
+        return None
+    try:
+        return int(text) / THERMO_TEMP_TEILER
+    except ValueError:
+        return None
+
+
+def _thermo(teile: list[str], ergebnis: dict[str, Any]) -> dict[str, Any]:
+    """Zerlegt die ``entityUpd``-Nachricht einer Thermostatkarte.
+
+    Was hier herauskommt, ist **gemessen statt abgeleitet**: Ist- und Solltemperatur, der
+    Zustandstext samt Aktion, die Grenzen und vor allem die Betriebsarten so, wie das Gerät sie
+    wirklich zeigt — mit dem Symbolzeichen des Nextion-Fonts und der Farbe, die es dafür bekommen
+    hat. Genau das ist der Unterschied zur Vorschau aus der Konfiguration, die dieselben Werte aus
+    den Attributen der Entity herleitet.
+    """
+    feld = lambda nr: teile[nr] if len(teile) > nr else ""  # noqa: E731 – 1-basiert wie im Dump
+
+    ergebnis["strukturiert"] = True
+    rest = teile[2:]
+    for _ in range(NAVIGATION_ENTRIES):
+        if len(rest) < 6:
+            break
+        ergebnis["navigation"].append(_eintrag(rest[:6]))
+        rest = rest[6:]
+
+    ergebnis["entity"] = feld(14)
+    thermo: dict[str, Any] = {
+        # Die Ist-Temperatur kommt bereits mit Einheit ("21.4 °C"), die Sollwerte nicht.
+        "current": feld(15),
+        "target": _thermo_zahl(feld(16)),
+        "state": feld(17),
+        "min": _thermo_zahl(feld(18)),
+        "max": _thermo_zahl(feld(19)),
+        "step": _thermo_zahl(feld(20)),
+    }
+
+    modi = []
+    for nummer in range(THERMO_MODI):
+        basis = 21 + nummer * THERMO_MODUS_FELDER
+        symbol, farbe, aktiv, name = (feld(basis + i) for i in range(4))
+        # Nicht belegte Tasten schickt das Backend als vier leere Felder – am Gerät sind sie
+        # ausgeblendet, hier bleiben sie weg statt als leere Kästchen aufzutauchen.
+        if not (symbol or name):
+            continue
+        modi.append(
+            {
+                "iconChar": symbol,
+                "color": farbe,
+                "rgb": rgb565_to_rgb(farbe),
+                "aktiv": str(aktiv).strip() == "1",
+                "modus": name,
+            }
+        )
+    thermo["modes"] = modi
+
+    thermo["labels"] = {"currently": feld(53), "state": feld(54), "action": feld(55)}
+    thermo["unitIcon"] = feld(56)
+    # Zweiter Sollwert: gesetzt heißt Bereichsthermostat, leer heißt ein einzelner Sollwert.
+    thermo["target2"] = _thermo_zahl(feld(57))
+    thermo["detailPage"] = feld(58)
+    ergebnis["thermo"] = thermo
+    return ergebnis
+
+
 def parse_entity_upd(payload: str, card_type: str | None) -> dict[str, Any] | None:
     """Zerlegt eine ``entityUpd~``-Nachricht.
 
@@ -134,6 +222,9 @@ def parse_entity_upd(payload: str, card_type: str | None) -> dict[str, Any] | No
         "entities": [],
         "navigation": [],
     }
+
+    if card_type == "cardThermo":
+        return _thermo(teile, ergebnis)
 
     aufbau = PAGE_FORMATS.get(card_type or "")
     if aufbau is None:

@@ -2357,11 +2357,17 @@ class NsPanelUiConfigPanel extends PanelBase {
     const model = (this._model.global || {}).model || "eu";
     const eintraege = nachricht.entities || [];
     const info = capacityInfo(this._schema, liveCardType(gesucht, nachricht), eintraege.length, model);
+    // Der Thermostat bringt seine eigene Struktur mit; wieviele Sollwerte und Betriebsarten das
+    // Gerät gerade zeigt, steht damit **in der Nachricht** – hier wird nichts abgeleitet.
+    this._liveThermo = nachricht.thermo || null;
+    const thermoModi = this._liveThermo ? (this._liveThermo.modes || []).length : 0;
     const layout = previewSlots({
       cardType: info.shownType,
       capacity: info.limit === null ? eintraege.length : info.limit,
       filled: eintraege.length,
       model,
+      zielwerte: this._liveThermo && this._liveThermo.target2 !== null ? 2 : 1,
+      betriebsarten: thermoModi,
     });
 
     // **Nur die passende Karte zeichnen.** Vorher stand hier die zuletzt empfangene – nach einem
@@ -2729,9 +2735,12 @@ class NsPanelUiConfigPanel extends PanelBase {
    * Felder leer statt erfunden.
    */
   _thermoSlot(element, slot, card, auftraege, marke) {
-    const { attrs, arten, zustand } = this._thermoInfo(card);
     element.className = `thermo ${slot.kind.slice(7)}`;
     this._nachAttributen(element, slot, slot.kind === "thermo-modus" ? ICON_FAKTOR : 1);
+    // Im Live-Modus steht in der Nachricht, was das Gerät zeigt – dann wird nichts hergeleitet.
+    if (this._previewMode === "live") return this._thermoSlotLive(element, slot);
+
+    const { attrs, arten, zustand } = this._thermoInfo(card);
 
     const einheit = (attrs && attrs.temperature_unit) || "";
     const zahl = (wert) =>
@@ -2796,6 +2805,90 @@ class NsPanelUiConfigPanel extends PanelBase {
       }
       element.classList.toggle("aktiv", Boolean(aktiv));
       element.title = `${modus}${aktiv ? " (aktiv)" : ""}`;
+      return element;
+    }
+
+    return element;
+  }
+
+  /**
+   * Derselbe Platz, gefüllt aus dem Mitschnitt des Geräts.
+   *
+   * **Hier wird nichts abgeleitet:** Ist-Temperatur samt Einheit, der Zustandstext (den das
+   * Backend übersetzt und um die Aktion ergänzt), die Beschriftungen und die Betriebsarten kommen
+   * genau so an, wie sie ans Display gingen — inklusive der Symbolzeichen des Nextion-Fonts und
+   * der Farben, die das Gerät dafür bekommen hat.
+   */
+  _thermoSlotLive(element, slot) {
+    const t = this._liveThermo;
+    if (!t) return element;
+    const labels = t.labels || {};
+    const zahl = (wert) =>
+      wert === null || wert === undefined ? "" : Number(wert).toFixed(1).replace(".", ",");
+
+    if (slot.kind === "thermo-label") {
+      // Die Beschriftungen schickt das Backend übersetzt mit – hier steht also die Sprache des
+      // Geräts, nicht die der Oberfläche.
+      element.textContent =
+        slot.rolle === "curTempLbl" ? labels.currently || "" : labels.state || "";
+      return element;
+    }
+
+    if (slot.kind === "thermo-wert") {
+      element.textContent = slot.feld === "current" ? t.current || "" : t.state || "";
+      // Das Backend trennt Aktion und Zustand mit einem Zeilenumbruch (`\r\n`).
+      element.style.whiteSpace = "pre-line";
+      return element;
+    }
+
+    if (slot.kind === "thermo-ziel") {
+      element.textContent = zahl(slot.feld === "low" ? t.target2 : t.target);
+      return element;
+    }
+
+    if (slot.kind === "thermo-einheit") {
+      // Die Einheit kommt als Symbolzeichen (Celsius- oder Fahrenheit-Symbol des Fonts).
+      const name = iconNameFromChar(t.unitIcon);
+      if (name) {
+        const symbol = document.createElement("ha-icon");
+        symbol.setAttribute("icon", `mdi:${name}`);
+        element.appendChild(symbol);
+      } else {
+        element.textContent = t.unitIcon || "";
+      }
+      return element;
+    }
+
+    if (slot.kind === "thermo-taste") {
+      element.textContent = slot.zeichen;
+      // Detailtaste: Der Seitencode blendet sie bei `if(tTmp.txt!="1") vis btDetail,1` genau dann
+      // ein, wenn das letzte Feld **nicht** "1" ist. Das Backend schickt dort "0", sobald die
+      // Entity Preset-, Schwenk- oder Lüftermodi kennt — nur dann gibt es eine Detailseite.
+      if (slot.rolle === "detail" && String(t.detailPage).trim() === "1") {
+        element.style.visibility = "hidden";
+      }
+      return element;
+    }
+
+    if (slot.kind === "thermo-modus") {
+      const m = (t.modes || [])[slot.modus];
+      if (!m) return element;
+      const name = iconNameFromChar(m.iconChar);
+      if (name) {
+        const symbol = document.createElement("ha-icon");
+        symbol.setAttribute("icon", `mdi:${name}`);
+        element.appendChild(symbol);
+      } else if (m.iconChar) {
+        element.textContent = m.iconChar;
+      }
+      // Gefärbt wird nur die aktive Taste – so macht es das Display (`bt0.pco2` nur bei val=1).
+      if (m.aktiv && Array.isArray(m.rgb)) {
+        const farbe = `rgb(${m.rgb.join(",")})`;
+        element.style.color = farbe;
+        element.style.setProperty("--icon-primary-color", farbe);
+      }
+      element.classList.toggle("aktiv", Boolean(m.aktiv));
+      element.title = `${m.modus || ""}${m.aktiv ? " (aktiv)" : ""}`;
       return element;
     }
 
