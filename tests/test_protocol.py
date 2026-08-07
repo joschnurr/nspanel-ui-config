@@ -106,10 +106,12 @@ def test_cardpower_haengt_jedem_eintrag_die_geschwindigkeit_an() -> None:
 def test_karten_mit_eigenem_aufbau_liefern_keine_erfundenen_eintraege() -> None:
     """Für Karten ohne Eintragsblöcke gibt es Titel, aber keine Liste.
 
-    `cardThermo` steht hier seit v0.28 nicht mehr dabei – sein Format ist inzwischen bekannt und
-    wird gelesen (siehe `test_thermo_wird_zerlegt_statt_uebergangen`).
+    Uebrig ist hier nur noch `cardChart`: Diese Seite hat gar keine Diagramm-Bauteile — das
+    Display malt die Balken mit Zeichenbefehlen direkt auf die Flaeche. Es gibt also nichts, was
+    ein Parser einer Komponente zuordnen koennte. cardThermo (v0.28) sowie cardAlarm, cardUnlock
+    und cardMedia (v0.29) werden dagegen gelesen.
     """
-    for card_type in ("cardMedia", "cardAlarm", "cardChart", "cardUnlock"):
+    for card_type in ("cardChart",):
         payload = "entityUpd~Wohnzimmer~nav~nav~~~~~~~~~~~~media_player.tv~an"
         ergebnis = protocol.parse_message(payload, card_type)
         assert ergebnis["strukturiert"] is False, card_type
@@ -317,3 +319,65 @@ def test_thermo_mit_zwei_sollwerten() -> None:
     t = protocol.parse_message(roh, "cardThermo")["thermo"]
     assert t["target"] == 24.0
     assert t["target2"] == 18.0
+
+
+NAV = "~".join(["delete"] + [""] * 5 + ["delete"] + [""] * 5)
+
+
+def test_alarm_wird_zerlegt() -> None:
+    """Vier Aktionstasten als Paar aus Beschriftung und Modus, dazu Zustand und Tastatur."""
+    arm = "~Aktivieren - Zuhause~arm_home~Aktivieren - Abwesend~arm_away~~~~"
+    roh = f"entityUpd~Alarm~{NAV}~alarm_control_panel.haus{arm}~\ue000~13345~show~~\ue001~64512~"
+    d = protocol.parse_message(roh, "cardAlarm")
+    assert d["strukturiert"] is True
+    assert d["entity"] == "alarm_control_panel.haus"
+    a = d["alarm"]
+    assert [t["modus"] for t in a["buttons"]] == ["arm_home", "arm_away"], "leere Tasten fallen weg"
+    assert a["buttons"][0]["label"] == "Aktivieren - Zuhause"
+    assert a["numpad"] is True, "nur das Wort 'disable' blendet die Tastatur aus"
+    assert a["flashing"] is False
+    assert a["rgb"] == protocol.rgb565_to_rgb(13345)
+
+
+def test_alarm_ohne_tastatur_und_mit_blinken() -> None:
+    roh = f"entityUpd~Alarm~{NAV}~alarm_control_panel.haus~Deaktivieren~disarm~~~~~~~\ue000~223~disable~enable~~~"
+    a = protocol.parse_message(roh, "cardAlarm")["alarm"]
+    assert a["numpad"] is False
+    assert a["flashing"] is True
+    assert len(a["buttons"]) == 1 and a["buttons"][0]["modus"] == "disarm"
+
+
+def test_unlock_wird_wie_alarm_gelesen() -> None:
+    """`cardUnlock` hat keine eigene Seite – das Backend schreibt sie auf `cardAlarm` um."""
+    roh = f"entityUpd~Entsperren~{NAV}~~~~~~~~~~~~show~~~~"
+    d = protocol.parse_message(roh, "cardUnlock")
+    assert d["strukturiert"] is True
+    assert "alarm" in d
+
+
+def test_media_ist_strukturiert_und_kennt_seine_rollen() -> None:
+    """Neun eigene Felder, dann 6er-Bloecke – erster Block ist der Player, letzter der Lautsprecher."""
+    lead = "~media_player.tv~Ein Lied~~Interpret~~42~\ue409~64704~\ue49c"
+    bloecke = "~media_pl~media_player.tv~~65535~TV~" + "~light~light.k~~64512~Kueche~" + "~media_pl~media_player.tv~~65535~Sonos~"
+    d = protocol.parse_message(f"entityUpd~Medien~{NAV}{lead}{bloecke}", "cardMedia")
+    assert d["strukturiert"] is True, "cardMedia ist nicht unstrukturiert"
+    m = d["media"]
+    assert (m["title"], m["artist"]) == ("Ein Lied", "Interpret")
+    assert m["volume"] == 42
+    assert m["onOff"] == protocol.rgb565_to_rgb(64704)
+    assert m["shuffleChar"] == "\ue49c"
+    assert [e["name"] for e in d["entities"]] == ["TV", "Kueche", "Sonos"]
+    # Die Rolle folgt der Position, nicht dem type: bei gesetztem `status:` traegt der letzte
+    # Block eine ganz andere Domaene.
+    assert d["entities"][0]["rolle"] == "self"
+    assert d["entities"][-1]["rolle"] == "speaker"
+
+
+def test_media_disable_heisst_unsichtbar_leer_heisst_ohne_wert() -> None:
+    """Der Fehlerfall schickt leere Felder – das ist etwas anderes als 'disable'."""
+    lead = "~media_player.tv~Not found~~check apps.yaml~~0~\ue409~disable~disable"
+    d = protocol.parse_message(f"entityUpd~Medien~{NAV}{lead}", "cardMedia")
+    m = d["media"]
+    assert m["onOff"] is None and m["shuffleChar"] is None
+    leer = protocol.parse_message(f"entityUpd~Medien~{NAV}~media_player.tv~x~~y~~0~z~~", "cardMedia")["media"]
+    assert leer["onOff"] is None or leer["onOff"] == protocol.rgb565_to_rgb("")

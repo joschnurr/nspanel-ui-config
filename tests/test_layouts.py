@@ -43,7 +43,7 @@ def test_datei_ist_vorhanden_und_lesbar() -> None:
 # Karten mit festem Aufbau statt Entity-Liste: Sie zeigen genau eine Entity, aber auf fest
 # aufgeteilter Fläche (Ist-Temperatur, Sollwert, Zustand, Betriebsarten). `CARD_CAPACITY` zählt
 # Listenplätze und kennt sie deshalb bewusst nicht — ihre Prüfungen stehen weiter unten.
-FESTE = ("cardThermo",)
+FESTE = ("cardThermo", "cardAlarm")
 
 
 def test_jede_abgemessene_karte_hat_genau_so_viele_plaetze_wie_das_schema_sagt() -> None:
@@ -69,6 +69,22 @@ def test_feste_karten_haben_rollen_statt_plaetze() -> None:
             assert card_type not in schema.CARD_CAPACITY, (
                 f"{card_type} steht in CARD_CAPACITY – dann gehört es nicht zu den festen Karten"
             )
+
+
+def test_cardalarm_hat_tastatur_zustand_und_vier_aktionstasten() -> None:
+    """Zwoelf Tastaturplaetze, das Zustandssymbol, das PIN-Feld und vier Aktionstasten.
+
+    `b9` ist dabei KEINE Ziffer, sondern die Zusatztaste unten links — deshalb traegt sie eine
+    eigene Rolle (`extra`) und steht trotzdem im Tastenraster.
+    """
+    for model, layout in LAYOUTS["cardAlarm"].items():
+        fest = layout["fixed"]
+        for rolle in ("code", "state", "extra"):
+            assert rolle in fest, f"cardAlarm/{model}: Rolle {rolle} fehlt"
+        tasten = [r for r in fest if r.startswith("key")]
+        assert len(tasten) == 12, f"cardAlarm/{model}: {len(tasten)} Tastaturplaetze statt 12"
+        assert fest["extra"] == fest["key9"], "die Zusatztaste ist der Platz b9"
+        assert len(layout["modes"]) == 4, f"cardAlarm/{model}: {len(layout['modes'])} Aktionstasten statt 4"
 
 
 def test_cardthermo_hat_beide_bedienbilder_und_acht_betriebsarten() -> None:

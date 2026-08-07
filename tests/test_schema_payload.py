@@ -336,3 +336,47 @@ def test_wirkungslose_keys_werden_auch_im_extra_dict_gefunden() -> None:
     unit_meldungen = [f for f in schema.validate_model(model) if "'unit'" in f["message"]]
     assert unit_meldungen, "unit im extra-Dict muss ebenfalls auffallen"
     assert "Zeile 1" in unit_meldungen[0]["message"]
+
+
+def test_entity_als_objekt_auf_ein_entity_karte_ist_ein_fehler() -> None:
+    """Der Fehler, der am 2026-08-07 das ganze Panel dunkel machte.
+
+    In ``entities:`` stehen Objekte, bei ``entity:`` einer Ein-Entity-Karte ein reiner String.
+    Verwechselt man das, uebergibt ``config.py`` das Dict an seine Entity-Klasse, es landet als
+    entityId in der Namensliste, und ``controller.py`` bricht beim Registrieren der Callbacks mit
+    ``'dict' object has no attribute 'startswith'`` ab — bevor irgendetwas gezeichnet wird.
+    """
+    for card_type in schema.FLAT_ENTITY_CARD_TYPES:
+        modell = {
+            "global": {},
+            "cards": [{"type": card_type, "entity": {"entity": "climate.x", "extra": {}}}],
+        }
+        befunde = schema.validate_model(modell)
+        passend = [b for b in befunde if b["path"].endswith(".entity") and b["level"] == "error"]
+        assert passend, f"{card_type}: Objekt statt String wurde nicht als Fehler gemeldet"
+        assert "Text" in passend[0]["message"]
+
+
+def test_entity_als_string_ist_in_ordnung() -> None:
+    """Die richtige Form darf keinen Befund erzeugen — sonst waere die Pruefung wertlos."""
+    for card_type in schema.FLAT_ENTITY_CARD_TYPES:
+        modell = {"global": {}, "cards": [{"type": card_type, "entity": "climate.wohnzimmer"}]}
+        befunde = [b for b in schema.validate_model(modell) if b["path"].endswith(".entity")]
+        assert befunde == [], f"{card_type}: gueltige Form wurde bemaengelt: {befunde}"
+
+
+def test_leere_entity_auf_ein_entity_karte_ist_nur_eine_warnung() -> None:
+    """Noch nicht ausgefuellt ist kein Fehler — das Panel zeigt dort schlicht 'Not found'."""
+    modell = {"global": {}, "cards": [{"type": "cardThermo", "entity": "   "}]}
+    befunde = [b for b in schema.validate_model(modell) if b["path"].endswith(".entity")]
+    assert len(befunde) == 1 and befunde[0]["level"] == "warning"
+
+
+def test_listen_entities_bleiben_objekte() -> None:
+    """Die Gegenrichtung: In ``entities:`` ist ein blosser String falsch."""
+    modell = {
+        "global": {},
+        "cards": [{"type": "cardGrid", "entities": ["light.kueche"]}],
+    }
+    befunde = schema.validate_model(modell)
+    assert any(b["level"] == "error" and "entities[0]" in b["path"] for b in befunde)

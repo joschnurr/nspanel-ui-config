@@ -62,12 +62,17 @@ PAGE_FORMATS: Final[dict[str, dict[str, int]]] = {
 }
 
 # Karten, die das Backend aus eigenen Feldern zusammensetzt statt aus Einträgen.
-UNSTRUCTURED_PAGES: Final[tuple[str, ...]] = (
-    "cardMedia",
-    "cardAlarm",
-    "cardChart",
-    "cardUnlock",
-)
+#
+# `cardChart` bleibt hier: Die Seite hat **gar keine Diagramm-Bauteile**. Das Display malt die
+# Balken beim Eintreffen der Nachricht mit Zeichenbefehlen (`fill`, `line`, `xstr`) direkt auf die
+# Fläche. Es gibt also nichts zu benennen, was ein Parser einer Komponente zuordnen könnte.
+UNSTRUCTURED_PAGES: Final[tuple[str, ...]] = ("cardChart",)
+
+# `cardMedia`: neun eigene Felder (14–22), danach die gewohnten 6er-Blöcke ab Feld 23.
+MEDIA_LEAD: Final = 9
+
+# `cardAlarm` füllt vier Aktionstasten mit je zwei Feldern (Beschriftung, Modus-Kennung).
+ALARM_TASTEN: Final = 4
 
 # --- cardThermo ---------------------------------------------------------------------------------
 #
@@ -206,6 +211,111 @@ def _thermo(teile: list[str], ergebnis: dict[str, Any]) -> dict[str, Any]:
     return ergebnis
 
 
+def _alarm(teile: list[str], ergebnis: dict[str, Any]) -> dict[str, Any]:
+    """Zerlegt die ``entityUpd``-Nachricht einer Alarmkarte.
+
+    Der Aufbau nach der Navigation (Feldnummern aus den ``spstr``-Zeilen des Seitencodes):
+    14 die Entity, 15–22 die vier Aktionstasten als Paar aus Beschriftung und Modus-Kennung,
+    23/24 Symbol und Farbe des Zustands, 25 der Schalter für die Zifferntastatur, 26 das Blinken,
+    27–29 die Zusatztaste unten links.
+
+    **Wieviele Aktionstasten erscheinen, sagt allein die Nachricht.** Ist die Anlage unscharf,
+    füllt das Backend so viele, wie die Entity Modi unterstützt; in jedem anderen Zustand genau
+    eine — „Deaktivieren". Leere Beschriftung heißt: Taste am Gerät unsichtbar.
+    """
+    feld = lambda nr: teile[nr] if len(teile) > nr else ""  # noqa: E731
+
+    ergebnis["strukturiert"] = True
+    rest = teile[2:]
+    for _ in range(NAVIGATION_ENTRIES):
+        if len(rest) < 6:
+            break
+        ergebnis["navigation"].append(_eintrag(rest[:6]))
+        rest = rest[6:]
+
+    ergebnis["entity"] = feld(14)
+    tasten = []
+    for nummer in range(ALARM_TASTEN):
+        beschriftung, modus = feld(15 + nummer * 2), feld(16 + nummer * 2)
+        if not beschriftung:
+            continue
+        tasten.append({"label": beschriftung, "modus": modus})
+
+    numpad = feld(25)
+    ergebnis["alarm"] = {
+        "buttons": tasten,
+        "iconChar": feld(23),
+        "color": feld(24),
+        "rgb": rgb565_to_rgb(feld(24)),
+        # Der Seitencode blendet die zwölf Tasten bei genau diesem Wort aus.
+        "numpad": numpad != "disable",
+        # „enable" lässt das Zustandssymbol im 600-ms-Takt blinken (Scharfschalten, Alarm).
+        "flashing": feld(26) == "enable",
+        "extraIconChar": feld(27),
+        "extraColor": feld(28),
+        "extraRgb": rgb565_to_rgb(feld(28)),
+        "extraTarget": feld(29),
+    }
+    return ergebnis
+
+
+def _media(teile: list[str], ergebnis: dict[str, Any]) -> dict[str, Any]:
+    """Zerlegt die ``entityUpd``-Nachricht einer Medienkarte.
+
+    Anders als lange angenommen ist diese Karte **vollständig zerlegbar**: Nach der Navigation
+    stehen neun eigene Felder (14–22), danach folgen die gewohnten 6er-Blöcke ab Feld 23.
+
+    Zwei Dinge, die man der Nachricht nicht ansieht und die deshalb hier stehen:
+
+    * **Der erste Block ist der Medienplayer selbst, der letzte die Lautsprecherauswahl** — das
+      ergänzt das Backend von sich aus. Die Rolle wird über die *Position* bestimmt, nicht über
+      das ``type``-Feld: Ist an der Karte ``status:`` konfiguriert, trägt der Lautsprecherblock
+      die Status-Entity und damit eine ganz andere Domäne.
+    * **``disable`` heißt „am Gerät unsichtbar"**, ein leeres Feld dagegen „vorhanden, aber ohne
+      Wert". Der Fehlerfall („Not found") schickt leer, nicht ``disable``.
+    """
+    feld = lambda nr: teile[nr] if len(teile) > nr else ""  # noqa: E731
+
+    ergebnis["strukturiert"] = True
+    rest = teile[2:]
+    for _ in range(NAVIGATION_ENTRIES):
+        if len(rest) < 6:
+            break
+        ergebnis["navigation"].append(_eintrag(rest[:6]))
+        rest = rest[6:]
+
+    lautstaerke: int | None
+    try:
+        lautstaerke = int(str(feld(19)).strip())
+    except ValueError:
+        lautstaerke = None
+
+    ergebnis["entity"] = feld(14)
+    ergebnis["media"] = {
+        "title": feld(15),
+        "artist": feld(17),
+        "volume": lautstaerke,
+        "playPauseChar": feld(20),
+        # Ein/Aus und Zufallswiedergabe können ganz fehlen (dann `None`), sonst tragen sie die
+        # Farbe bzw. das Symbol, das am Gerät steht.
+        "onOff": None if feld(21) == "disable" else rgb565_to_rgb(feld(21)),
+        "shuffleChar": None if feld(22) == "disable" else feld(22),
+    }
+
+    rest = rest[MEDIA_LEAD:]
+    while len(rest) >= 6:
+        ergebnis["entities"].append(_eintrag(rest[:6]))
+        rest = rest[6:]
+    if rest:
+        ergebnis["rest"] = rest
+    # Rollen über die Position, siehe oben.
+    if ergebnis["entities"]:
+        ergebnis["entities"][0]["rolle"] = "self"
+        if len(ergebnis["entities"]) > 1:
+            ergebnis["entities"][-1]["rolle"] = "speaker"
+    return ergebnis
+
+
 def parse_entity_upd(payload: str, card_type: str | None) -> dict[str, Any] | None:
     """Zerlegt eine ``entityUpd~``-Nachricht.
 
@@ -223,6 +333,13 @@ def parse_entity_upd(payload: str, card_type: str | None) -> dict[str, Any] | No
         "navigation": [],
     }
 
+    # `cardUnlock` hat keine eigene Display-Seite: Das Backend schreibt sie in `page_type()` auf
+    # `cardAlarm` um, bevor der Kartentyp ans Panel geht. Das Gerät sieht den Namen nie — hier
+    # steht er trotzdem, weil der Editor die Karte so nennt.
+    if card_type in ("cardAlarm", "cardUnlock"):
+        return _alarm(teile, ergebnis)
+    if card_type == "cardMedia":
+        return _media(teile, ergebnis)
     if card_type == "cardThermo":
         return _thermo(teile, ergebnis)
 

@@ -310,6 +310,84 @@ function thermoLayout(layout, model, zielwerte, betriebsarten) {
   return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
 }
 
+/**
+ * `cardAlarm` — und damit zugleich `cardUnlock`.
+ *
+ * **Beide teilen sich eine Display-Seite:** Das Backend schreibt `cardUnlock` in `page_type()` auf
+ * `cardAlarm` um, bevor der Kartentyp ans Panel geht. Die Geometrie ist deshalb dieselbe; die
+ * Entsperrkarte benutzt davon nur Zifferntastatur und PIN-Feld.
+ *
+ * Die Namen der zwölf Tastaturplätze führen in die Irre: `b0`…`b8` sind die Ziffern 1–9, `b10`
+ * die Null, `b11` löscht — und `b9` ist **keine Ziffer**, sondern die Zusatztaste unten links.
+ * Deshalb trägt dieser Platz hier eine eigene Rolle.
+ */
+function alarmLayout(layout, model, tasten, tastatur) {
+  const [breite, hoehe] = layout.screen;
+  const fest = layout.fixed || {};
+  const attrs = layout.fixedAttrs || {};
+  const slots = [];
+
+  const nimm = (rolle, kind, extra = {}) => {
+    if (!fest[rolle]) return;
+    slots.push({
+      kind,
+      rolle,
+      ...proz(fest[rolle], breite, hoehe),
+      px: fest[rolle].slice(2),
+      attr: attrs[rolle] || null,
+      ...extra,
+    });
+  };
+
+  const chrome = layout.chrome || {};
+  const chromeAttrs = layout.chromeAttrs || {};
+  if (chrome.title) {
+    slots.push({ kind: "title", ...proz(chrome.title, breite, hoehe), attr: chromeAttrs.title || null });
+  }
+  for (const taste of ["prev", "next"]) {
+    if (chrome[taste]) {
+      slots.push({
+        kind: "navbtn",
+        taste,
+        ...proz(chrome[taste], breite, hoehe),
+        attr: chromeAttrs[taste] || null,
+      });
+    }
+  }
+
+  nimm("state", "alarm-zustand");
+  if (tastatur) {
+    nimm("code", "alarm-code");
+    // Die Beschriftung steht nicht im Dump (das Display setzt sie selbst), also hier.
+    const ZIFFERN = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    for (let i = 0; i < 12; i++) {
+      const rolle = `key${i}`;
+      if (!fest[rolle]) continue;
+      if (i === 9) {
+        nimm(rolle, "alarm-extra");
+      } else {
+        nimm(rolle, "alarm-taste", { zeichen: i === 10 ? "0" : i === 11 ? "✕" : ZIFFERN[i] });
+      }
+    }
+  } else {
+    // Ohne Tastatur bleibt die Zusatztaste trotzdem stehen – sie gehört nicht zum PIN-Block.
+    nimm("key9", "alarm-extra");
+  }
+
+  const anzahl = Math.max(0, Math.min(tasten, (layout.modes || []).length));
+  (layout.modes || []).slice(0, anzahl).forEach((rect, index) => {
+    slots.push({
+      kind: "alarm-aktion",
+      aktion: index,
+      ...proz(rect, breite, hoehe),
+      px: rect.slice(2),
+      attr: (layout.modeAttrs || {})[String(index)] || null,
+    });
+  });
+
+  return { screen: { w: breite, h: hoehe }, chrome: false, slots, gemessen: true, back: layout.back };
+}
+
 // --- Notlösung für Karten ohne abgemessenes Layout ---------------------------------------------
 
 /** Kopfzeile und Fußzeile, wenn nichts Abgemessenes vorliegt. */
@@ -357,12 +435,22 @@ export function previewSlots({
   model = "eu",
   zielwerte = 1,
   betriebsarten = 8,
+  aktionen = 4,
+  tastatur = true,
 } = {}) {
   const screen = screenFor(model);
   const anzahl = Math.max(0, Number(capacity) || 0);
 
-  const gemessen = LAYOUTS[cardType] && LAYOUTS[cardType][model];
+  // `cardUnlock` wird am Gerät als `cardAlarm` gezeichnet (das Backend schreibt den Typ um),
+  // hat also keine eigene Geometrie.
+  const seite = cardType === "cardUnlock" ? "cardAlarm" : cardType;
+  const gemessen = LAYOUTS[seite] && LAYOUTS[seite][model];
   if (gemessen) {
+    if (seite === "cardAlarm") {
+      // Die Entsperrkarte zeigt nur PIN-Feld und Tastatur, keine Aktionstasten.
+      const nurCode = cardType === "cardUnlock";
+      return alarmLayout(gemessen, model, nurCode ? 0 : aktionen, nurCode ? true : tastatur);
+    }
     if (gemessen.fixed) return thermoLayout(gemessen, model, zielwerte, betriebsarten);
     return gemessen.special
       ? screensaverLayout(gemessen, anzahl, filled, model)

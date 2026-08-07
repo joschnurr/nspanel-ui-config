@@ -904,6 +904,39 @@ def validate_model(model: dict[str, Any]) -> list[dict[str, str]]:
             findings.append(
                 {"level": "warning", "path": path, "message": f"Unbekannter Kartentyp '{card_type}'"}
             )
+        # **Die Entity einer Ein-Entity-Karte ist ein reiner String, kein Objekt.**
+        # Das Backend übergibt bei diesen Karten die *ganze Karte* an seine Entity-Klasse
+        # (`config.py`: ``self.entity = Entity(card_input_config)``) und nimmt ``entity`` dort
+        # unbesehen als entityId. Steht da ein Dict, landet es in der Namensliste, und das
+        # Registrieren der Callbacks bricht mit ``'dict' object has no attribute 'startswith'``
+        # ab — **bevor irgendetwas gezeichnet wird**. Folge: Das Panel bleibt vollständig dunkel,
+        # nicht nur diese eine Karte. Verwechselt ist das schnell, weil in ``entities:`` genau
+        # umgekehrt Objekte stehen müssen; am 2026-08-07 hat es genau so ein Panel lahmgelegt.
+        flat_entity = card.get("entity")
+        if flat_entity is not None and card_type in FLAT_ENTITY_CARD_TYPES:
+            if not isinstance(flat_entity, str):
+                findings.append(
+                    {
+                        "level": "error",
+                        "path": f"{path}.entity",
+                        "message": (
+                            f"'entity' muss auf {card_type} der Name der Entity als Text sein "
+                            f"(z. B. climate.wohnzimmer), hier steht "
+                            f"{type(flat_entity).__name__}. Das Backend liest den Wert direkt als "
+                            "Entity-ID — mit einem Objekt bricht es beim Start ab und das Panel "
+                            "bleibt komplett dunkel."
+                        ),
+                    }
+                )
+            elif not flat_entity.strip():
+                findings.append(
+                    {
+                        "level": "warning",
+                        "path": f"{path}.entity",
+                        "message": f"{card_type} ohne Entity — das Panel zeigt dort 'Not found'.",
+                    }
+                )
+
         entities = card.get(CARD_ENTITIES_FIELD) or []
         # Wirkungslose Keys je Karte sammeln statt je Zeile melden – sonst steht dieselbe
         # Erklärung fünfmal untereinander.

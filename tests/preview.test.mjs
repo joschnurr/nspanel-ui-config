@@ -155,8 +155,8 @@ test("Screensaver haben keinen Rahmen, Karten schon", () => {
   assert.equal(gemessen.gemessen, true);
   assert.equal(gemessen.slots.some((slot) => slot.kind === "title"), true);
   assert.equal(gemessen.slots.filter((slot) => slot.kind === "navbtn").length, 2);
-  // cardAlarm hat kein abgemessenes Layout – dort zeichnet die Vorschau den Rahmen selbst.
-  assert.equal(previewSlots({ cardType: "cardAlarm", capacity: 0 }).chrome, true);
+  // cardChart hat kein abgemessenes Layout – dort zeichnet die Vorschau den Rahmen selbst.
+  assert.equal(previewSlots({ cardType: "cardChart", capacity: 0 }).chrome, true);
 });
 
 test("abgemessene Plätze tragen ihre Bestandteile mit sich", () => {
@@ -189,8 +189,10 @@ test("us-p steht hochkant, eu und us-l liegen quer", () => {
 });
 
 test("Karten ohne Entity-Liste zeigen die Fläche des Backends, nicht erfundene Plätze", () => {
-  // cardThermo ist seit v0.27 abgemessen und steht deshalb nicht mehr in dieser Liste.
-  for (const cardType of ["cardAlarm", "cardUnlock", "cardChart"]) {
+  // Uebrig ist nur cardChart: cardThermo ist seit v0.27 abgemessen, cardAlarm und cardUnlock
+  // seit v0.29. Das Diagramm malt das Display mit Zeichenbefehlen – es gibt dort keine Bauteile,
+  // die sich vermessen liessen.
+  for (const cardType of ["cardChart"]) {
     const ergebnis = previewSlots({ cardType, capacity: 0, filled: 0 });
     assert.equal(entitySlots(ergebnis).length, 0, `${cardType} sollte keine Listenplätze haben`);
     assert.equal(ergebnis.slots.length, 1);
@@ -743,4 +745,50 @@ test("weniger Plätze, weniger Balken", () => {
     ergebnis.slots.filter((slot) => slot.kind === "flow").map((b) => b.zuSlot),
     [2, 3]
   );
+});
+
+test("cardAlarm ist abgemessen: Tastatur, Zustand und Aktionstasten", () => {
+  const l = previewSlots({ cardType: "cardAlarm", model: "eu", aktionen: 3, tastatur: true });
+  assert.equal(l.gemessen, true);
+  assert.equal(l.chrome, false);
+  const zahl = (k) => l.slots.filter((s) => s.kind === k).length;
+  assert.equal(zahl("alarm-taste"), 11, "elf Zifferntasten – b9 ist die Zusatztaste");
+  assert.equal(zahl("alarm-extra"), 1);
+  assert.equal(zahl("alarm-aktion"), 3, "nur so viele, wie die Anlage anbietet");
+  assert.equal(zahl("alarm-code"), 1);
+  assert.equal(zahl("alarm-zustand"), 1);
+});
+
+test("ohne Tastatur bleibt die Zusatztaste stehen – sie gehört nicht zum PIN-Block", () => {
+  const l = previewSlots({ cardType: "cardAlarm", aktionen: 1, tastatur: false });
+  const zahl = (k) => l.slots.filter((s) => s.kind === k).length;
+  assert.equal(zahl("alarm-taste"), 0);
+  assert.equal(zahl("alarm-code"), 0);
+  assert.equal(zahl("alarm-extra"), 1);
+  assert.equal(zahl("alarm-aktion"), 1);
+});
+
+test("cardUnlock benutzt die Fläche von cardAlarm, aber ohne Aktionstasten", () => {
+  const unlock = previewSlots({ cardType: "cardUnlock", model: "eu" });
+  const alarm = previewSlots({ cardType: "cardAlarm", model: "eu", aktionen: 4 });
+  assert.equal(unlock.gemessen, true, "cardUnlock hat keine eigene Seite – das Backend schreibt sie um");
+  assert.deepEqual(unlock.screen, alarm.screen);
+  assert.equal(unlock.slots.filter((s) => s.kind === "alarm-aktion").length, 0);
+  assert.equal(unlock.slots.filter((s) => s.kind === "alarm-taste").length, 11);
+  // Die Tastenpositionen müssen sich decken – es ist dieselbe Displayseite.
+  const lage = (e) => e.slots.filter((s) => s.kind === "alarm-taste").map((s) => [s.x, s.y]);
+  assert.deepEqual(lage(unlock), lage(alarm));
+});
+
+test("cardAlarm passt auf alle drei Displays", () => {
+  for (const model of ["eu", "us-l", "us-p"]) {
+    const l = previewSlots({ cardType: "cardAlarm", model, aktionen: 4, tastatur: true });
+    assert.deepEqual(l.screen, SCREEN[model]);
+    for (const slot of l.slots) {
+      assert.ok(
+        slot.x >= -0.01 && slot.y >= -0.01 && slot.x + slot.w <= 100.01 && slot.y + slot.h <= 100.01,
+        `${model}: ${slot.kind}/${slot.rolle ?? slot.aktion} ragt über die Fläche hinaus`
+      );
+    }
+  }
 });

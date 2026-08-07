@@ -368,6 +368,24 @@ const STYLES = `
   }
   .screen .thermo.modus.aktiv { box-shadow: inset 0 0 0 2px currentColor; }
   .screen .thermo.modus ha-icon { --mdc-icon-size: 26px; }
+  /* cardAlarm/cardUnlock: Zifferntastatur, Aktionstasten, Zustandssymbol. */
+  .screen .alarm { display: flex; align-items: center; justify-content: center; }
+  .screen .alarm.taste, .screen .alarm.extra {
+    border-radius: 6px; color: #b9bec7;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .screen .alarm.code {
+    border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
+  }
+  .screen .alarm.aktion {
+    border-radius: 6px; color: #d7d9dd; font-size: 13px; text-align: center;
+    padding: 0 4px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+  }
+  .screen .alarm.zustand ha-icon { --mdc-icon-size: 34px; }
+  .screen .alarm.extra ha-icon { --mdc-icon-size: 24px; }
+  /* Blinken wie am Gerät (600-ms-Takt beim Scharfschalten und im Alarm). */
+  .screen .alarm.zustand.blinkt { animation: ns-blink 1.2s step-end infinite; }
+  @keyframes ns-blink { 50% { opacity: 0; } }
   /* cardPower: die sechs Laufbalken zwischen Mitte und Außenplätzen. Auf dem Gerät ein
      Nextion-Slider, dessen Cursor im 100-ms-Takt weiterrückt – hier die Spur und der Punkt.
      Eine Farbe gibt der Dump nicht her (Fill: image, Back. Picture ID 20), wohl aber
@@ -2161,6 +2179,9 @@ class NsPanelUiConfigPanel extends PanelBase {
     const entities = Array.isArray(card.entities) ? card.entities : [];
     const info = capacityInfo(this._schema, card.type, entities.length, model);
     const thermo = this._thermoInfo(card);
+    const alarm = this._alarmInfo(card);
+    this._liveAlarm = null;
+    this._liveThermo = null;
     const layout = previewSlots({
       cardType: info.shownType,
       capacity: info.limit === null ? 0 : info.limit,
@@ -2168,6 +2189,8 @@ class NsPanelUiConfigPanel extends PanelBase {
       model,
       zielwerte: thermo.zielwerte,
       betriebsarten: thermo.arten.length,
+      aktionen: alarm.tasten.length,
+      tastatur: alarm.tastatur,
     });
 
     // Jede Neuzeichnung bekommt eine Marke: Antworten auf Template-Anfragen einer *älteren*
@@ -2360,6 +2383,8 @@ class NsPanelUiConfigPanel extends PanelBase {
     // Der Thermostat bringt seine eigene Struktur mit; wieviele Sollwerte und Betriebsarten das
     // Gerät gerade zeigt, steht damit **in der Nachricht** – hier wird nichts abgeleitet.
     this._liveThermo = nachricht.thermo || null;
+    this._liveAlarm = nachricht.alarm || null;
+    this._liveMedia = nachricht.media || null;
     const thermoModi = this._liveThermo ? (this._liveThermo.modes || []).length : 0;
     const layout = previewSlots({
       cardType: info.shownType,
@@ -2368,6 +2393,10 @@ class NsPanelUiConfigPanel extends PanelBase {
       model,
       zielwerte: this._liveThermo && this._liveThermo.target2 !== null ? 2 : 1,
       betriebsarten: thermoModi,
+      // Bei der Alarmkarte steht in der Nachricht, wieviele Tasten das Gerät wirklich zeigt und
+      // ob die Zifferntastatur eingeblendet ist — hier wird nichts abgeleitet.
+      aktionen: this._liveAlarm ? (this._liveAlarm.buttons || []).length : 4,
+      tastatur: this._liveAlarm ? this._liveAlarm.numpad : true,
     });
 
     // **Nur die passende Karte zeichnen.** Vorher stand hier die zuletzt empfangene – nach einem
@@ -2668,6 +2697,10 @@ class NsPanelUiConfigPanel extends PanelBase {
       return this._thermoSlot(element, slot, card, auftraege, marke);
     }
 
+    if (slot.kind.startsWith("alarm-")) {
+      return this._alarmSlot(element, slot, card);
+    }
+
     const inhalt = inhaltFuer(slot);
 
     if (slot.kind === "status") return this._statusSlot(element, slot, inhalt, auftraege, marke);
@@ -2893,6 +2926,125 @@ class NsPanelUiConfigPanel extends PanelBase {
     }
 
     return element;
+  }
+
+  /**
+   * Ein Platz auf `cardAlarm` (und damit auch auf `cardUnlock`).
+   *
+   * Wie beim Thermostat entscheidet die Entity, was zu sehen ist — hier sogar noch stärker:
+   * Zustand und `supported_features` bestimmen, **welche und wie viele** Aktionstasten das Gerät
+   * anbietet, und `code_arm_required` entscheidet über die Zifferntastatur.
+   */
+  _alarmSlot(element, slot, card) {
+    element.className = `alarm ${slot.kind.slice(6)}`;
+    this._nachAttributen(element, slot, slot.kind === "alarm-zustand" ? ICON_FAKTOR : 1);
+    const live = this._previewMode === "live" ? this._liveAlarm : null;
+    const info = live ? null : this._alarmInfo(card);
+
+    if (slot.kind === "alarm-taste") {
+      element.textContent = slot.zeichen;
+      return element;
+    }
+
+    if (slot.kind === "alarm-code") {
+      // Am Gerät steht hier die eingetippte PIN als Punkte; ohne Eingabe ist das Feld leer.
+      element.textContent = "";
+      element.title = "PIN-Eingabe";
+      return element;
+    }
+
+    if (slot.kind === "alarm-zustand") {
+      const zeichen = live ? live.iconChar : null;
+      const name = zeichen ? iconNameFromChar(zeichen) : info && info.symbol;
+      if (name) {
+        const symbol = document.createElement("ha-icon");
+        symbol.setAttribute("icon", name.startsWith("mdi:") ? name : `mdi:${name}`);
+        element.appendChild(symbol);
+      }
+      const rgb = live ? live.rgb : info && info.rgb;
+      if (Array.isArray(rgb)) {
+        const farbe = `rgb(${rgb.join(",")})`;
+        element.style.color = farbe;
+        element.style.setProperty("--icon-primary-color", farbe);
+      }
+      // Das Gerät lässt das Symbol beim Scharfschalten und im Alarm blinken.
+      if ((live && live.flashing) || (info && info.blinkt)) element.classList.add("blinkt");
+      element.title = live ? "Zustand laut Gerät" : (info && info.zustand) || "";
+      return element;
+    }
+
+    if (slot.kind === "alarm-extra") {
+      // Zusatztaste unten links: entweder der Hinweis auf offene Sensoren oder die frei
+      // konfigurierte `alarmControl`-Entity.
+      const zeichen = live ? live.extraIconChar : null;
+      const name = zeichen ? iconNameFromChar(zeichen) : "alarm-light-outline";
+      const symbol = document.createElement("ha-icon");
+      symbol.setAttribute("icon", `mdi:${name}`);
+      element.appendChild(symbol);
+      const rgb = live ? live.extraRgb : null;
+      if (Array.isArray(rgb)) element.style.setProperty("--icon-primary-color", `rgb(${rgb.join(",")})`);
+      element.title = "Offene Sensoren bzw. alarmControl";
+      return element;
+    }
+
+    if (slot.kind === "alarm-aktion") {
+      const taste = live
+        ? (live.buttons || [])[slot.aktion]
+        : info && info.tasten[slot.aktion];
+      if (!taste) return element;
+      element.textContent = taste.label || taste.modus || "";
+      element.title = taste.modus || "";
+      return element;
+    }
+
+    return element;
+  }
+
+  /**
+   * Was `cardAlarm` am Gerät zeigen wird — abgelesen an der Entity.
+   *
+   * Nachgebildet ist `generate_alarm_page`: Im unscharfen Zustand bietet das Backend genau die
+   * Modi an, die `supported_features` meldet (bzw. die Kartenoption `supportedModes`), in jedem
+   * anderen Zustand **eine einzige** Taste zum Deaktivieren. Die Zifferntastatur entfällt nur
+   * dann, wenn die Anlage unscharf ist *und* sie zum Scharfschalten keinen Code verlangt.
+   */
+  _alarmInfo(card) {
+    const leer = { tasten: [], symbol: "shield-off", rgb: null, blinkt: false, tastatur: true, zustand: "" };
+    if (!isPlain(card)) return leer;
+    const id = typeof card.entity === "string" ? card.entity : null;
+    const zustand = ((this._hass && this._hass.states) || {})[id];
+    if (!zustand) return leer;
+    const attrs = zustand.attributes || {};
+    const state = zustand.state;
+
+    const MODI = [
+      { bit: 1, modus: "arm_home", label: "Aktivieren – Zuhause" },
+      { bit: 2, modus: "arm_away", label: "Aktivieren – Abwesend" },
+      { bit: 4, modus: "arm_night", label: "Aktivieren – Nacht" },
+      { bit: 32, modus: "arm_vacation", label: "Aktivieren – Urlaub" },
+    ];
+    let tasten;
+    if (state === "disarmed") {
+      const erlaubt = Array.isArray(card.supportedModes) ? card.supportedModes : null;
+      const merkmale = Number(attrs.supported_features) || 0;
+      tasten = MODI.filter((m) => (erlaubt ? erlaubt.includes(m.modus) : merkmale & m.bit));
+    } else {
+      tasten = [{ modus: "disarm", label: "Deaktivieren" }];
+    }
+
+    const SYMBOLE = {
+      disarmed: ["shield-off", [13, 160, 53]],
+      armed_home: ["shield-home", [223, 76, 30]],
+      armed_away: ["shield-lock", [223, 76, 30]],
+      armed_night: ["weather-night", [223, 76, 30]],
+      armed_vacation: ["shield-airplane", [223, 76, 30]],
+      triggered: ["bell-ring", [223, 76, 30]],
+    };
+    const [symbol, rgb] = SYMBOLE[state] || ["shield", [243, 179, 0]];
+    const blinkt = ["arming", "pending", "triggered"].includes(state);
+    // `code_arm_required: false` heißt: unscharf ohne Code scharfschaltbar, dann keine Tastatur.
+    const tastatur = !(state === "disarmed" && attrs.code_arm_required === false);
+    return { tasten, symbol, rgb, blinkt, tastatur, zustand: state };
   }
 
   _flowSlot(element, slot, inhaltFuer, auftraege, marke) {

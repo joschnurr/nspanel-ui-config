@@ -464,7 +464,53 @@ def fixed_card_thermo(komponenten: dict) -> tuple[dict, list]:
     return fest, tasten
 
 
-FESTE_SEITEN = {"cardThermo": fixed_card_thermo}
+# `cardAlarm`: links eine 3×4-Zifferntastatur, rechts vier Aktionstasten, oben Titel bzw.
+# PIN-Anzeige und das Zustandssymbol.
+#
+# **Die Namen der Tastaturtasten führen in die Irre:** `b0`…`b8` sind die Ziffern 1–9, `b10` ist
+# die Null und `b11` löscht — `b9` ist dagegen **keine Ziffer**, sondern die Zusatztaste unten
+# links (Symbolfont statt Zifferfont). Sie ist die einzige der zwölf, die das Backend überhaupt
+# füllt; die übrigen sind reine Display-Logik (`tCode.txt=tCode.txt+"1"`).
+#
+# **`cardUnlock` hat keine eigene Seite**: `page_type()` im Backend schreibt sie auf `cardAlarm`
+# um, bevor der Kartentyp ans Display geht. Beide teilen sich diese Geometrie.
+ALARM_ROLLEN = {
+    "code": r"^Text tCode$",
+    "state": r"^Text tIcon$",
+    "extra": r"^Button b9$",
+}
+
+
+def fixed_card_alarm(komponenten: dict) -> tuple[dict, list]:
+    """Benannte Flächen, Zifferntastatur und Aktionstasten von ``cardAlarm``."""
+    fest = {}
+    for rolle, muster in ALARM_ROLLEN.items():
+        for name, rect in komponenten.items():
+            if re.match(muster, name):
+                fest[rolle] = list(rect)
+                break
+
+    # Die zwölf Tastaturplätze in Anzeigereihenfolge – b9 bleibt dabei bewusst mit drin, damit
+    # das Raster vollständig ist; welche Rolle der Platz trägt, weiß die Vorschau über `extra`.
+    for nummer in range(12):
+        name = f"Button b{nummer}"
+        if name in komponenten:
+            fest[f"key{nummer}"] = list(komponenten[name])
+
+    # Aktionstasten: eigene Liste, weil ihre Zahl vom Zustand der Anlage abhängt (scharf = genau
+    # eine „Deaktivieren"-Taste, unscharf = so viele, wie die Entity Modi unterstützt).
+    tasten = []
+    for nummer in range(1, 5):
+        name = f"Button arm{nummer}"
+        if name in komponenten:
+            tasten.append(list(komponenten[name]))
+    return fest, tasten
+
+
+FESTE_SEITEN = {
+    "cardThermo": fixed_card_thermo,
+    "cardAlarm": fixed_card_alarm,
+}
 
 
 def _attrs_zu(rechtecke: dict, komponenten: dict, attribute: dict) -> dict:
@@ -563,7 +609,7 @@ def main(argv: list[str]) -> int:
                 # Keine Plätze, sondern feste Rollen — CARD_CAPACITY kennt diese Seiten nicht.
                 print(
                     f"  ok  {seite:<14} {model:<5} {len(layout['fixed'])} Rollen,"
-                    f" {len(layout['modes'])} Betriebsartentasten"
+                    f" {len(layout['modes'])} Zustandstasten"
                 )
                 layouts[seite][model] = layout
                 continue
