@@ -3,6 +3,21 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.30.1 – 2026-08-07
+
+Der QR-Code aus 0.30.0 blieb unsichtbar — der graue Kasten stand weiter da.
+
+**Ursache:** Am Anfang von `_slotElement` steht eine Tabelle für Flächen, die nur angedeutet
+werden (Regler, Tastatur …). Dort war der QR-Code noch eingetragen, und die Tabelle wird
+**vor** allen spezialisierten Abfragen geprüft. Sie fing den Platz also ab, und die neue
+Zeichenfunktion lief nie an. Der Eintrag ist entfernt.
+
+Damit das nicht wiederkommt, prüft `tests/test_panel_assets.py` jetzt, dass keine Art zugleich in
+der Platzhalter-Tabelle steht **und** eine eigene Zeichenfunktion hat. Der Test wurde in beide
+Richtungen geprüft: Mit wieder eingetragenem QR-Eintrag schlägt er fehl, ohne ihn ist er still.
+
+**Testlage: 201 Python + 160 Node.**
+
 ## 0.30.0 – 2026-08-07
 
 ### Der QR-Code wird gezeichnet, nicht angedeutet

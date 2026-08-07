@@ -2634,7 +2634,6 @@ class NsPanelUiConfigPanel extends PanelBase {
 
     // Flächen ohne Entity: QR-Code, Regler, Tastatur … – nachgebaut wird nur ihre Lage.
     const platzhalter = {
-      qr: "QR-Code",
       slider: "Lautstärke",
       transport: "⏮  ⏯  ⏭",
       "flat-main": {

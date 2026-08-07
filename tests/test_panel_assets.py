@@ -123,3 +123,34 @@ def test_icon_liste_enthaelt_fallback_und_gaengige_namen() -> None:
     assert FALLBACK_ICON in namen, "Fallback-Icon des Backends fehlt"
     for name in ("lightbulb", "thermometer-water", "garage-variant-lock", "solar-power"):
         assert name in namen, f"gängiges Icon fehlt: {name}"
+
+
+def test_kein_platz_wird_von_der_platzhalter_tabelle_verdeckt() -> None:
+    """Was eine eigene Zeichenfunktion hat, darf nicht vorher als Platzhalter abgefangen werden.
+
+    Die Platzhalter-Tabelle steht am Anfang von ``_slotElement`` und greift, sobald sie den
+    ``kind`` kennt — sie kommt also **vor** jeder spezialisierten Abfrage. Stand dort noch ein
+    Eintrag für eine Art, die inzwischen richtig gezeichnet wird, blieb der graue Kasten stehen
+    und die neue Funktion lief nie an. Genau so blieb der QR-Code nach v0.30 zunächst unsichtbar.
+    """
+    quelle = PANEL_MODULE.read_text(encoding="utf-8")
+    tabelle = re.search(r"const platzhalter = \{(.*?)\}\[slot\.kind\];", quelle, re.DOTALL)
+    assert tabelle, "Platzhalter-Tabelle nicht gefunden – wurde sie umbenannt?"
+    # Schlüssel der Tabelle (nur die oberste Ebene, verschachtelte Werte gehören zu flat-main).
+    platzhalter_arten = set(re.findall(r'^\s{6}"?([a-zA-Z-]+)"?:', tabelle.group(1), re.MULTILINE))
+
+    # Arten mit eigener Zeichenfunktion. Gezählt wird erst **hinter** dem Platzhalter-Block,
+    # der mit der Titel-Abfrage endet: Innerhalb des Blocks steht noch eine `flat-main`-Abfrage,
+    # die lediglich den Entity-Namen anhängt — die ist kein Konflikt, sondern Teil des
+    # Platzhalters selbst.
+    beginn = quelle.find('if (slot.kind === "title")', tabelle.end())
+    assert beginn > 0, "Titel-Abfrage nicht gefunden – Aufbau von _slotElement geändert?"
+    danach = quelle[beginn:]
+    eigene = set(re.findall(r'slot\.kind === "([a-zA-Z-]+)"', danach))
+    eigene |= {p.rstrip("-") for p in re.findall(r'slot\.kind\.startsWith\("([a-zA-Z-]+)"\)', danach)}
+
+    kollision = platzhalter_arten & eigene
+    assert not kollision, (
+        f"Diese Arten stehen als Platzhalter UND haben eine eigene Zeichenfunktion: "
+        f"{sorted(kollision)} – der Platzhalter gewinnt, weil er zuerst geprüft wird."
+    )
