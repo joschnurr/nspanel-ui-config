@@ -217,3 +217,15 @@ def test_das_empfangs_topic_kommt_aus_dem_modell() -> None:
     assert live.recv_topic_of(modell) == "NSPanel_1/tele/RESULT"
     assert live.recv_topic_of({"global": {}}) is None
     assert live.recv_topic_of(None) is None
+
+
+def test_unlock_teilt_sich_den_schluessel_mit_alarm() -> None:
+    """`cardUnlock` wird am Geraet als `cardAlarm` gezeichnet – sonst findet der Editor sie nie.
+
+    Das Backend schreibt den Typ in `page_type()` um, bevor er ans Panel geht; im Mitschnitt steht
+    also immer `cardAlarm`. Suchte der Editor unter `cardUnlock|<Titel>`, bliebe die Ansicht leer,
+    obwohl die Nachricht da ist.
+    """
+    assert live.card_key({"cardType": "cardUnlock", "title": "Entsperren"}) == live.card_key(
+        {"cardType": "cardAlarm", "title": "Entsperren"}
+    )

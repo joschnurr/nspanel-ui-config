@@ -43,6 +43,11 @@ def card_key(message: dict[str, Any] | None) -> str:
     typ = message.get("cardType") or "?"
     if isinstance(typ, str) and typ.startswith("screensaver"):
         return typ
+    # `cardUnlock` wird am Gerät als `cardAlarm` gezeichnet (das Backend schreibt den Typ in
+    # `page_type()` um). Der Mitschnitt trägt deshalb immer `cardAlarm` — würde der Editor unter
+    # `cardUnlock|…` suchen, fände er seine eigene Karte nie wieder. Beide teilen sich den Schlüssel.
+    if typ == "cardUnlock":
+        typ = "cardAlarm"
     titel = message.get("title")
     return f"{typ}|{titel}" if titel else str(typ)
 
