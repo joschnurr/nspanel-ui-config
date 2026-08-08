@@ -882,3 +882,59 @@ test("ein Farb-Template wird gerendert, nicht von der Standardregel ueberschrieb
     "das Template muss zum Rendern angemeldet sein"
   );
 });
+
+test("bedienbare Entities zeigen die Beschriftung ihrer Taste, nicht den Zustand", () => {
+  // `generate_entities_item` schreibt in das Wertfeld nur bei Messwerten den Zustand. Bei allem,
+  // was man druecken kann, steht die Beschriftung — bei einem `button` also "Druecken" und nicht
+  // der ISO-Zeitstempel des letzten Drucks, den HA dort als Zustand fuehrt.
+  const states = {
+    "button.taster": { state: "2026-05-02T13:03:28.059601+00:00", attributes: {} },
+    "script.pumpe": { state: "off", attributes: {} },
+    "scene.abend": { state: "unknown", attributes: {} },
+    "lock.zu": { state: "locked", attributes: {} },
+    "lock.auf": { state: "unlocked", attributes: {} },
+    "switch.licht": { state: "on", attributes: {} },
+    "sensor.temp": { state: "21.5", attributes: { unit_of_measurement: "°C" } },
+  };
+  const wert = (e, loc = "de_DE") => previewContent(e, states, null, {}, loc).value;
+
+  assert.equal(wert({ entity: "button.taster" }), "Drücken", "kein Zeitstempel");
+  assert.equal(wert({ entity: "script.pumpe" }), "Ausführen");
+  assert.equal(wert({ entity: "scene.abend" }), "Aktivieren");
+  assert.equal(wert({ entity: "navigate.menu" }), "Drücken");
+  // Das Schloss beschriftet nach dem Gegenteil seines Zustands – man drueckt ja, um zu wechseln.
+  assert.equal(wert({ entity: "lock.zu" }), "Entriegeln");
+  assert.equal(wert({ entity: "lock.auf" }), "Verriegeln");
+  // Schalter zeigen am Geraet einen Kippschalter, kein Wort.
+  assert.equal(wert({ entity: "switch.licht" }), "");
+  // Messwerte bleiben Messwerte.
+  assert.equal(wert({ entity: "sensor.temp" }), "21.5 °C");
+  // Sprache folgt global.locale.
+  assert.equal(wert({ entity: "button.taster" }, "en"), "Press");
+});
+
+test("ein eigener value schlaegt die Tastenbeschriftung", () => {
+  const states = { "script.pumpe": { state: "off", attributes: {} } };
+  assert.equal(previewContent({ entity: "script.pumpe", value: "Start" }, states).value, "Start");
+});
+
+test("ein Symbol je Zustand wird ausgewertet", () => {
+  // `icon: {on: …, off: …}` ist eine dokumentierte Schreibweise; die Vorschau prueft nicht mehr
+  // nur auf Zeichenketten, sonst landet das Dict beim HA-Symbol.
+  const states = { "cover.r": { state: "open", attributes: { icon: "mdi:garage-lock" } } };
+  const inhalt = previewContent(
+    { entity: "cover.r", icon: { open: "window-shutter-open", closed: "window-shutter" } },
+    states
+  );
+  assert.equal(inhalt.icon, "mdi:window-shutter-open");
+  assert.ok(!inhalt.iconAbgeleitet, "es ist konfiguriert, nicht von HA geborgt");
+});
+
+test("Sonderformen ohne icon tragen das feste Symbol des Backends", () => {
+  // navigate/service/iText zeigen auf keine Entity – es gibt nichts abzuleiten, aber das Symbol
+  // steht in `simple_type_mapping` fest. Vorher zeigte die Vorschau dort den grauen Platzhalter.
+  const f = (id) => previewContent({ entity: id }, {}).icon;
+  assert.equal(f("navigate.menu"), "mdi:gesture-tap-button");
+  assert.equal(f("service.script.turn_on"), "mdi:script-text");
+  assert.equal(f("iText.Hallo"), "mdi:alert-circle-outline");
+});

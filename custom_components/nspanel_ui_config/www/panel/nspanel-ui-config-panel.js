@@ -686,6 +686,19 @@ function wetterDarstellung(id, zustand) {
 const istWetter = (id) => typeof id === "string" && id.startsWith("weather.");
 
 /**
+ * Was das Backend einer Sonderform ohne eigenes `icon` gibt (`simple_type_mapping` in icons.py).
+ *
+ * Diese drei Formen zeigen auf keine HA-Entity, es gibt also nichts abzuleiten — das Symbol steht
+ * allein aus der Konfiguration fest.
+ */
+const SONDERFORM_SYMBOLE = {
+  navigate: "mdi:gesture-tap-button",
+  service: "mdi:script-text",
+  // `entityKind` nennt die iText-Form "text".
+  text: "mdi:alert-circle-outline",
+};
+
+/**
  * Was das Backend bei einer Wetter-Entity in das **Wertfeld** schreibt: die Temperatur.
  *
  * `pages.py` setzt für `weather` fest `f'{temperature}{unit}'` – der Zustand („sunny“) landet dort
@@ -962,6 +975,59 @@ const FARBE_KLIMA_565 = {
   fan_only: 35921,
 };
 
+/**
+ * Was das Backend in das **Wertfeld** eines Eintrags schreibt (`generate_entities_item`).
+ *
+ * Der Zustand steht dort nur bei Messwerten. Bei allem, was man *bedienen* kann, steht die
+ * Beschriftung der Taste — `script` heißt „Ausführen", ein `button` „Drücken". Die Vorschau zeigte
+ * bislang den rohen HA-Zustand, bei Tastern also den ISO-Zeitstempel des letzten Drucks: eine
+ * Angabe, die am Gerät nirgends vorkommt.
+ *
+ * Übersetzt wird nach `global.locale`; das Backend nimmt dieselben Schlüssel aus HAs
+ * Frontend-Übersetzungen.
+ */
+const AKTION_TEXTE = {
+  de: {
+    script: "Ausführen",
+    scene: "Aktivieren",
+    button: "Drücken",
+    input_button: "Drücken",
+    navigate: "Drücken",
+    service: "Ausführen",
+    lock_locked: "Entriegeln",
+    lock_unlocked: "Verriegeln",
+  },
+  en: {
+    script: "Run",
+    scene: "Activate",
+    button: "Press",
+    input_button: "Press",
+    navigate: "Press",
+    service: "Run",
+    lock_locked: "Unlock",
+    lock_unlocked: "Lock",
+  },
+};
+
+// Domänen, die am Gerät als Kippschalter erscheinen: Dort steht kein Text, sondern die
+// Schalterstellung (`bText` aus, `btOnOff` ein). Der Zustand als Wort wäre eine Behauptung.
+const SCHALT_DOMAENEN = new Set(["light", "switch", "input_boolean", "automation", "fan"]);
+
+function backendWert(id, kind, zustand, locale) {
+  const texte = AKTION_TEXTE[String(locale || "").slice(0, 2) === "en" ? "en" : "de"];
+  if (kind === "navigate") return texte.navigate;
+  if (kind === "service") return texte.service;
+  const domain = typeof id === "string" && id.includes(".") ? id.split(".")[0] : null;
+  if (!domain) return null;
+  if (texte[domain]) return texte[domain];
+  if (domain === "lock" && zustand) {
+    return zustand.state === "locked" ? texte.lock_locked : texte.lock_unlocked;
+  }
+  // Schalter: das Wertfeld bleibt leer, gezeichnet wird die Stellung.
+  if (SCHALT_DOMAENEN.has(domain)) return "";
+  return null;
+}
+
 function backendStandardfarbe(id, state) {
   const domain = typeof id === "string" && id.includes(".") ? id.split(".")[0] : null;
   // Navigationsziele sind für das Backend keine Entity — es nimmt dort immer die Aus-Farbe.
@@ -1031,7 +1097,7 @@ function gridSensorText(zustand) {
   return text;
 }
 
-function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
+function previewContent(entity, states = {}, cardType = null, forecasts = {}, locale = null) {
   if (!isPlain(entity)) {
     return { frei: true, kind: "empty", name: "", value: "", icon: "", templates: [] };
   }
@@ -1078,11 +1144,17 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
       // zurück; ist sie nur noch nicht geladen, bleibt der Platz solange leer.
       else if (vorhersage && !Array.isArray(tage)) value = "";
       else value = wetterTemperatur(attrs.temperature, attrs.temperature_unit);
-    } else if (zustand) {
-      value = attrs.unit_of_measurement
-        ? `${zustand.state} ${attrs.unit_of_measurement}`
-        : zustand.state;
-    } else value = "";
+    } else {
+      // Erst die Regel des Backends: Bedienbares trägt die Beschriftung seiner Taste, nicht den
+      // Zustand. Nur wenn keine greift, steht dort wirklich der Zustand.
+      const ausRegel = backendWert(id, kind, zustand, locale);
+      if (ausRegel !== null) value = ausRegel;
+      else if (zustand) {
+        value = attrs.unit_of_measurement
+          ? `${zustand.state} ${attrs.unit_of_measurement}`
+          : zustand.state;
+      } else value = "";
+    }
   }
 
   let icon = null;
@@ -1091,7 +1163,18 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
   // Der Rohtext einer Sonderform – gebraucht, wenn kein Jinja drinsteckt und es also nichts zu
   // rendern gibt (`<I>mdi:fire</I> fest`): dann steht schon hier, was das Display zeigen wird.
   let iconRoh = null;
-  if (typeof entity.icon === "string" && entity.icon.trim() !== "") {
+  // **Ein Symbol je Zustand.** `get_icon_ha` vergleicht bei einem Dict die Schlüssel mit dem
+  // Zustand und schickt das passende Symbol — `icon: {on: …, off: …}` ist also eine gewöhnliche,
+  // dokumentierte Schreibweise. Die Vorschau prüfte nur auf Zeichenketten; ein Dict fiel durch und
+  // landete beim HA-Symbol, das mit dem konfigurierten oft nichts zu tun hat.
+  const zustandsSymbol =
+    isPlain(entity.icon) && zustand
+      ? entity.icon[zustand.state] ?? entity.icon[String(zustand.state)]
+      : null;
+
+  if (typeof zustandsSymbol === "string" && zustandsSymbol.trim() !== "") {
+    icon = `mdi:${zustandsSymbol.trim().replace(/^mdi:/, "")}`;
+  } else if (typeof entity.icon === "string" && entity.icon.trim() !== "") {
     if (iconKind(entity.icon) === "special") {
       // `text:`/`ha:`/`<I>` sind kein Icon-Name. Steckt Jinja drin, rendert das Panel es nach.
       iconSonderform = true;
@@ -1100,6 +1183,12 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
     } else {
       icon = `mdi:${entity.icon.trim().replace(/^mdi:/, "")}`;
     }
+  } else if (SONDERFORM_SYMBOLE[kind]) {
+    // **Die Sonderformen tragen ihr Symbol in sich.** Für `navigate.`, `service.` und `iText.`
+    // gibt es keine HA-Entity, aus der sich etwas borgen ließe — das Backend nimmt deshalb feste
+    // Werte (`simple_type_mapping` bzw. `alert-circle-outline`). Die stehen damit fest, und die
+    // Vorschau zeigte trotzdem den grauen Platzhalter „kein Symbol gesetzt".
+    icon = SONDERFORM_SYMBOLE[kind];
   } else if (attrs.icon) {
     icon = attrs.icon;
     iconAbgeleitet = true;
@@ -1433,8 +1522,10 @@ const ICON_FAKTOR = 1.2;
 // HA-Zustand. Nachgebildet statt neu erfunden — sonst zeigte die Vorschau andere Farben als das
 // Gerät. Unbekannte Betriebsarten bekommen den Standardwert des Backends (64512, orange).
 const THERMO_MODUS_ICONS = {
-  auto: "mdi:calendar-sync",
-  heat_cool: "mdi:calendar-sync",
+  // `climate_mapping` in icons.py: auto und heat_cool haben eigene Symbole – calendar-sync stand
+  // hier aus einer aelteren Backend-Fassung und zeigte auf beiden Tasten dasselbe.
+  auto: "mdi:fan-auto",
+  heat_cool: "mdi:sun-snowflake-variant",
   heat: "mdi:fire",
   cool: "mdi:snowflake",
   dry: "mdi:water-percent",
@@ -2318,12 +2409,19 @@ class NsPanelUiConfigPanel extends PanelBase {
       // Screensaver – sie werden über ihre Nummer geholt, nicht über einen Listenindex.
       const inhalt =
         slot.kind === "status"
-          ? previewContent(card[`statusIcon${slot.nummer}`], states, info.shownType, this._forecasts)
+          ? previewContent(
+              card[`statusIcon${slot.nummer}`],
+              states,
+              info.shownType,
+              this._forecasts,
+              (this._model.global || {}).locale
+            )
           : previewContent(
               slot.index === "flat" ? card : entities[slot.index],
               states,
               info.shownType,
-              this._forecasts
+              this._forecasts,
+              (this._model.global || {}).locale
             );
       if (inhalt.vorhersageFehlt) {
         const { id, reihe } = inhalt.vorhersageFehlt;

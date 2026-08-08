@@ -3,6 +3,43 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.33.0 – 2026-08-08
+
+Aus einem systematischen Abgleich zwischen Backend und Vorschau: 18 Abweichungen wurden gefunden
+und adversarisch gegengeprüft, die vier folgenschwersten sind hier behoben.
+
+### Bedienbares zeigt jetzt die Beschriftung seiner Taste
+
+In das Wertfeld schreibt das Backend nur bei Messwerten den Zustand. Bei allem, was man drücken
+kann, steht die Beschriftung: `script` heißt „Ausführen", `scene` „Aktivieren", ein `button`
+„Drücken", ein Schloss „Verriegeln" bzw. „Entriegeln".
+
+Die Vorschau zeigte dort den rohen HA-Zustand — bei einem Taster also den **ISO-Zeitstempel des
+letzten Drucks**, eine Angabe, die am Gerät nirgends vorkommt. Schalter (`light`, `switch`,
+`input_boolean`, `automation`, `fan`) bekommen am Gerät gar keinen Text, sondern einen
+Kippschalter; dort bleibt das Feld jetzt leer statt „on" zu behaupten. Übersetzt wird nach
+`global.locale`.
+
+### Ein Symbol je Zustand wurde gar nicht ausgewertet
+
+`icon: {on: …, off: …}` ist eine dokumentierte Schreibweise, und das Backend wählt daraus nach dem
+Zustand aus. Die Vorschau prüfte nur, ob `icon` eine Zeichenkette ist — ein Dict fiel durch und
+landete beim Symbol, das Home Assistant für die Entity führt. Betroffen waren im Modell dieser
+Installation fünf Plätze der Ruheanzeige.
+
+### Sonderformen zeigten den Platzhalter, obwohl ihr Symbol feststeht
+
+`navigate.`, `service.` und `iText.` zeigen auf keine HA-Entity — es gibt nichts abzuleiten, aber
+das Backend hat für sie feste Werte (`gesture-tap-button`, `script-text`,
+`alert-circle-outline`). Die Vorschau zeichnete stattdessen den grauen „kein Symbol gesetzt"-Kreis.
+
+### cardThermo: auto und heat_cool hatten dasselbe Symbol
+
+Beide standen auf `calendar-sync`, offenbar aus einer älteren Backend-Fassung. Richtig sind
+`fan-auto` und `sun-snowflake-variant` (`climate_mapping` in icons.py).
+
+**Testlage: 201 Python + 170 Node.**
+
 ## 0.32.0 – 2026-08-08
 
 ### Symbole ohne eigene Farbe waren in der Vorschau zu hell
