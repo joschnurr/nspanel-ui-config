@@ -3,6 +3,31 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.31.0 – 2026-08-08
+
+### Jedes zwölfte Symbol fehlte in der Live-Ansicht
+
+Auf `cardGrid` und `cardGrid2` blieben Symbole leer, obwohl das Gerät sie zeigt. Die Ursache liegt
+tiefer als vermutet und betrifft alle Kartentypen:
+
+**496 der 6896 Symbole des Backends liegen zwischen U+F900 und U+FAFF** — das ist der Bereich der
+CJK-Kompatibilitätsideogramme. Unicode bildet die in *jeder* Normalform auf ein anderes Zeichen ab:
+Aus U+F986 (`light-flood-down`) wird 閭, das gewöhnliche Zeichen U+95AD. Irgendeine Stelle der Kette
+vom Backend über MQTT bis zur Vorschau normalisiert, und danach stand das Zeichen nicht mehr in der
+Symboltabelle. Die Rückübersetzung fand nichts, und schlimmer noch: Weil das Ergebnis unter U+E000
+liegt, galt es als gewöhnlicher Text — die Vorschau schrieb also ein chinesisches Schriftzeichen
+dorthin, wo das Gerät ein Symbol zeigt.
+
+Statt die normalisierende Stelle zu suchen, wird jetzt zurückgerechnet: Eine Tabelle bildet die
+Normalform jedes betroffenen Zeichens auf seinen Symbolnamen ab. Sie entsteht einmal beim Laden aus
+derselben Liste, die auch den Hinweg trägt — es gibt also nichts, was auseinanderlaufen könnte.
+
+Dass gewöhnlicher Text weiterhin Text bleibt, ist mitgeprüft: Ein CJK-Zeichen, das *nicht* aus der
+Symbolliste stammt, gilt nach wie vor als Text. Auf dem Raster ist das wichtig, denn dort schickt
+das Backend bei Sensoren den Messwert ins Symbolfeld.
+
+**Testlage: 201 Python + 163 Node.**
+
 ## 0.30.1 – 2026-08-07
 
 Der QR-Code aus 0.30.0 blieb unsichtbar — der graue Kasten stand weiter da.

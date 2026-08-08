@@ -1134,8 +1134,33 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
 function iconNameFromChar(zeichen) {
   if (typeof zeichen !== "string" || zeichen === "") return null;
   const index = ICON_CHARS.indexOf(zeichen[0]);
-  return index === -1 ? null : ICON_NAMES[index];
+  if (index !== -1) return ICON_NAMES[index];
+  // **Unterwegs normalisierte Zeichen zurückfinden.** 496 der 6896 Symbole des Backends liegen
+  // zwischen U+F900 und U+FAFF — das ist der Bereich der CJK-Kompatibilitätsideogramme, und
+  // Unicode bildet die in *jeder* Normalform auf ein anderes Zeichen ab (aus U+F986 wird 閭,
+  // U+95AD). Irgendeine Stelle der Kette vom Backend über MQTT bis hierher normalisiert, und
+  // damit war jedes zwölfte Symbol in der Live-Ansicht nicht mehr auffindbar. Statt die Kette zu
+  // suchen, wird hier zurückgerechnet: Wenn das empfangene Zeichen die Normalform eines
+  // Symbolzeichens ist, gehört es zu genau diesem Symbol.
+  return NORMALISIERTE_ICON_CHARS.get(zeichen[0]) || null;
 }
+
+/**
+ * Normalform → Symbolname, für die Zeichen, die eine Normalisierung nicht überstehen.
+ *
+ * Einmal aufgebaut statt bei jeder Anfrage gerechnet; die Tabelle bleibt klein, weil nur die
+ * Zeichen aus dem Kompatibilitätsbereich überhaupt eine abweichende Normalform haben.
+ */
+const NORMALISIERTE_ICON_CHARS = (() => {
+  const tabelle = new Map();
+  for (let i = 0; i < ICON_CHARS.length; i++) {
+    const zeichen = ICON_CHARS[i];
+    if (!zeichen) continue;
+    const norm = zeichen.normalize("NFC");
+    if (norm !== zeichen && norm.length === 1) tabelle.set(norm, ICON_NAMES[i]);
+  }
+  return tabelle;
+})();
 
 /**
  * Ist das ein Symbol des Nextion-Fonts – oder Text?
@@ -1148,7 +1173,12 @@ function istIconZeichen(wert) {
   if (typeof wert !== "string" || [...wert].length !== 1) return false;
   // Ab U+E000 beginnt der Private-Use-Bereich. Eine obere Grenze wäre falsch: das Mapping des
   // Backends reicht bis U+FAEF und damit über das klassische PUA-Ende (U+F8FF) hinaus.
-  return wert.codePointAt(0) >= 0xe000;
+  if (wert.codePointAt(0) >= 0xe000) return true;
+  // Ein normalisiertes Symbolzeichen sieht wie gewöhnlicher Text aus (aus U+F986 wird das
+  // CJK-Zeichen U+95AD) — es ist aber eines, wenn es in der Rücktabelle steht. Ohne diese
+  // Ausnahme landete es im Wertfeld und die Vorschau schriebe ein chinesisches Schriftzeichen
+  // dorthin, wo das Gerät ein Symbol zeigt.
+  return NORMALISIERTE_ICON_CHARS.has(wert);
 }
 
 /**

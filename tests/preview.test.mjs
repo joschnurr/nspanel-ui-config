@@ -792,3 +792,39 @@ test("cardAlarm passt auf alle drei Displays", () => {
     }
   }
 });
+
+test("normalisierte Symbolzeichen werden zurückgefunden", () => {
+  // 496 der 6896 Symbole liegen zwischen U+F900 und U+FAFF – dem Bereich der
+  // CJK-Kompatibilitätsideogramme. Unicode bildet die in JEDER Normalform auf ein anderes Zeichen
+  // ab; aus U+F986 (light-flood-down) wird das gewöhnliche Zeichen 閭 (U+95AD). Irgendeine Stelle
+  // der Kette vom Backend über MQTT bis zur Vorschau normalisiert, und damit war jedes zwölfte
+  // Symbol in der Live-Ansicht unauffindbar.
+  const original = String.fromCodePoint(0xf986);
+  const normalisiert = original.normalize("NFC");
+  assert.notEqual(normalisiert, original, "die Vorbedingung des Tests – sonst prüft er nichts");
+  assert.equal(iconNameFromChar(original), "light-flood-down", "das Originalzeichen");
+  assert.equal(iconNameFromChar(normalisiert), "light-flood-down", "die Normalform");
+  assert.equal(istIconZeichen(normalisiert), true, "sonst landet es im Wertfeld");
+});
+
+test("gewöhnlicher Text bleibt Text – auch aus demselben Schriftbereich", () => {
+  // Die Rücktabelle darf nicht dazu führen, dass jedes CJK-Zeichen als Symbol gilt: Auf dem
+  // Raster schickt das Backend bei Sensoren echten Text ins Symbolfeld.
+  assert.equal(istIconZeichen("中"), false);
+  assert.equal(iconNameFromChar("中"), null);
+  assert.equal(istIconZeichen("21.5"), false, "mehrstellige Werte sind nie Symbole");
+});
+
+test("die Live-Ansicht macht aus dem normalisierten Zeichen wieder ein Symbol", () => {
+  const eintrag = {
+    type: "switch",
+    entity: "switch.flur",
+    iconChar: String.fromCodePoint(0xf986).normalize("NFC"),
+    color: "17299",
+    name: "Flur",
+    value: "",
+  };
+  const inhalt = liveContent(eintrag);
+  assert.equal(inhalt.icon, "mdi:light-flood-down");
+  assert.equal(inhalt.iconText, null, "kein Text – es ist ein Symbol");
+});
