@@ -828,3 +828,57 @@ test("die Live-Ansicht macht aus dem normalisierten Zeichen wieder ein Symbol", 
   assert.equal(inhalt.icon, "mdi:light-flood-down");
   assert.equal(inhalt.iconText, null, "kein Text – es ist ein Symbol");
 });
+
+test("ohne eigene Farbe gilt die Standardregel des Backends, nicht die Schriftfarbe des Dumps", () => {
+  // `get_entity_color` (pages.py) faerbt jedes Symbol: gelb, wenn der Zustand als "an" gilt,
+  // sonst blaugrau. Die Vorschau zeigte solche Symbole bisher weiss (die Schriftfarbe der
+  // HMI-Komponente) — am Geraet sind sie gedaempft. Wer beides nebeneinanderhielt, sah einen
+  // Unterschied, den es nicht gibt.
+  const states = {
+    "switch.aus": { state: "off", attributes: {} },
+    "switch.an": { state: "on", attributes: {} },
+    "lock.tuer": { state: "unlocked", attributes: {} },
+    "alarm_control_panel.a": { state: "armed_away", attributes: {} },
+    "climate.c": { state: "cool", attributes: {} },
+  };
+  const farbe = (eintrag) => previewContent(eintrag, states, {}).color;
+
+  assert.equal(farbe({ entity: "switch.aus", icon: "lightbulb" }), "#44739e", "aus = blaugrau");
+  assert.equal(farbe({ entity: "switch.an", icon: "lightbulb" }), "#fdd835", "an = gelb");
+  // Nicht nur "on" gilt als an – das Backend zaehlt unlocked/home/active/above_horizon mit.
+  assert.equal(farbe({ entity: "lock.tuer", icon: "lock" }), "#fdd835", "unlocked zaehlt als an");
+  // Navigationsziele sind fuer das Backend keine Entity und bekommen immer die Aus-Farbe.
+  assert.equal(farbe({ entity: "navigate.garage", icon: "garage" }), "#44739e");
+  // Eigene Tabellen fuer Alarmanlage und Klima.
+  assert.equal(farbe({ entity: "alarm_control_panel.a", icon: "shield" }), "#df4c1e", "scharf = rot");
+  // Klima liefert das Backend als fertigen RGB565-Wert (cool = 11487); zurueckgerechnet ergibt
+  // das rgb(41,154,255). Der Wert ist nachgerechnet, nicht aus dem Code uebernommen.
+  assert.equal(farbe({ entity: "climate.c", icon: "snowflake" }), "#299aff", "kuehlen = blau");
+});
+
+test("eine konfigurierte Farbe schlaegt die Standardregel", () => {
+  const states = { "switch.aus": { state: "off", attributes: {} } };
+  const eigene = previewContent({ entity: "switch.aus", color: [255, 0, 0] }, states, {});
+  assert.equal(eigene.color, "#ff0000");
+  // Auch die zustandsabhaengige Form {on, off} muss weiterhin gewinnen.
+  const jeZustand = previewContent(
+    { entity: "switch.aus", color: { on: [0, 255, 0], off: [0, 0, 255] } },
+    states,
+    {}
+  );
+  assert.equal(jeZustand.color, "#0000ff");
+});
+
+test("ein Farb-Template wird gerendert, nicht von der Standardregel ueberschrieben", () => {
+  const states = { "sensor.t": { state: "42", attributes: {} } };
+  const inhalt = previewContent(
+    { entity: "sensor.t", color: "{{ iif(states('sensor.t') | float > 40, '[255,0,0]', '[0,0,255]') }}" },
+    states,
+    {}
+  );
+  assert.equal(inhalt.color, null, "bis zum Rendern steht hier nichts");
+  assert.ok(
+    (inhalt.templates || []).some((t) => t.feld === "color"),
+    "das Template muss zum Rendern angemeldet sein"
+  );
+});

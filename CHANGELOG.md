@@ -3,6 +3,27 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.32.0 – 2026-08-08
+
+### Symbole ohne eigene Farbe waren in der Vorschau zu hell
+
+Am Gerät ist ein Symbol ohne konfigurierte `color` **gedämpft blau**, solange nichts „an" ist —
+die Vorschau zeigte es weiß. Der Grund: Sie nahm die Schriftfarbe der HMI-Komponente, die das
+Backend zur Laufzeit aber immer überschreibt.
+
+Nachgebildet ist jetzt `get_entity_color` aus `pages.py`, und die Regel ist kurz: Gelb
+(253, 216, 53), wenn der Zustand als „an" gilt — dazu zählen neben `on` auch `unlocked`, `home`,
+`active` und `above_horizon` —, sonst Blaugrau (68, 115, 158). Für Alarmanlage und Klima hat das
+Backend eigene Tabellen, die ebenfalls übernommen sind; das Wetter hatte seine schon.
+
+Navigationsziele bekommen immer die Aus-Farbe: Für das Backend sind sie gar keine Entity.
+
+Eine konfigurierte Farbe schlägt die Regel weiterhin, ebenso die zustandsabhängige Form
+`{on, off}` und ein Farb-Template — letzteres wird wie bisher über HAs Engine gerendert und
+nicht vorher überschrieben.
+
+**Testlage: 201 Python + 166 Node.**
+
 ## 0.31.0 – 2026-08-08
 
 ### Jedes zwölfte Symbol fehlte in der Live-Ansicht

@@ -923,6 +923,56 @@ function entityKind(id) {
  * `{on, off}` wählt nach dem *aktuellen* Zustand aus; ist keiner bekannt, gilt `on`, weil das die
  * Farbe ist, die man beim Konfigurieren im Blick hat.
  */
+/**
+ * Die Farbe, die das Backend einem Symbol **ohne eigene `color`-Angabe** gibt.
+ *
+ * Nachgebildet aus `get_entity_color` (pages.py). Das ist keine Kosmetik: Die Vorschau zeigte
+ * solche Symbole bisher in der Schriftfarbe der HMI-Komponente, also weiß — am Gerät sind sie aber
+ * gedämpft blau, solange nichts „an" ist. Wer die Vorschau nebeneinanderhält, sah damit einen
+ * Unterschied, den es nicht gibt.
+ *
+ * Die Regel des Backends ist kurz: Gelb, wenn der Zustand als „an" gilt, sonst Blaugrau — mit
+ * eigenen Tabellen für Alarmanlage und Klima. Das Wetter hat seine eigene (siehe
+ * `wetterDarstellung`) und bleibt hier außen vor.
+ */
+const AN_ZUSTAENDE = new Set(["on", "unlocked", "above_horizon", "home", "active"]);
+const FARBE_AN = [253, 216, 53];
+const FARBE_AUS = [68, 115, 158];
+
+const FARBE_ALARM = {
+  disarmed: [13, 160, 53],
+  arming: [244, 180, 0],
+  armed_home: [223, 76, 30],
+  armed_away: [223, 76, 30],
+  armed_night: [223, 76, 30],
+  armed_vacation: [223, 76, 30],
+  pending: [223, 76, 30],
+  triggered: [223, 76, 30],
+};
+
+// Klima schickt das Backend als fertige RGB565-Werte, nicht als Tripel — hier ebenso, damit
+// nichts durch zweimaliges Umrechnen verrutscht.
+const FARBE_KLIMA_565 = {
+  auto: 1024,
+  heat_cool: 1024,
+  heat: 64512,
+  off: 35921,
+  cool: 11487,
+  dry: 60897,
+  fan_only: 35921,
+};
+
+function backendStandardfarbe(id, state) {
+  const domain = typeof id === "string" && id.includes(".") ? id.split(".")[0] : null;
+  // Navigationsziele sind für das Backend keine Entity — es nimmt dort immer die Aus-Farbe.
+  if (domain === "navigate" || !state) return rgbToHex(FARBE_AUS);
+  if (domain === "alarm_control_panel" && FARBE_ALARM[state]) return rgbToHex(FARBE_ALARM[state]);
+  if (domain === "climate" && FARBE_KLIMA_565[state] !== undefined) {
+    return rgb565ToHex(FARBE_KLIMA_565[state]);
+  }
+  return rgbToHex(AN_ZUSTAENDE.has(String(state)) ? FARBE_AN : FARBE_AUS);
+}
+
 function previewColor(value, state) {
   const shape = colorShape(value);
   if (shape === "rgb") return rgbToHex(value);
@@ -1096,6 +1146,9 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}) {
     // Dieselbe Quelle wie das Symbol: ohne eigene Farbe färbt das Backend das Wettersymbol nach
     // Zustand – die Sonne gelb, der Regen blau. Grau wäre hier schlicht falsch.
     color = wetter.color;
+  } else if (color === null && kind !== "empty" && kind !== "delete") {
+    // Kein Template, kein Wetter, keine eigene Farbe: dann gilt die Standardregel des Backends.
+    color = backendStandardfarbe(id, zustand && zustand.state);
   }
 
   return {
