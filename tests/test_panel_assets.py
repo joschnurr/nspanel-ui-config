@@ -154,3 +154,55 @@ def test_kein_platz_wird_von_der_platzhalter_tabelle_verdeckt() -> None:
         f"Diese Arten stehen als Platzhalter UND haben eine eigene Zeichenfunktion: "
         f"{sorted(kollision)} – der Platzhalter gewinnt, weil er zuerst geprüft wird."
     )
+
+
+def test_die_symbolregeln_decken_sich_mit_dem_backend() -> None:
+    """`icon-rules.js` ist ein Erzeugnis aus `icons.py` — hier faellt eine vergessene Neuerzeugung auf.
+
+    Geprueft wird gegen das Backend, das auf dieser Installation laeuft. Fehlt es (etwa in CI),
+    ueberspringt der Test sich selbst: Die Datei liegt im Repo, das Backend nicht.
+    """
+    import json
+    from pathlib import Path
+
+    backend = Path("/home/johannes/smarthome/appdaemon/apps/luibackend/icons.py")
+    if not backend.is_file():
+        return  # kein Backend zur Hand – nichts zu vergleichen
+
+    regeln_js = PANEL_DIR / "icon-rules.js"
+    assert regeln_js.is_file(), "icon-rules.js fehlt – tools/extract_icon_rules.py ausfuehren"
+    text = regeln_js.read_text(encoding="utf-8")
+    regeln = json.loads(text[text.index("{") : text.rindex("}") + 1])
+
+    quelle = backend.read_text(encoding="utf-8")
+    # Stichproben ueber alle Tabellenarten – Schluessel UND Wert muessen stimmen.
+    for tabelle, schluessel, erwartet in (
+        ("simple_type_mapping", "switch", "light-switch"),
+        ("simple_type_mapping", "light", "lightbulb"),
+        ("climate_mapping", "heat", "fire"),
+        ("alarm_control_panel_mapping", "disarmed", "shield-off"),
+        ("sensor_mapping", "temperature", "thermometer"),
+        ("sensor_mapping_on", "door", "door-open"),
+        ("sensor_mapping_off", "door", "door-closed"),
+    ):
+        assert regeln[tabelle].get(schluessel) == erwartet, (
+            f"{tabelle}[{schluessel}] ist {regeln[tabelle].get(schluessel)!r}, erwartet {erwartet!r}"
+        )
+        assert f'"{erwartet}"' in quelle or f"'{erwartet}'" in quelle, (
+            f"{erwartet} steht nicht im Backend – icon-rules.js ist veraltet"
+        )
+
+    # Rollladen: das Backend haelt fuenf Symbole je Geraeteklasse, uebernommen werden die ersten
+    # beiden (offen/geschlossen). Die drei uebrigen sind die Bedientasten der Zeile.
+    assert regeln["cover_mapping"]["shutter"] == {
+        "offen": "window-shutter-open",
+        "geschlossen": "window-shutter",
+    }
+    # Die Zahl der Eintraege muss mitwachsen, sonst faellt ein Upstream-Zuwachs nicht auf.
+    import re
+
+    treffer = re.search(r"^sensor_mapping\s*=\s*\{(.*?)^\}", quelle, re.M | re.S)
+    im_backend = len(re.findall(r"['\"][^'\"]*['\"]\s*:", treffer.group(1)))
+    assert len(regeln["sensor_mapping"]) == im_backend, (
+        f"sensor_mapping: {len(regeln['sensor_mapping'])} in icon-rules.js, {im_backend} im Backend"
+    )

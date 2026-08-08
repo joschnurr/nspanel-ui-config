@@ -38,6 +38,7 @@ const { ICON_NAMES } = await import(`./icon-names.js${MODUL_VERSION}`);
 // Live-Vorschau: über MQTT kommt nur das Zeichen an, <ha-icon> will den Namen.
 const { ICON_CHARS } = await import(`./icon-chars.js${MODUL_VERSION}`);
 const { qrSvg } = await import(`./qr.js${MODUL_VERSION}`);
+const { ICON_RULES } = await import(`./icon-rules.js${MODUL_VERSION}`);
 // Wo die Plätze einer Karte auf dem Display sitzen. Wie *viele* es sind, kommt weiterhin aus dem
 // Schema (cardCapacity) und wird an previewSlots übergeben – siehe preview-layouts.js.
 const { previewSlots } = await import(`./preview-layouts.js${MODUL_VERSION}`);
@@ -1013,6 +1014,84 @@ const AKTION_TEXTE = {
 // Schalterstellung (`bText` aus, `btOnOff` ein). Der Zustand als Wort wäre eine Behauptung.
 const SCHALT_DOMAENEN = new Set(["light", "switch", "input_boolean", "automation", "fan"]);
 
+/**
+ * Das Symbol, das das Backend einem Eintrag **ohne eigenes `icon`** gibt (`get_icon_ha`).
+ *
+ * Die Vorschau borgte sich bislang das Symbol, das Home Assistant für die Entity führt. Für ganze
+ * Domänen gibt es das aber nicht — ein Template-Rollladen hat kein `icon`-Attribut, und dort stand
+ * dann der graue Platzhalter, während das Gerät eine Jalousie zeichnet.
+ *
+ * Die Reihenfolge folgt dem Backend: erst die Domänen mit festem Symbol (`simple_type_mapping` —
+ * ein `switch` ist dort **immer** `light-switch`, unabhängig vom Zustand), dann die
+ * zustandsabhängigen, zuletzt die, die zusätzlich die `device_class` lesen.
+ *
+ * `null` heißt: Diese Domäne braucht Wissen, das nur das Backend hat — dann bleibt es bei der
+ * bisherigen Näherung (Symbol aus HA, als solches gekennzeichnet).
+ */
+function backendSymbol(id, zustand) {
+  if (!ICON_RULES || typeof id !== "string" || !id.includes(".")) return null;
+  // Wetter hat bereits eine eigene, feinere Nachbildung (`wetterDarstellung`): Sie kennt auch die
+  // Vorhersagetage, für die das Backend mit `stateOverwrite` arbeitet. Hier würde nur der
+  // *aktuelle* Zustand ausgewertet — die Vorhersagespalte zeigte dann überall dasselbe Symbol.
+  if (istWetter(id)) return null;
+  let domain = id.split(".")[0];
+  // Zwei Sensoren behandelt das Backend als Wetter.
+  if ((ICON_RULES.wetter_sonderfaelle || []).includes(id)) domain = "weather";
+  const state = zustand ? String(zustand.state) : null;
+  const attrs = (zustand && zustand.attributes) || {};
+  const fest = ICON_RULES.feste_zweige || {};
+
+  const einfach = ICON_RULES.simple_type_mapping || {};
+  if (einfach[domain]) return einfach[domain];
+
+  if (domain === "weather") return (ICON_RULES.weather_mapping || {})[state] || ICON_RULES.ersatz;
+  if (domain === "climate") return (ICON_RULES.climate_mapping || {})[state] || ICON_RULES.ersatz;
+  if (domain === "alarm_control_panel") {
+    return (ICON_RULES.alarm_control_panel_mapping || {})[state] || ICON_RULES.ersatz;
+  }
+  for (const zweig of ["input_boolean", "lock", "sun"]) {
+    if (domain === zweig) {
+      const regel = fest[zweig] || {};
+      return regel[state] || regel.sonst || ICON_RULES.ersatz;
+    }
+  }
+  if (domain === "cover") {
+    // Ohne device_class nimmt das Backend "window" an.
+    const klasse = attrs.device_class || "window";
+    const eintrag = (ICON_RULES.cover_mapping || {})[klasse];
+    if (!eintrag) return ICON_RULES.ersatz;
+    return state === "closed" ? eintrag.geschlossen : eintrag.offen;
+  }
+  if (domain === "sensor") {
+    return (ICON_RULES.sensor_mapping || {})[attrs.device_class || ""] || ICON_RULES.ersatz;
+  }
+  if (domain === "binary_sensor") {
+    const tabelle = state === "on" ? ICON_RULES.sensor_mapping_on : ICON_RULES.sensor_mapping_off;
+    const regel = fest.binary_sensor || {};
+    return (tabelle || {})[attrs.device_class || ""] || (state === "on" ? regel.on : regel.sonst);
+  }
+  if (domain === "valve") {
+    // Steht nicht in icons.py, sondern als eigener Zweig in pages.py — dort überschreibt das
+    // Backend den Ersatzwert nachträglich.
+    return state === "open" ? "valve-open" : "valve-closed";
+  }
+  // media_player hängt an `media_content_type`, das nur während der Wiedergabe gesetzt ist —
+  // hier keine Behauptung aufstellen.
+  return null;
+}
+
+/**
+ * Kennt das Backend diesen Symbolnamen überhaupt?
+ *
+ * `get_icon_id` schlägt jeden Namen in seiner Tabelle nach und fällt bei allem Unbekannten still
+ * auf `alert-circle-outline` zurück. In den Tabellen des Backends stehen dabei selbst tote Namen:
+ * `sensor_mapping["illuminance"]` verweist auf `light`, das es im Symbolsatz nicht gibt. Wer den
+ * Namen einfach durchreicht, zeigt in der Vorschau ein Symbol, das am Gerät ein Warnkreis ist.
+ */
+function symbolBekannt(name) {
+  return ICON_NAMES.includes(String(name || "").replace(/^mdi:/, ""));
+}
+
 function backendWert(id, kind, zustand, locale) {
   const texte = AKTION_TEXTE[String(locale || "").slice(0, 2) === "en" ? "en" : "de"];
   if (kind === "navigate") return texte.navigate;
@@ -1183,6 +1262,13 @@ function previewContent(entity, states = {}, cardType = null, forecasts = {}, lo
     } else {
       icon = `mdi:${entity.icon.trim().replace(/^mdi:/, "")}`;
     }
+  } else if (kind === "state" && backendSymbol(id, zustand)) {
+    // Die Regel des Backends steht fest und ist berechenbar – dann ist sie besser als das
+    // geborgte HA-Symbol, das oft gar nicht existiert. Einen Namen, den der Symbolsatz des
+    // Backends nicht führt, ersetzt das Gerät durch den Warnkreis; die Vorschau tut dasselbe,
+    // statt ein Symbol zu zeigen, das dort nie erscheint.
+    const abgeleitet = backendSymbol(id, zustand);
+    icon = `mdi:${symbolBekannt(abgeleitet) ? abgeleitet : ICON_RULES.ersatz}`;
   } else if (SONDERFORM_SYMBOLE[kind]) {
     // **Die Sonderformen tragen ihr Symbol in sich.** Für `navigate.`, `service.` und `iText.`
     // gibt es keine HA-Entity, aus der sich etwas borgen ließe — das Backend nimmt deshalb feste

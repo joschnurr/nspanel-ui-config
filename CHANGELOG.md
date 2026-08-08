@@ -3,6 +3,38 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.34.0 – 2026-08-08
+
+### Ohne eigenes `icon` leitet die Vorschau jetzt dasselbe Symbol ab wie das Gerät
+
+Rollläden zeigten in der Vorschau nur den grauen Platzhalter, in der Live-Ansicht dagegen eine
+Jalousie. Der Grund: Die Vorschau borgte sich das Symbol, das Home Assistant für die Entity führt —
+für ganze Domänen gibt es das aber nicht. Ein Template-Rollladen hat kein `icon`-Attribut.
+
+Das Backend borgt sich ohnehin nichts: **`get_icon_ha` liest HAs Symbolattribut nie**, sondern
+entscheidet allein nach Domäne, Zustand und `device_class`. Diese Ableitung ist jetzt nachgebildet.
+Damit sie nicht auseinanderläuft, wird sie aus dem Backend **erzeugt** — `tools/extract_icon_rules.py`
+schreibt `www/panel/icon-rules.js` mit allen Tabellen (10 Rollladenarten, 31 Sensor-Geräteklassen,
+je 27 für binäre Sensoren an und aus, dazu Wetter, Klima, Alarm und die zustandsunabhängigen
+Domänen). Ein Test hält die Datei gegen das Backend.
+
+**Am echten Gerät gegengeprüft:** Für alle acht Rollläden, die Schalter, Taster, binären Sensoren,
+das Wetter, die Alarmanlage und den Thermostat liefert die Nachbildung genau das Symbol, das im
+MQTT-Mitschnitt ankommt.
+
+Zwei Eigenheiten sind dabei mit übernommen:
+
+- **Ein Schalter bleibt `light-switch`, auch wenn er aus ist.** Die zustandsunabhängigen Domänen
+  stehen im Backend ganz vorn; unterschieden wird an/aus nur über die Farbe.
+- **Einen Namen, den der Symbolsatz des Backends nicht kennt, ersetzt auch die Vorschau durch den
+  Warnkreis.** Das betrifft sogar Namen aus den Backend-Tabellen selbst: `illuminance` verweist auf
+  `light`, das es dort nicht gibt.
+
+Unberührt bleibt die ältere Regel, dass auf dem Raster bei Sensoren ohne eigenes `icon` der
+Messwert an die Stelle des Symbols tritt — am Gerät nachgeprüft.
+
+**Testlage: 202 Python + 173 Node.**
+
 ## 0.33.0 – 2026-08-08
 
 Aus einem systematischen Abgleich zwischen Backend und Vorschau: 18 Abweichungen wurden gefunden

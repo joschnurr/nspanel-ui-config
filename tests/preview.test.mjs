@@ -287,9 +287,13 @@ test("ohne eigene Angaben kommen Name, Wert und Symbol aus Home Assistant", () =
   );
   assert.equal(inhalt.name, "Puffer oben");
   assert.equal(inhalt.value, "48.2 °C");
-  assert.equal(inhalt.icon, "mdi:thermometer");
-  // Wichtig: gekennzeichnet, denn das Backend leitet sein Symbol selbst ab (icon_mapping.py).
-  assert.equal(inhalt.iconAbgeleitet, true);
+  // **Das Symbol kommt NICHT aus Home Assistant.** `get_icon_ha` liest ausschliesslich Zustand,
+  // device_class und media_content_type — ein `icon`-Attribut der Entity ignoriert das Backend.
+  // Dieser Sensor hat keine device_class, also faellt er auf den Warnkreis; am Geraet ist das
+  // belegt (die vier Muell-Sensoren dieser Anlage zeigen genau ihn). Bis v0.33 zeigte die
+  // Vorschau hier das HA-Symbol und behauptete damit etwas, das am Panel nie erscheint.
+  assert.equal(inhalt.icon, "mdi:alert-circle-outline");
+  assert.ok(!inhalt.iconAbgeleitet, "es ist die Regel des Backends, nichts Geborgtes");
 });
 
 test("eigene Angaben schlagen Home Assistant", () => {
@@ -937,4 +941,60 @@ test("Sonderformen ohne icon tragen das feste Symbol des Backends", () => {
   assert.equal(f("navigate.menu"), "mdi:gesture-tap-button");
   assert.equal(f("service.script.turn_on"), "mdi:script-text");
   assert.equal(f("iText.Hallo"), "mdi:alert-circle-outline");
+});
+
+test("ohne eigenes icon leitet die Vorschau dasselbe Symbol ab wie das Backend", () => {
+  // Fuer ganze Domaenen fuehrt Home Assistant gar kein Symbolattribut — ein Template-Rollladen
+  // etwa. Dort stand bisher der graue Platzhalter, waehrend das Geraet eine Jalousie zeichnet.
+  // Die erwarteten Namen sind am echten Geraet gegengeprueft (MQTT-Mitschnitt der Rollladen-Karte).
+  const states = {
+    "cover.zu": { state: "closed", attributes: { device_class: "shutter" } },
+    "cover.auf": { state: "open", attributes: { device_class: "shutter" } },
+    "cover.garage": { state: "closed", attributes: { device_class: "garage" } },
+    "cover.ohne": { state: "open", attributes: {} },
+    "switch.s": { state: "off", attributes: {} },
+    "light.l": { state: "off", attributes: {} },
+    "binary_sensor.tuer": { state: "on", attributes: { device_class: "door" } },
+    "lock.t": { state: "locked", attributes: {} },
+    "sun.sun": { state: "above_horizon", attributes: {} },
+  };
+  const icon = (id) => previewContent({ entity: id }, states, "cardEntities").icon;
+
+  assert.equal(icon("cover.zu"), "mdi:window-shutter", "am Geraet als U+F11B bestaetigt");
+  assert.equal(icon("cover.auf"), "mdi:window-shutter-open", "am Geraet als U+F11D bestaetigt");
+  assert.equal(icon("cover.garage"), "mdi:garage");
+  // Ohne device_class nimmt das Backend "window" an.
+  assert.equal(icon("cover.ohne"), "mdi:window-open");
+  // simple_type_mapping steht im Backend ganz vorn und ist zustandsUNabhaengig: ein Schalter
+  // bleibt light-switch, auch wenn er aus ist — unterschieden wird nur ueber die Farbe.
+  assert.equal(icon("switch.s"), "mdi:light-switch");
+  assert.equal(icon("light.l"), "mdi:lightbulb");
+  assert.equal(icon("binary_sensor.tuer"), "mdi:door-open");
+  assert.equal(icon("lock.t"), "mdi:lock");
+  assert.equal(icon("sun.sun"), "mdi:weather-sunset-up");
+});
+
+test("einen Namen, den der Symbolsatz des Backends nicht kennt, ersetzt auch die Vorschau", () => {
+  // sensor_mapping["illuminance"] verweist auf "light" — diesen Namen gibt es im Symbolsatz des
+  // Backends nicht, das Geraet zeigt dort den Warnkreis. Wer den Namen durchreicht, zeigt in der
+  // Vorschau ein Symbol, das am Geraet nie erscheint.
+  const states = { "sensor.hell": { state: "300", attributes: { device_class: "illuminance" } } };
+  assert.equal(
+    previewContent({ entity: "sensor.hell" }, states, "cardEntities").icon,
+    "mdi:alert-circle-outline"
+  );
+});
+
+test("auf dem Raster bleibt der Messwert an der Stelle des Symbols", () => {
+  // Die abgeleiteten Symbole duerfen die aeltere Regel nicht verdraengen: Auf cardGrid* tritt bei
+  // Sensoren ohne eigenes icon der Wert an die Stelle des Symbols (am Geraet belegt: die
+  // Heizungs-Karte zeigt "87.0", nicht das Thermometer).
+  const states = { "sensor.puffer": { state: "87.0", attributes: { device_class: "temperature" } } };
+  for (const karte of ["cardGrid", "cardGrid2"]) {
+    const c = previewContent({ entity: "sensor.puffer" }, states, karte);
+    assert.equal(c.iconText, "87.0", karte);
+    assert.equal(c.icon, null, karte);
+  }
+  // Auf cardEntities gilt die Regel nicht – dort steht das Symbol.
+  assert.equal(previewContent({ entity: "sensor.puffer" }, states, "cardEntities").icon, "mdi:thermometer");
 });
