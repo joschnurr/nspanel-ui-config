@@ -15,6 +15,9 @@ const {
   alsListe,
   verschiebeKarte,
   verschiebeEintrag,
+  vergebeKey,
+  loeseVerweis,
+  haengeUnter,
 } = await import("../custom_components/nspanel_ui_config/www/panel/nav-tree.js");
 
 const karte = (key, eintraege = [], rest = {}) => ({
@@ -158,4 +161,130 @@ test("Menüpunkte lassen sich innerhalb einer Karte umsortieren", () => {
   assert.deepEqual(menue.entities.map((e) => e.entity), ["navigate.c", "navigate.a", "navigate.b"]);
   verschiebeEintrag(menue, 0, 3);
   assert.deepEqual(menue.entities.map((e) => e.entity), ["navigate.a", "navigate.b", "navigate.c"]);
+});
+
+// --- Verlinken durch Ziehen (Mittelzonen-Geste) ------------------------------------------------
+
+test("vergebeKey lässt gute Keys stehen und macht aus Titeln lesbare", () => {
+  const model = { cards: [], hiddenCards: [karte("heizung")] };
+  assert.equal(vergebeKey(model, { key: "heizung" }), "heizung");
+  const neu = { title: "Rollo Mitfahren", type: "cardGrid2" };
+  assert.equal(vergebeKey(model, neu), "rollo-mitfahren");
+  assert.equal(neu.key, "rollo-mitfahren");
+  // Umlaute werden aufgelöst statt verschluckt.
+  assert.equal(vergebeKey(model, { title: "Müll & Grünschnitt" }), "muell-gruenschnitt");
+});
+
+test("vergebeKey weicht auf einen Zähler aus, statt einen Key doppelt zu vergeben", () => {
+  const model = { cards: [karte("licht")], hiddenCards: [] };
+  assert.equal(vergebeKey(model, { title: "Licht" }), "licht-2");
+  // "unknown" gilt als „kein Key" – das ist der Default des Backends für Karten ohne key.
+  assert.equal(vergebeKey(model, { key: "unknown", title: "Licht" }), "licht-2");
+});
+
+test("loeseVerweis entfernt genau den gemeinten Menüeintrag", () => {
+  const menue = karte("menu", ["navigate.a", "light.k", "navigate.b"]);
+  assert.equal(loeseVerweis(menue, "entity", "b", 2), true);
+  assert.deepEqual(menue.entities.map((e) => e.entity), ["navigate.a", "light.k"]);
+  // Verschobener Index (Liste hat sich geändert): der Key entscheidet, nicht die Stelle.
+  const menue2 = karte("menu", ["light.k", "navigate.a"]);
+  assert.equal(loeseVerweis(menue2, "entity", "a", 0), true);
+  assert.deepEqual(menue2.entities.map((e) => e.entity), ["light.k"]);
+});
+
+test("loeseVerweis räumt auch Blättertasten ab – aber nur die richtige", () => {
+  const menue = karte("menu", [], { navItem2: { entity: "navigate.detail" } });
+  assert.equal(loeseVerweis(menue, "navItem2", "anderes-ziel", null), false);
+  assert.equal("navItem2" in menue, true);
+  assert.equal(loeseVerweis(menue, "navItem2", "detail", null), true);
+  assert.equal("navItem2" in menue, false);
+});
+
+test("haengeUnter verlinkt eine verwaiste Karte und belegt Name aus dem Titel vor", () => {
+  const model = {
+    cards: [karte("menu", ["navigate.x"])],
+    hiddenCards: [karte("x"), { type: "cardGrid2", key: "detail", title: "Detailseite", entities: [] }],
+  };
+  const ergebnis = haengeUnter(model, { kind: "hiddenCards", index: 1 }, { kind: "cards", index: 0 }, {});
+  assert.deepEqual(ergebnis, { ok: true, key: "detail" });
+  assert.deepEqual(model.cards[0].entities.at(-1), {
+    entity: "navigate.detail",
+    extra: {},
+    name: "Detailseite",
+  });
+  // Der Baum kennt die Karte jetzt als Kind, verwaist ist nichts mehr.
+  assert.deepEqual(baueBaum(model).verwaist, []);
+});
+
+test("haengeUnter hängt eine Karte von Menü A nach Menü B um", () => {
+  const model = {
+    cards: [karte("a", ["navigate.detail", "navigate.x"]), karte("b")],
+    hiddenCards: [karte("detail"), karte("x")],
+  };
+  const ergebnis = haengeUnter(
+    model,
+    { kind: "hiddenCards", index: 0 },
+    { kind: "cards", index: 1 },
+    { eltern: { kind: "cards", index: 0, eintragIndex: 0 }, ueber: "entity" }
+  );
+  assert.equal(ergebnis.ok, true);
+  assert.deepEqual(model.cards[0].entities.map((e) => e.entity), ["navigate.x"]);
+  assert.deepEqual(model.cards[1].entities.map((e) => e.entity), ["navigate.detail"]);
+  // Die Karte selbst bleibt, wo sie war: unter den Unterseiten.
+  assert.equal(model.hiddenCards[0].key, "detail");
+});
+
+test("haengeUnter zieht eine sichtbare Karte zu den Unterseiten", () => {
+  const model = { cards: [karte("menu"), karte("seite")], hiddenCards: [] };
+  const ergebnis = haengeUnter(model, { kind: "cards", index: 1 }, { kind: "cards", index: 0 }, {});
+  assert.equal(ergebnis.ok, true);
+  assert.deepEqual(model.cards.map((k) => k.key), ["menu"]);
+  assert.deepEqual(model.hiddenCards.map((k) => k.key), ["seite"]);
+  assert.equal("hidden" in model.hiddenCards[0], false);
+  assert.deepEqual(model.cards[0].entities.map((e) => e.entity), ["navigate.seite"]);
+});
+
+test("haengeUnter löst auch einen navItem-Verweis der alten Elternkarte", () => {
+  const model = {
+    cards: [karte("rollladen", [], { navItem2: { entity: "navigate.detail" } }), karte("menu")],
+    hiddenCards: [karte("detail")],
+  };
+  const ergebnis = haengeUnter(
+    model,
+    { kind: "hiddenCards", index: 0 },
+    { kind: "cards", index: 1 },
+    { eltern: { kind: "cards", index: 0, eintragIndex: null }, ueber: "navItem2" }
+  );
+  assert.equal(ergebnis.ok, true);
+  assert.equal("navItem2" in model.cards[0], false);
+  assert.deepEqual(model.cards[1].entities.map((e) => e.entity), ["navigate.detail"]);
+});
+
+test("haengeUnter verweigert volle Ziele, Doppelverweise und sich selbst – ohne Spuren", () => {
+  const voll = karte("voll", ["navigate.a", "navigate.b"]);
+  const model = { cards: [voll], hiddenCards: [karte("a"), karte("b"), karte("c")] };
+  const vorher = JSON.stringify(model);
+
+  const zuVoll = haengeUnter(model, { kind: "hiddenCards", index: 2 }, { kind: "cards", index: 0 }, { maxEintraege: 2 });
+  assert.equal(zuVoll.ok, false);
+  assert.match(zuVoll.grund, /voll/);
+
+  const doppelt = haengeUnter(model, { kind: "hiddenCards", index: 0 }, { kind: "cards", index: 0 }, {});
+  assert.equal(doppelt.ok, false);
+
+  const selbst = haengeUnter(model, { kind: "cards", index: 0 }, { kind: "cards", index: 0 }, {});
+  assert.equal(selbst.ok, false);
+
+  assert.equal(JSON.stringify(model), vorher);
+});
+
+test("haengeUnter vergibt fehlende Keys selbst und verlinkt darauf", () => {
+  const model = {
+    cards: [karte("menu")],
+    hiddenCards: [{ type: "cardGrid", title: "Neue Seite", entities: [] }],
+  };
+  const ergebnis = haengeUnter(model, { kind: "hiddenCards", index: 0 }, { kind: "cards", index: 0 }, {});
+  assert.deepEqual(ergebnis, { ok: true, key: "neue-seite" });
+  assert.equal(model.hiddenCards[0].key, "neue-seite");
+  assert.deepEqual(model.cards[0].entities.map((e) => e.entity), ["navigate.neue-seite"]);
 });

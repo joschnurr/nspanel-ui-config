@@ -162,6 +162,116 @@ export function verschiebeKarte(model, vonKind, vonIndex, nachKind, nachIndex) {
   return { kind: nachKind, index: einfuegen };
 }
 
+/**
+ * Vergibt einer Karte einen eindeutigen `key`, falls sie keinen brauchbaren hat.
+ *
+ * Ohne `key` ist eine Karte nicht verlinkbar (`navigate.<key>` braucht einen Namen). Der Vorschlag
+ * kommt aus dem Titel — klein, Umlaute aufgelöst, alles Unlesbare wird `-`. Kollidiert er mit einem
+ * vorhandenen `key`, hängt eine Zahl dran: lieber `heizung-2` als ein stiller Doppelverweis, bei dem
+ * das Backend nur die erste Karte findet.
+ */
+export function vergebeKey(model, card) {
+  if (card.key && card.key !== "unknown") return card.key;
+  const basis =
+    String(card.title || card.type || "karte")
+      .toLowerCase()
+      .replace(/ä/g, "ae")
+      .replace(/ö/g, "oe")
+      .replace(/ü/g, "ue")
+      .replace(/ß/g, "ss")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "karte";
+  const vergeben = new Set(
+    [...(model.cards || []), ...(model.hiddenCards || [])].map((k) => k && k.key).filter(Boolean)
+  );
+  let key = basis;
+  for (let n = 2; vergeben.has(key); n += 1) key = `${basis}-${n}`;
+  card.key = key;
+  return key;
+}
+
+/**
+ * Löst den Verweis, über den eine Baumzeile an ihrer Elternkarte hängt.
+ *
+ * `ueber` sagt, wo der Verweis steht: als Menüeintrag (`entity`, dann zeigt `eintragIndex` auf die
+ * Stelle) oder als überschriebene Blättertaste (`navItem1`/`navItem2`). Der `eintragIndex` wird
+ * gegen den `key` geprüft, bevor gelöscht wird — zwischen Zeichnen und Ziehen kann sich die Liste
+ * geändert haben, und ein Löschen an der falschen Stelle risse einen fremden Menüpunkt heraus.
+ */
+export function loeseVerweis(elternCard, ueber, kindKey, eintragIndex) {
+  if (!elternCard || typeof elternCard !== "object") return false;
+  if (ueber === "navItem1" || ueber === "navItem2") {
+    const wert = elternCard[ueber];
+    const ziel = navigationsZiel(wert && typeof wert === "object" ? wert.entity : wert);
+    if (ziel !== kindKey) return false;
+    delete elternCard[ueber];
+    return true;
+  }
+  const liste = elternCard.entities || [];
+  let index =
+    eintragIndex != null && navigationsZiel(liste[eintragIndex] && liste[eintragIndex].entity) === kindKey
+      ? eintragIndex
+      : liste.findIndex((e) => navigationsZiel(e && e.entity) === kindKey);
+  if (index < 0) return false;
+  liste.splice(index, 1);
+  return true;
+}
+
+/**
+ * Hängt eine Karte als Unterseite unter eine Zielkarte — das „mitten auf die Zeile"-Ziehen.
+ *
+ * Macht in einem Zug, was bisher drei Handgriffe waren: `key` sicherstellen, den bisherigen
+ * Menü-Verweis der gezogenen Zeile lösen (nur diesen einen — absichtliche Mehrfach-Verweise von
+ * anderen Karten bleiben stehen), `navigate.<key>` auf der Zielkarte anlegen (Name aus dem Titel
+ * vorbelegt) und die Karte selbst zu den Unterseiten stellen, falls sie in der Blätterkette stand.
+ *
+ * `optionen.maxEintraege` ist die Anzeigekapazität der Zielkarte (aus dem Schema, `null` = keine
+ * Aussage): ein Eintrag über der Kapazität käme in der YAML an, bliebe am Gerät aber unsichtbar —
+ * genau die stillen Fehler, vor denen der Editor sonst überall warnt.
+ *
+ * Rückgabe `{ ok: true, key }` oder `{ ok: false, grund }`; das Modell wird nur im Erfolgsfall
+ * angefasst (alle Prüfungen stehen vor der ersten Änderung).
+ */
+export function haengeUnter(model, quelle, ziel, optionen = {}) {
+  const karte = (model[quelle.kind] || [])[quelle.index];
+  const zielKarte = (model[ziel.kind] || [])[ziel.index];
+  if (!karte || !zielKarte) return { ok: false, grund: "Karte nicht gefunden" };
+  if (karte === zielKarte) return { ok: false, grund: "Eine Karte kann nicht unter sich selbst hängen" };
+
+  const liste = zielKarte.entities || (zielKarte.entities = []);
+  const key = karte.key && karte.key !== "unknown" ? karte.key : null;
+  if (key && liste.some((e) => navigationsZiel(e && e.entity) === key))
+    return { ok: false, grund: "Die Zielkarte verlinkt diese Karte schon" };
+  if (optionen.maxEintraege != null && liste.length >= optionen.maxEintraege)
+    return {
+      ok: false,
+      grund: `Die Zielkarte ist voll (${liste.length}/${optionen.maxEintraege} Plätze) — der neue Eintrag wäre am Gerät unsichtbar`,
+    };
+
+  // Ab hier wird geändert. Elternkarte VOR dem Listenumbau auflösen — ihr Index gilt noch.
+  const echterKey = vergebeKey(model, karte);
+  if (optionen.eltern) {
+    const elternKarte = (model[optionen.eltern.kind] || [])[optionen.eltern.index];
+    loeseVerweis(elternKarte, optionen.ueber || "entity", echterKey, optionen.eltern.eintragIndex);
+  }
+
+  // Unterseiten stehen unter `hiddenCards` — eine verlinkte Karte hat in der Blätterkette nichts
+  // mehr verloren (sie käme sonst doppelt: einmal geblättert, einmal gesprungen).
+  if (quelle.kind === "cards") {
+    const index = (model.cards || []).indexOf(karte);
+    if (index >= 0) {
+      model.cards.splice(index, 1);
+      (model.hiddenCards || (model.hiddenCards = [])).push(karte);
+      delete karte.hidden; // wie in verschiebeKarte: die Liste entscheidet, nicht das Feld.
+    }
+  }
+
+  const eintrag = { entity: `navigate.${echterKey}`, extra: {} };
+  if (karte.title) eintrag.name = karte.title;
+  liste.push(eintrag);
+  return { ok: true, key: echterKey };
+}
+
 /** Verschiebt einen Eintrag innerhalb einer Karte (die Reihenfolge der Menüpunkte). */
 export function verschiebeEintrag(card, vonIndex, nachIndex) {
   const liste = card && card.entities;

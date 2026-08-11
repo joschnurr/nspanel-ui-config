@@ -44,7 +44,7 @@ const { ICON_RULES } = await import(`./icon-rules.js${MODUL_VERSION}`);
 const { previewSlots } = await import(`./preview-layouts.js${MODUL_VERSION}`);
 // Der Navigationsbaum: welche Karte von welcher aus erreichbar ist – und die Umbauten, die
 // Ziehen und Fallenlassen auslösen. Ohne DOM gehalten, damit die Zuordnung testbar bleibt.
-const { baueBaum, verschiebeKarte, verschiebeEintrag } = await import(
+const { baueBaum, verschiebeKarte, verschiebeEintrag, haengeUnter } = await import(
   `./nav-tree.js${MODUL_VERSION}`
 );
 
@@ -140,6 +140,9 @@ const STYLES = `
   /* Ablegezone: sonst kann man nur *vor* eine vorhandene Zeile ziehen, nie an den Anfang. */
   .drop { height: 8px; border-radius: 4px; margin: 1px 0; }
   .drop.aktiv { background: var(--primary-color, #03a9f4); height: 10px; }
+  /* Ziehen mitten auf eine Zeile: „als Unterseite verlinken" – deutlich anders als Einsortieren. */
+  .item.tree.ziel-mitte { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: -2px; border-radius: 6px; }
+  .item.tree.ziel-davor { box-shadow: 0 -2px 0 0 var(--primary-color, #03a9f4); }
 
   .add-row { display: flex; gap: 4px; margin-top: 6px; }
   .add-row select { flex: 1; min-width: 0; }
@@ -1925,11 +1928,17 @@ class NsPanelUiConfigPanel extends PanelBase {
       const aktiv = sel.kind === kind && sel.index === index ? " active" : "";
       const art = isPlain(card) ? card.type || "?" : "?";
       // Woran diese Zeile im Menü der Elternkarte hängt – daran entscheidet sich beim Ziehen, ob
-      // ein Menüpunkt umsortiert oder eine Karte verschoben wird.
-      const bindung =
-        eltern && eltern.eintragIndex !== null && eltern.eintragIndex !== undefined
-          ? ` data-eltern="${eltern.kind}:${eltern.index}" data-eintrag="${eltern.eintragIndex}"`
-          : "";
+      // ein Menüpunkt umsortiert oder eine Karte verschoben wird. `data-eintrag` gibt es nur bei
+      // Menüeinträgen; navItem-Kinder tragen trotzdem ihre Elternkarte (fürs Umhängen), und
+      // `data-ueber` sagt, als was der Verweis dort steht.
+      const bindung = eltern
+        ? ` data-eltern="${eltern.kind}:${eltern.index}"${
+            eltern.eintragIndex !== null && eltern.eintragIndex !== undefined
+              ? ` data-eintrag="${eltern.eintragIndex}"`
+              : ""
+          }`
+        : "";
+      const wegAttr = ueber && ueber !== "kette" ? ` data-ueber="${esc(ueber)}"` : "";
       // Woher der Weg zu dieser Karte führt – das erklärt die Einrückung.
       const weg =
         ueber === "kette"
@@ -1939,7 +1948,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           : `<span class="via" title="über ${esc(ueber || "")} (Blättertaste)">⤷</span>`;
       return `
         <div class="item tree${aktiv}${mehrfach ? " wieder" : ""}" draggable="true"
-             data-kind="${kind}" data-index="${index}"${bindung}
+             data-kind="${kind}" data-index="${index}"${bindung}${wegAttr}
              style="padding-left:${8 + tiefe * 14}px">
           ${weg}
           <span class="label">${esc(cardLabel(card))}
@@ -2005,8 +2014,10 @@ class NsPanelUiConfigPanel extends PanelBase {
           event.stopPropagation();
           const act = toolButton.dataset.act;
           // Bei einem Menüpunkt meinen ▲▼ die Reihenfolge *auf der Menükarte*. Die Position in
-          // `hiddenCards` zu tauschen sähe am Gerät nach gar nichts aus.
-          if ((act === "up" || act === "down") && item.dataset.eltern) {
+          // `hiddenCards` zu tauschen sähe am Gerät nach gar nichts aus. navItem-Kinder tragen
+          // zwar eine Elternkarte, aber keinen Menüplatz (`data-eintrag`) – dort gibt es nichts
+          // zu sortieren.
+          if ((act === "up" || act === "down") && item.dataset.eltern && item.dataset.eintrag !== undefined) {
             const [ekind, eindex] = item.dataset.eltern.split(":");
             const von = Number(item.dataset.eintrag);
             this._sortiereEintrag(ekind, Number(eindex), von, act === "up" ? von - 1 : von + 2);
@@ -2028,14 +2039,20 @@ class NsPanelUiConfigPanel extends PanelBase {
     });
   }
 
-  /** Was eine Zeile beim Ziehen über sich verrät: ihre Karte und ihr Platz im Menü darüber. */
+  /** Was eine Zeile beim Ziehen über sich verrät: ihre Karte, ihr Platz im Menü darüber und als
+   *  was sie dort hängt (Menüeintrag oder Blättertaste). */
   _zeilenInfo(item) {
     const bindung = item.dataset.eltern ? item.dataset.eltern.split(":") : null;
     return {
       kind: item.dataset.kind,
       index: Number(item.dataset.index),
+      ueber: item.dataset.ueber || (bindung ? "entity" : null),
       eltern: bindung
-        ? { kind: bindung[0], index: Number(bindung[1]), eintragIndex: Number(item.dataset.eintrag) }
+        ? {
+            kind: bindung[0],
+            index: Number(bindung[1]),
+            eintragIndex: item.dataset.eintrag === undefined ? null : Number(item.dataset.eintrag),
+          }
         : null,
     };
   }
@@ -2053,15 +2070,35 @@ class NsPanelUiConfigPanel extends PanelBase {
       item.classList.remove("zieht");
       this._zieht = null;
       this.shadowRoot.querySelectorAll(".drop.aktiv").forEach((d) => d.classList.remove("aktiv"));
+      this.shadowRoot
+        .querySelectorAll(".ziel-mitte, .ziel-davor")
+        .forEach((d) => d.classList.remove("ziel-mitte", "ziel-davor"));
     });
-    // Auf eine Zeile fallen lassen heißt: davor einsortieren.
+    // Zwei Gesten auf derselben Zeile: am **Rand** fallen lassen sortiert davor ein (wie immer),
+    // in der **Mitte** wird die gezogene Karte als Unterseite der Zeile verlinkt — der Editor
+    // pflegt den `navigate.`-Eintrag dann selbst (anlegen, beim Umhängen den alten lösen).
     item.addEventListener("dragover", (event) => {
-      if (this._zieht) event.preventDefault();
+      if (!this._zieht) return;
+      event.preventDefault();
+      const mitte = this._istMittelzone(item, event);
+      item.classList.toggle("ziel-mitte", mitte);
+      item.classList.toggle("ziel-davor", !mitte);
     });
+    item.addEventListener("dragleave", () => item.classList.remove("ziel-mitte", "ziel-davor"));
     item.addEventListener("drop", (event) => {
       event.preventDefault();
-      this._dropAuf(this._zeilenInfo(item));
+      const mitte = this._istMittelzone(item, event);
+      item.classList.remove("ziel-mitte", "ziel-davor");
+      if (mitte) this._verlinkeIn(this._zeilenInfo(item));
+      else this._dropAuf(this._zeilenInfo(item));
     });
+  }
+
+  /** Liegt der Zeiger im mittleren Drittel der Zeile? (Rand oben/unten = Einsortieren.) */
+  _istMittelzone(item, event) {
+    const kasten = item.getBoundingClientRect();
+    const rand = Math.min(10, kasten.height / 3);
+    return event.clientY > kasten.top + rand && event.clientY < kasten.bottom - rand;
   }
 
   /** Die schmalen Zonen zwischen den Abschnitten – dort landet man am Anfang einer Liste. */
@@ -2094,6 +2131,8 @@ class NsPanelUiConfigPanel extends PanelBase {
     const gleichesMenue =
       quelle.eltern &&
       ziel.eltern &&
+      quelle.eltern.eintragIndex !== null &&
+      ziel.eltern.eintragIndex !== null &&
       quelle.eltern.kind === ziel.eltern.kind &&
       quelle.eltern.index === ziel.eltern.index;
 
@@ -2112,6 +2151,58 @@ class NsPanelUiConfigPanel extends PanelBase {
     const neu = verschiebeKarte(this._model, quelle.kind, quelle.index, ziel.kind, ziel.index);
     if (!neu) return;
     this._selection = neu;
+    this._markDirty();
+    this._renderNav();
+    this._renderDetail();
+  }
+
+  /**
+   * Die gezogene Karte als Unterseite der Zielzeile verlinken (Mittelzonen-Geste).
+   *
+   * Die eigentliche Arbeit macht `haengeUnter` in nav-tree.js; hier steht nur, was der Editor
+   * beisteuert: die Anzeigekapazität der Zielkarte aus dem Schema (damit kein Eintrag entsteht,
+   * den das Gerät gar nicht mehr zeigt) und die Rückmeldung über die Statuszeile.
+   */
+  _verlinkeIn(ziel) {
+    const quelle = this._zieht;
+    this._zieht = null;
+    if (!quelle) return;
+    if (quelle.kind === ziel.kind && quelle.index === ziel.index) return;
+
+    const zielKarte = (this._model[ziel.kind] || [])[ziel.index];
+    if (!zielKarte) return;
+    const info = capacityInfo(
+      this._schema,
+      zielKarte.type,
+      ((zielKarte.entities || []).length || 0) + 1,
+      (this._model.global || {}).model
+    );
+    if (info.noList) {
+      this._setStatus(`${zielKarte.type} führt keine Entity-Liste — dort lässt sich nichts verlinken.`, "error");
+      return;
+    }
+
+    const ergebnis = haengeUnter(
+      this._model,
+      { kind: quelle.kind, index: quelle.index },
+      { kind: ziel.kind, index: ziel.index },
+      {
+        eltern: quelle.eltern,
+        ueber: quelle.ueber,
+        // `info.limit` gilt schon für den Stand *mit* dem neuen Eintrag (count+1) — die Grenze
+        // fürs Anhängen ist also das Limit selbst.
+        maxEintraege: info.limit,
+      }
+    );
+    if (!ergebnis.ok) {
+      this._setStatus(ergebnis.grund, "error");
+      return;
+    }
+
+    // Die Karte ist jetzt (spätestens) eine Unterseite — Auswahl folgt ihr an den neuen Platz.
+    const neuerIndex = (this._model.hiddenCards || []).findIndex((k) => k && k.key === ergebnis.key);
+    if (neuerIndex >= 0) this._selection = { kind: "hiddenCards", index: neuerIndex };
+    this._setStatus(`„${cardLabel(zielKarte)}" verlinkt jetzt auf navigate.${ergebnis.key}.`, "ok");
     this._markDirty();
     this._renderNav();
     this._renderDetail();

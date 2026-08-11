@@ -3,6 +3,39 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.35.0 – 2026-08-11
+
+### Ziehen pflegt jetzt die Menü-Navigation — Karten lassen sich per Drag & Drop verlinken und umhängen
+
+Bisher konnte der Navigationsbaum beim Ziehen nur zweierlei: Menüpunkte innerhalb derselben Karte
+umsortieren und Karten zwischen „Aufbau" und „Unterseiten" verschieben. Wer eine Karte unter ein
+anderes Menü hängen wollte, musste den `navigate.`-Eintrag von Hand anlegen — und den alten selbst
+wiederfinden und löschen. Beim Verschieben blieb die Verlinkung schlicht stehen, die Karte hing im
+Baum weiter unter dem alten Menü.
+
+Jetzt hat jede Zeile zwei Drop-Zonen: Am **Rand** fallen lassen sortiert wie bisher davor ein, in
+der **Mitte** (die Zeile bekommt einen Rahmen) wird die gezogene Karte **als Unterseite der
+Zielkarte verlinkt**. Der Editor erledigt dabei alles, was dazugehört:
+
+- Auf der Zielkarte entsteht ein `navigate.<key>`-Eintrag, der Name ist aus dem Kartentitel
+  vorbelegt.
+- Hing die gezogene Zeile schon an einem Menü, wird **genau dieser** Verweis gelöst — auch wenn er
+  als Blättertasten-Override (`navItem1`/`navItem2`) stand. Absichtliche Mehrfach-Verweise von
+  anderen Karten bleiben unangetastet.
+- Eine Karte ohne `key` bekommt einen lesbaren aus ihrem Titel (Umlaute aufgelöst, Kollisionen mit
+  Zähler), denn ohne `key` gibt es nichts zu verlinken.
+- Stand die Karte noch in der Blätterkette, wandert sie zu den Unterseiten — sonst käme sie am
+  Gerät doppelt vor: einmal geblättert, einmal gesprungen.
+
+Verweigert wird der Zug mit Begründung in der Statuszeile, wenn er nur Schaden anrichten würde:
+Zielkarte ohne Entity-Liste, Ziel schon voll (die Anzeigekapazität aus dem Schema — ein Eintrag
+über dem Limit stünde zwar in der YAML, bliebe am Gerät aber unsichtbar), doppelter Verweis oder
+eine Karte unter sich selbst. Im Fehlerfall bleibt das Modell unangetastet.
+
+Nebenbei tragen navItem-Kinder im Baum jetzt ihre Elternkarte mit sich — vorher wusste der Editor
+beim Ziehen nicht, woran sie hingen. Die ▲▼-Tasten sortieren weiterhin nur echte Menüeinträge;
+für eine Blättertaste gibt es ja keine Reihenfolge.
+
 ## 0.34.0 – 2026-08-08
 
 ### Ohne eigenes `icon` leitet die Vorschau jetzt dasselbe Symbol ab wie das Gerät
