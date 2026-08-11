@@ -3,6 +3,24 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.35.1 – 2026-08-11
+
+### Das Entladen scheiterte nach jedem Speichern — der Live-Mitschnitt meldete ein veraltetes Abo ab
+
+Beim Einrichten wurde die Abmeldefunktion des MQTT-Mitschnitts **fest** beim Config-Entry
+registriert. `async_restart` tauscht das Abo aber bei jedem Speichern aus — beim Entladen rief
+Home Assistant dann die veraltete Funktion auf, MQTT warf „Cannot unsubscribe topic twice", das
+Entladen brach ab und die Integration blieb „nicht eingerichtet" (ein weiterer Reload-Versuch
+lieferte nur noch einen Fehler; erst ein Neustart von Home Assistant half). Obendrein verwaiste
+das tatsächlich aktive Abo.
+
+Registriert wird jetzt eine Hülle, die im Moment des Entladens das **aktuelle** Abo abmeldet:
+doppelt aufrufbar, ohne Abo harmlos, und sie steht auch dann bereit, wenn erst ein späteres
+Speichern ein Abo anlegt. Ein Fehler beim Abmelden bringt das Entladen nicht mehr zum Scheitern.
+
+Damit funktioniert wieder, was die Ausroll-Anleitung verspricht: Dateien tauschen,
+Config-Entry neu laden, fertig — ohne Neustart.
+
 ## 0.35.0 – 2026-08-11
 
 ### Ziehen pflegt jetzt die Menü-Navigation — Karten lassen sich per Drag & Drop verlinken und umhängen

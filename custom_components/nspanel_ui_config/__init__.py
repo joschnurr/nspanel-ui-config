@@ -89,7 +89,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_live = await live.async_start(hass, domain_data[entry.entry_id])
     if unsub_live is not None:
         domain_data[entry.entry_id]["live_unsub"] = unsub_live
-        entry.async_on_unload(unsub_live)
+    # Immer die Hülle registrieren, nie die Abmeldefunktion selbst: `async_restart` tauscht das Abo
+    # bei jedem Speichern aus — die ursprüngliche Funktion wäre beim Entladen veraltet (doppelte
+    # Abmeldung, das Entladen scheitert), und ein erst später entstandenes Abo bliebe verwaist.
+    entry.async_on_unload(live.abmeldung_fuer(domain_data[entry.entry_id]))
 
     entry.async_on_unload(entry.add_update_listener(_async_update_options))
     _LOGGER.info("NSPanel UI Config eingerichtet (Panel unter /%s)", PANEL_URL_PATH)

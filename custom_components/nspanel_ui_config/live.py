@@ -276,6 +276,34 @@ class LiveError(RuntimeError):
     """Der Panel-Aufruf war nicht möglich – mit einer Begründung, die man anzeigen kann."""
 
 
+def abmeldung_fuer(data: dict[str, Any]) -> Callable[[], None]:
+    """Die Abmeldefunktion fürs Entladen des Entries: meldet immer das **aktuelle** Abo ab.
+
+    Die naheliegende Variante — die Abmeldefunktion des ersten Abos direkt bei
+    ``entry.async_on_unload`` registrieren — ist genau der Fehler, der das Entladen zum Scheitern
+    brachte: ``async_restart`` tauscht das Abo bei jedem Speichern aus. Beim Entladen rief Home
+    Assistant dann die **veraltete** Abmeldefunktion auf („Cannot unsubscribe topic twice"), das
+    Entladen brach ab, die Integration blieb „nicht eingerichtet" — und das tatsächlich aktive Abo
+    wurde nie abgemeldet.
+
+    Diese Hülle greift stattdessen im Moment des Entladens auf ``data["live_unsub"]`` zu und ist
+    doppelt aufrufbar (``pop`` räumt den Eintrag weg, ein zweiter Aufruf tut nichts). Sie wird auch
+    dann registriert, wenn beim Start **kein** Abo zustande kam: ein späteres Speichern kann eines
+    anlegen, und das soll beim Entladen nicht verwaisen.
+    """
+
+    def _abmelden() -> None:
+        unsub = data.pop("live_unsub", None)
+        if unsub is None:
+            return
+        try:
+            unsub()
+        except Exception:  # noqa: BLE001 – beim Abmelden ist nichts mehr zu retten
+            _LOGGER.debug("Abmelden des Live-Mitschnitts fehlgeschlagen", exc_info=True)
+
+    return _abmelden
+
+
 async def async_restart(hass: Any, data: dict[str, Any]) -> None:
     """Melde ein bestehendes Abo ab und richte es neu ein.
 

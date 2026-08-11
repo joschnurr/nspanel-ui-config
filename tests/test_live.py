@@ -229,3 +229,44 @@ def test_unlock_teilt_sich_den_schluessel_mit_alarm() -> None:
     assert live.card_key({"cardType": "cardUnlock", "title": "Entsperren"}) == live.card_key(
         {"cardType": "cardAlarm", "title": "Entsperren"}
     )
+
+
+def test_abmeldung_meldet_das_aktuelle_abo_ab_nicht_das_erste() -> None:
+    """Der Fehler, der das Entladen brach: ``async_restart`` tauscht das Abo bei jedem Speichern
+    aus — wer die erste Abmeldefunktion fest registriert, meldet beim Entladen ein längst
+    ersetztes Abo erneut ab (Home Assistant wirft dann „Cannot unsubscribe topic twice"), und das
+    aktive Abo verwaist."""
+    aufrufe: list[str] = []
+    data: dict = {"live_unsub": lambda: aufrufe.append("alt")}
+    abmelden = live.abmeldung_fuer(data)
+
+    # Speichern tauscht das Abo aus (wie async_restart: pop + neues rein).
+    data.pop("live_unsub")()
+    data["live_unsub"] = lambda: aufrufe.append("neu")
+
+    abmelden()
+    assert aufrufe == ["alt", "neu"]
+    assert "live_unsub" not in data
+
+
+def test_abmeldung_ist_doppelt_aufrufbar_und_ohne_abo_harmlos() -> None:
+    aufrufe: list[str] = []
+    data: dict = {"live_unsub": lambda: aufrufe.append("x")}
+    abmelden = live.abmeldung_fuer(data)
+    abmelden()
+    abmelden()  # zweiter Aufruf: nichts mehr da, nichts passiert
+    assert aufrufe == ["x"]
+
+    # Auch ganz ohne Abo (Start ohne MQTT/Topic) darf die Hülle registriert und gerufen werden.
+    leer = live.abmeldung_fuer({})
+    leer()
+
+
+def test_abmeldung_schluckt_fehler_beim_abmelden() -> None:
+    """Ein kaputter Broker beim Herunterfahren darf das Entladen nicht mehr zum Scheitern bringen."""
+
+    def kaputt() -> None:
+        raise RuntimeError("Cannot unsubscribe topic twice")
+
+    abmelden = live.abmeldung_fuer({"live_unsub": kaputt})
+    abmelden()  # darf nicht durchschlagen
