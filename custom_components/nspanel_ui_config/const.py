@@ -75,3 +75,6 @@ API_BACKUP_RESTORE: Final = "/api/nspanel_ui_config/backups/restore"
 API_LIVE: Final = "/api/nspanel_ui_config/live"
 # Bittet das Panel, eine bestimmte Karte anzuzeigen (die einzige Stelle, die MQTT sendet).
 API_SHOW: Final = "/api/nspanel_ui_config/show"
+# Export als panels.yaml für das neue nspanel-lovelace-ui-Backend (Add-on/Standalone ab 4.8.0),
+# das die apps.yaml nicht mehr liest. Nur Text zurück, nichts wird geschrieben.
+API_PANELS_EXPORT: Final = "/api/nspanel_ui_config/export/panels"

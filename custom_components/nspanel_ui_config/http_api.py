@@ -33,6 +33,7 @@ from .const import (
     API_GENERATE,
     API_IMPORT,
     API_LIVE,
+    API_PANELS_EXPORT,
     API_SCHEMA,
     API_SHOW,
     API_YAML,
@@ -45,6 +46,7 @@ from .const import (
 )
 from .generator import dump_config_yaml, write_config_yaml
 from .importer import find_apps, parse_apps_yaml
+from .panels_export import dump_panels_yaml
 from .reload import ReloadError, async_trigger_reload
 from .schema import empty_model, schema_payload, validate_model
 
@@ -62,6 +64,7 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelBackupRestoreView(hass))
     hass.http.register_view(NsPanelLiveView(hass))
     hass.http.register_view(NsPanelShowView(hass))
+    hass.http.register_view(NsPanelPanelsExportView(hass))
 
 
 def _backup_count(options: dict[str, Any]) -> int:
@@ -272,6 +275,47 @@ class NsPanelYamlView(_NsPanelView):
                 "findings": validate_model(model),
             }
         )
+
+class NsPanelPanelsExportView(_NsPanelView):
+    """Exportiert das Modell als ``panels.yaml`` für das neue nspanel-lovelace-ui-Backend.
+
+    Seit Upstream 4.8.0 ist das AppDaemon-Backend abgekündigt; Add-on und Standalone-Container
+    lesen eine ``panels.yaml`` mit leicht anderen Keys. Body wie bei der YAML-Ansicht optional:
+    ``{"model": {…}, "panel_name": "nspanel"}``. Zurück kommt der Text, die Liste der Hinweise
+    (was beim Umstieg wegfällt oder nachgearbeitet werden muss) und ein Dateiname für den Download.
+    Es wird **nichts** geschrieben – wohin die Datei gehört, entscheidet der Nutzer am neuen Backend.
+    """
+
+    url = API_PANELS_EXPORT
+    name = "api:nspanel_ui_config:export_panels"
+
+    async def post(self, request: web.Request) -> web.Response:
+        data, error = self._entry_data(request)
+        if error is not None:
+            return error
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        model = payload.get("model")
+        if not isinstance(model, dict):
+            model = data.get("model") or {}
+        panel_name = payload.get("panel_name")
+        if not isinstance(panel_name, str) or not panel_name.strip():
+            panel_name = "nspanel"
+
+        try:
+            text, warnings = await self.hass.async_add_executor_job(
+                dump_panels_yaml, model, panel_name.strip()
+            )
+        except Exception as err:  # noqa: BLE001 – kaputtes Modell des Nutzers, nicht unseres
+            _LOGGER.error("panels.yaml-Export fehlgeschlagen: %s", err)
+            return self.json_message(f"Export nicht möglich: {err}", HTTPStatus.BAD_REQUEST)
+
+        return self.json({"text": text, "warnings": warnings, "filename": "panels.yaml"})
 
 
 class NsPanelGenerateView(_NsPanelView):

@@ -3,6 +3,43 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.36.0 – 2026-10-27
+
+### Export als panels.yaml für das neue Backend
+
+Mit Version 4.8.0 (25.10.2026) erklärt nspanel-lovelace-ui das AppDaemon-Backend für abgekündigt –
+genau das, dessen `apps.yaml` dieser Editor schreibt. Nachfolger sind das Home-Assistant-Add-on und
+derselbe Code als eigenständiger Container (`ghcr.io/jobr99/nspanel-lovelace-ui`). Beide lesen eine
+`panels.yaml`: fast dieselben Keys unter `nspanels: {<name>: …}`, aber eben nicht ganz dieselben.
+Wer umsteigt, soll seine Konfiguration nicht von Hand abtippen müssen.
+
+**panels.yaml exportieren…** in der Kopfzeile erzeugt diese Datei aus dem Stand im Editor, auch dem
+ungespeicherten, mit frei wählbarem Panel-Namen, zum Kopieren oder Herunterladen. Geschrieben wird
+nichts – wohin die Datei gehört, weiß nur das neue Backend. Die Verbindungsdaten (Home-Assistant-Token,
+MQTT) stehen als auskommentierte Platzhalter im Kopf; Geheimnisse kennt der Editor nicht und legt sie
+auch nirgends ab.
+
+Die Umsetzregeln stammen aus dem Quelltext und der Doku des neuen Backends (Stand 4.8.4), nicht aus
+Vermutung: `timezone` wird `timeZone`, `dateFormatBabel` wird `dateFormat` (ein strftime-Muster
+kennt das Backend nicht mehr – es wird zu `full`), `featureExperimentalSliders` wird
+`featExperimentalSliders`, `supportedModes` wird `supported_modes`, `screensaver.defaultCard` und
+die `temperatureUnit` der Karten wandern aufs Panel (`defaultCard`, `temp_unit`), `cardGrid2` wird
+`cardGrid` (das Backend schaltet ab sieben Einträgen selbst um), `alternativeLayout` wird zum Typ
+`screensaver2`, und Templates in `icon`, `color`,
+`value` und `qrCode` bekommen das Präfix `ha:`, ohne das sie dort wörtlich erschienen. Das
+Legacy-Wetter `entity` der Ruheanzeige weicht der expliziten `entities`-Liste.
+
+Was das neue Backend nicht kennt, fällt weg oder bleibt mit Hinweis stehen – und jeder dieser
+Fälle wird gemeldet, im Dialog und als Kommentar im Dateikopf: eigene Blättertasten (`navItem1/2`),
+`cooldown`, Sonnenauf-/untergang im Helligkeitsplan (ersetzt durch 07:00/19:00), ein `cardChart`,
+gemischte Temperatureinheiten, bedingte Sichtbarkeit (`state`, `state_not`, `state_template`),
+`service.`-Einträge und Templates im Feld `name`. Das Modell im Editor bleibt dabei unangetastet,
+der Export ist eine Ansicht. `tests/test_panels_export.py` hält jede Regel fest; die Belege im
+Backend-Quelltext stehen im Modulkopf von `panels_export.py`.
+
+Neu dafür: `POST /api/nspanel_ui_config/export/panels` (`{"model": …, "panel_name": …}`, beides
+optional) liefert Text, Hinweise und Dateinamen.
+
 ## 0.35.1 – 2026-08-11
 
 ### Das Entladen scheiterte nach jedem Speichern — der Live-Mitschnitt meldete ein veraltetes Abo ab

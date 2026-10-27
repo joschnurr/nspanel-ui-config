@@ -19,6 +19,7 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 | `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen, schreiben und AppDaemon neu laden (`{"reload": false}` überspringt den Reload) |
 | `GET` | `/api/nspanel_ui_config/backups` | vorhandene Sicherungen der Ausgabedatei |
 | `POST` | `/api/nspanel_ui_config/backups/restore` | eine Sicherung zurückspielen (`{"name": …}`) |
+| `POST` | `/api/nspanel_ui_config/export/panels` | `panels.yaml` für das neue Backend (Add-on/Standalone) zum übergebenen Stand (`{"model": …, "panel_name": …}`, beides optional) — liefert `text`, `warnings`, `filename`; schreibt nichts |
 
 Beim Import über `path` muss das Verzeichnis in Home Assistants `allowlist_external_dirs` stehen
 (der Pfad kommt aus dem Request). Der *Ausgabe*pfad stammt dagegen aus den Integrations-Optionen und

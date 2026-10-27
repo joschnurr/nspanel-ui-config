@@ -1790,6 +1790,7 @@ class NsPanelUiConfigPanel extends PanelBase {
           <span class="dirty" id="dirty"></span>
           <button id="btn-import">Importieren…</button>
           <button id="btn-yaml">YAML ansehen…</button>
+          <button id="btn-panels" title="Konfiguration für das neue nspanel-lovelace-ui-Backend (Add-on/Standalone ab 4.8) als panels.yaml exportieren">panels.yaml exportieren…</button>
           <button id="btn-backups">Sicherungen…</button>
           <button id="btn-save">Speichern</button>
           <button id="btn-generate">YAML erzeugen</button>
@@ -1809,6 +1810,7 @@ class NsPanelUiConfigPanel extends PanelBase {
     `;
     this._$("btn-import").addEventListener("click", () => this._openImportDialog());
     this._$("btn-yaml").addEventListener("click", () => this._openYamlDialog());
+    this._$("btn-panels").addEventListener("click", () => this._openPanelsExportDialog());
     this._$("btn-backups").addEventListener("click", () => this._openBackupDialog());
     this._$("btn-save").addEventListener("click", () => this._save());
     this._$("btn-generate").addEventListener("click", () => this._generate());
@@ -4796,6 +4798,115 @@ class NsPanelUiConfigPanel extends PanelBase {
         statusEl.className = "status err";
       }
     });
+  }
+
+  /**
+   * Export als `panels.yaml` für das **neue** nspanel-lovelace-ui-Backend (Add-on bzw. Standalone-
+   * Container, ab Upstream 4.8.0 – das AppDaemon-Backend ist dort abgekündigt). Reine Ansicht mit
+   * Download: geschrieben wird nichts, denn wohin die Datei gehört, weiß nur das neue Backend.
+   * Die Hinweise sagen, was auf dem Weg verloren geht (navItem, Sonnenzeiten, cardGrid2 …) –
+   * dieselbe Liste steht auch als Kommentar im Kopf der Datei.
+   */
+  async _openPanelsExportDialog() {
+    const host = this._$("dialog-host");
+    const vorschlag = (this._model?.global?.panelRecvTopic || "")
+      .split("/")[0]
+      .replace(/[^A-Za-z0-9_-]/g, "")
+      .toLowerCase() || "nspanel";
+    host.innerHTML = `
+      <div class="overlay">
+        <div class="dialog body wide">
+          <h3>Export für das neue Backend (panels.yaml)</h3>
+          <p class="hint">Für das nspanel-lovelace-ui-<b>Add-on</b> bzw. den Standalone-Container
+            (ab 4.8). Die Datei ist eine Übersetzung dieses Stands – was das neue Backend nicht mehr
+            kennt, fällt weg und steht unten als Hinweis. Verbindungsdaten (Home-Assistant-Token,
+            MQTT) musst du selbst ergänzen, der Editor kennt sie nicht.</p>
+          <div class="field" style="flex:none">
+            <label for="panels-name">Panel-Name in der Datei (<code>nspanels.&lt;name&gt;</code>)</label>
+            <div class="row"><input id="panels-name" value="${esc(vorschlag)}" spellcheck="false"></div>
+          </div>
+          <div class="field fuellend">
+            <div class="row"><textarea id="panels-text" spellcheck="false" wrap="off" readonly></textarea></div>
+          </div>
+          <div class="status" id="panels-status"></div>
+          <ul id="panels-warnings" style="flex:none; max-height: 22vh; overflow:auto; margin: 4px 0 0; padding-left: 18px; font-size: 13px"></ul>
+          <div class="actions">
+            <button id="panels-close">Schließen</button>
+            <button id="panels-copy">Kopieren</button>
+            <button class="primary" id="panels-download" disabled>Herunterladen</button>
+          </div>
+        </div>
+      </div>`;
+
+    const close = () => (host.innerHTML = "");
+    const statusEl = host.querySelector("#panels-status");
+    const area = host.querySelector("#panels-text");
+    const liste = host.querySelector("#panels-warnings");
+    const nameEl = host.querySelector("#panels-name");
+    const downloadBtn = host.querySelector("#panels-download");
+    host.querySelector("#panels-close").addEventListener("click", close);
+    host.querySelector(".overlay").addEventListener("click", (event) => {
+      if (event.target.classList.contains("overlay")) close();
+    });
+
+    const laden = async () => {
+      statusEl.textContent = "Wird erzeugt…";
+      statusEl.className = "status";
+      downloadBtn.disabled = true;
+      try {
+        const antwort = await this._hass.callApi("POST", "nspanel_ui_config/export/panels", {
+          model: this._model,
+          panel_name: nameEl.value.trim() || "nspanel",
+        });
+        area.value = antwort.text || "";
+        const warnungen = antwort.warnings || [];
+        liste.innerHTML = warnungen.map((w) => `<li>${esc(w)}</li>`).join("");
+        statusEl.textContent = warnungen.length
+          ? `Erzeugt – ${warnungen.length} Hinweis(e) zum Nacharbeiten (stehen auch im Dateikopf).`
+          : "Erzeugt – nichts geht verloren.";
+        statusEl.className = "status ok";
+        downloadBtn.disabled = !area.value;
+      } catch (err) {
+        area.value = "";
+        liste.innerHTML = "";
+        statusEl.textContent = `Nicht erzeugbar: ${this._errText(err)}`;
+        statusEl.className = "status err";
+      }
+    };
+
+    let timer = null;
+    nameEl.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(laden, 500);
+    });
+
+    host.querySelector("#panels-copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(area.value);
+        statusEl.textContent = "In die Zwischenablage kopiert.";
+        statusEl.className = "status ok";
+      } catch (err) {
+        area.select();
+        statusEl.textContent = `Zwischenablage nicht verfügbar (${this._errText(err)}) – Text ist markiert.`;
+        statusEl.className = "status err";
+      }
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      // Download über eine Blob-URL: kein Server-Pfad, keine Schreibrechte nötig – der Browser
+      // legt die Datei dorthin, wo der Nutzer Downloads hinhaben will.
+      const blob = new Blob([area.value], { type: "application/yaml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "panels.yaml";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      statusEl.textContent = "panels.yaml heruntergeladen.";
+      statusEl.className = "status ok";
+    });
+
+    await laden();
   }
 
   _openImportDialog() {

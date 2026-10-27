@@ -328,6 +328,60 @@ Ein Fehler lässt den Dialog offen stehen, statt den bearbeiteten Text zu verwer
 Rundlauf nichts verliert – auch die ausgelagerte Form ohne App-Wrapper, mit der Kopfzeilen-Warnung
 davor –, hält `tests/test_roundtrip.py` fest.
 
+## Export für das neue Backend (panels.yaml)
+
+nspanel-lovelace-ui 4.8.0 (25.10.2026) erklärt das AppDaemon-Backend für abgekündigt. Nachfolger
+sind das Home-Assistant-Add-on und derselbe Code als eigenständiger Container
+(`ghcr.io/jobr99/nspanel-lovelace-ui`, `STANDALONE=1`, Web-Editor auf Port 8099). Beide lesen keine
+`apps.yaml` mehr, sondern eine `panels.yaml`:
+
+```yaml
+home_assistant_address: http://homeassistant.local:8123
+home_assistant_token: <langlebiges Zugriffstoken>
+mqtt_server: 192.168.1.10
+mqtt_port: 1883
+nspanels:
+  wohnzimmer:
+    panelRecvTopic: tele/nspanel/RESULT
+    panelSendTopic: cmnd/nspanel/CustomSend
+    screensaver: …
+    cards: …
+```
+
+**panels.yaml exportieren…** in der Kopfzeile erzeugt diese Datei aus dem Stand im Editor – auch
+dem ungespeicherten – über `POST …/export/panels`. Der Panel-Name ist frei wählbar (vorgeschlagen
+wird der erste Teil des `panelRecvTopic`); *Herunterladen* speichert die Datei über den Browser,
+*Kopieren* legt den Text in die Zwischenablage. **Geschrieben wird nichts**: wohin die Datei gehört,
+hängt an der Installation des neuen Backends, und die Verbindungsdaten im Kopf (Token, MQTT) kennt
+der Editor nicht – sie stehen als auskommentierte Platzhalter da und sind von Hand zu ergänzen.
+
+Der Export ist eine Übersetzung, kein Umbau: das Modell im Editor bleibt, wie es ist. Die Regeln sind
+aus dem Quelltext des neuen Backends (Stand 4.8.4, `config_manager.py`, `ha_cards.py`) und seiner
+Doku (`docs/entities.md`, `docs/config-migration-standalone.md`) abgelesen und in
+`tests/test_panels_export.py` festgehalten:
+
+| Im Editor (AppDaemon) | In der panels.yaml | Hinweis |
+| --- | --- | --- |
+| `timezone` | `timeZone` | |
+| `dateFormatBabel` | `dateFormat` | ein strftime-`dateFormat` wird zu `full` – das Backend kennt nur full/long/medium/short |
+| `featureExperimentalSliders` | `featExperimentalSliders` | |
+| `supportedModes` | `supported_modes` | |
+| `screensaver.defaultCard` | `defaultCard` am Panel | |
+| `temperatureUnit` je Karte | `temp_unit` am Panel | gemischte Einheiten werden gemeldet, die erste gewinnt |
+| `cardGrid2` | `cardGrid` | das Backend schaltet ab 7 Einträgen von selbst um |
+| `screensaver.alternativeLayout: true` | `type: screensaver2` | |
+| Templates in `icon`, `color`, `value`, `qrCode` | Präfix `ha:` | ohne Präfix erschiene der Jinja-Text wörtlich |
+| Legacy-Wetter `entity` der Ruheanzeige | `entities`-Liste | Vorhersagetage (`day`/`hour`) dort prüfen |
+| `navItem1`/`navItem2`, `cooldown`, `quiet` | entfallen | gemeldet |
+| `sunrise`/`sunset` im Helligkeitsplan | `07:00`/`19:00` | gemeldet – das Backend erlaubt nur feste Zeiten oder einen Sensor |
+| `cardChart` | bleibt | gemeldet – das Backend lehnt die Karte ab |
+| `state`, `state_not`, `state_template`, `berryURL`, `…AdditionalTemplate` | bleiben | gemeldet – „retained, but unsupported" |
+| `service.`-Einträge, Template im `name` | bleiben | gemeldet |
+
+Jeder Hinweis steht im Dialog **und** als Kommentar im Kopf der Datei, damit er beim Einspielen
+nicht verlorengeht. Die Belege zu jeder Regel (Datei und Zeile im Backend) stehen im Modulkopf von
+`panels_export.py`.
+
 ## Sicherungen
 
 Vor jedem Überschreiben der Ausgabedatei wandert der bisherige Stand nach `backups/` neben der
