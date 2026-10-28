@@ -3,6 +3,36 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.37.0 – 2026-10-28
+
+### Das neue Backend direkt bedienen: Option „Backend: standalone“
+
+Mit 0.36 ließ sich die Konfiguration als `panels.yaml` *exportieren*; wer das neue Backend (Add-on oder
+Standalone-Container ab 4.8) wirklich betreibt, musste die Datei danach von Hand einspielen – und
+jede weitere Änderung im Editor wieder. Jetzt bedient die Integration das neue Backend direkt. In den
+Optionen gibt es **Backend** (`appdaemon` wie bisher oder `standalone`) und den **Panel-Namen** unter
+`nspanels:`; der Ausgabepfad zeigt dann auf die `panels.yaml` des Backends.
+
+Im Standalone-Modus schreibt **panels.yaml schreiben** (so heißt der Knopf dann) nur das eigene Panel in
+die Datei: Verbindungsdaten (`home_assistant_token`, `mqtt_*`), `use_ha_api` und *fremde Panels* bleiben
+stehen, wie sie sind – der Editor kennt die Zugangsdaten nicht und schreibt sie nie. Die Datei wird wie
+bisher vorher gesichert, unverändert nicht geschrieben, und eine neue Datei bekommt Rechte 600, weil sie
+das Token trägt. Ein Reload-Weg entfällt: das Backend überwacht die Datei und lädt sie selbst nach
+(`config_watch` in `main.py`), was die Statuszeile auch so sagt.
+
+Damit funktionieren beide Editoren nebeneinander – dieser und der Web-Editor des Backends – auf
+derselben Datei. Den Rückweg gibt es dafür neu: der Import erkennt eine `panels.yaml` an ihrer Wurzel
+`nspanels:` und übersetzt sie zurück (`timeZone`→`timezone`, `dateFormat`→`dateFormatBabel`,
+`featExperimentalSliders`→`featureExperimentalSliders`, `supported_modes`→`supportedModes`, Panel-
+`defaultCard` zurück in die Ruheanzeige, `temp_unit` an die Thermostat-Karten, `ha:`-Präfix ab). Im
+Standalone-Modus lädt **Importieren…** mit leerem Pfad die eigene Ausgabedatei – so holt man eine
+Änderung aus dem Web-Editor in diesen Editor zurück; der Pfad muss dafür in `allowlist_external_dirs`
+stehen. `tests/test_panels_backend.py` hält fest, dass Datei → Modell → Datei dasselbe Panel ergibt,
+sonst „änderte“ jeder Klick etwas.
+
+Die API liefert dazu `backend`, `output_path` und `panel_name` in `GET …/config`, `backend` und
+`warnings` in `…/yaml` und `…/generate`.
+
 ## 0.36.1 – 2026-10-28
 
 ### Status-Symbole mit eingebettetem ha: wurden im neuen Backend nicht gerendert

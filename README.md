@@ -78,10 +78,13 @@ aus dem Editor zurückholen. → [Datensicherheit](#datensicherheit)
 **Import** – eine bestehende `apps.yaml` wird eingelesen und ist der Startpunkt. Nichts geht dabei
 verloren, auch keine Einstellung, die dieser Editor noch nicht kennt.
 
-**Export für das neue Backend** – seit nspanel-lovelace-ui 4.8 ist das AppDaemon-Backend
-abgekündigt; Add-on und Standalone-Container lesen stattdessen eine `panels.yaml`. Der Editor
-schreibt sie aus dem aktuellen Stand, übersetzt die umbenannten Keys und sagt, was das neue Backend
-nicht mehr kennt. → [docs/funktionen.md](docs/funktionen.md#export-für-das-neue-backend-panelsyaml)
+**Neues Backend (Add-on / Standalone ab 4.8)** – seit nspanel-lovelace-ui 4.8 ist das
+AppDaemon-Backend abgekündigt; Add-on und Standalone-Container lesen stattdessen eine `panels.yaml`.
+Mit *Backend: standalone* in den Optionen schreibt der Editor sein Panel direkt in diese Datei
+(Verbindungsdaten und fremde Panels bleiben stehen, das Backend lädt selbst nach) und liest sie auch
+wieder ein – beide Editoren, dieser und der Web-Editor des Backends, arbeiten auf derselben Datei.
+Dazu der Export zum Herunterladen für die Hand-Migration.
+→ [docs/funktionen.md](docs/funktionen.md#das-neue-backend-add-on--standalone-ab-48)
 
 ## Wie es funktioniert
 
@@ -124,8 +127,8 @@ Backend zuletzt wirklich ans Display geschickt hat. Details zu beidem:
 ## Voraussetzungen
 
 - Home Assistant 2024.4 oder neuer
-- ein laufendes **nspanel-lovelace-ui**-Setup auf AppDaemon (seit Upstream 4.8 abgekündigt –
-  für den Umstieg auf Add-on oder Standalone-Container gibt es den panels.yaml-Export)
+- ein laufendes **nspanel-lovelace-ui**-Setup – entweder klassisch auf AppDaemon (seit Upstream 4.8
+  abgekündigt) oder das neue Add-on bzw. der Standalone-Container (*Backend: standalone* in den Optionen)
 - **eine Datei, die Home Assistant und AppDaemon beide sehen.** Was dafür nötig ist, hängt an deiner
   Installationsart — bei zwei der drei Varianten ist es gar nichts:
 

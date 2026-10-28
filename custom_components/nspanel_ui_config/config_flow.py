@@ -22,7 +22,12 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 
 from .const import (
+    BACKEND_APPDAEMON,
+    BACKENDS,
+    CONF_BACKEND,
     CONF_BACKUP_COUNT,
+    CONF_PANEL_NAME,
+    DEFAULT_PANEL_NAME,
     CONF_IMPORT_YAML_PATH,
     CONF_OUTPUT_PATH,
     CONF_RELOAD_ADDON,
@@ -57,7 +62,9 @@ from .install_profile import (
 def _schema(werte: dict[str, Any], modi: list[str]) -> vol.Schema:
     """Formular für Einrichtung und Optionen – gleiche Felder, gefiltert nach Installationsart."""
     felder: dict[Any, Any] = {
+        vol.Required(CONF_BACKEND, default=werte[CONF_BACKEND]): vol.In(BACKENDS),
         vol.Required(CONF_OUTPUT_PATH, default=werte[CONF_OUTPUT_PATH]): str,
+        vol.Optional(CONF_PANEL_NAME, default=werte[CONF_PANEL_NAME]): str,
         vol.Required(CONF_RELOAD_MODE, default=werte[CONF_RELOAD_MODE]): vol.In(modi),
     }
     for feld in profile_reload_fields(modi):
@@ -71,7 +78,9 @@ def _schema(werte: dict[str, Any], modi: list[str]) -> vol.Schema:
 
 def _options_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
     return {
+        CONF_BACKEND: user_input.get(CONF_BACKEND, BACKEND_APPDAEMON),
         CONF_OUTPUT_PATH: user_input[CONF_OUTPUT_PATH],
+        CONF_PANEL_NAME: (user_input.get(CONF_PANEL_NAME) or DEFAULT_PANEL_NAME).strip(),
         CONF_RELOAD_MODE: user_input[CONF_RELOAD_MODE],
         CONF_RELOAD_ADDON: user_input.get(CONF_RELOAD_ADDON, ""),
         CONF_RELOAD_TOUCH_PATH: user_input.get(CONF_RELOAD_TOUCH_PATH, ""),
@@ -103,6 +112,8 @@ class NsPanelUiConfigFlow(ConfigFlow, domain=DOMAIN):
         profile, installation_type = await async_detect_profile(self.hass)
         vorgabe = profile_defaults(profile)
         werte = {
+            CONF_BACKEND: BACKEND_APPDAEMON,
+            CONF_PANEL_NAME: DEFAULT_PANEL_NAME,
             CONF_OUTPUT_PATH: vorgabe["output_path"],
             CONF_RELOAD_MODE: vorgabe["reload_mode"],
             CONF_RELOAD_ADDON: vorgabe["reload_addon"],
@@ -148,6 +159,8 @@ class NsPanelUiConfigOptionsFlow(OptionsFlow):
         profile, installation_type = await async_detect_profile(self.hass)
         vorgabe = profile_defaults(profile)
         werte = {
+            CONF_BACKEND: current.get(CONF_BACKEND, BACKEND_APPDAEMON),
+            CONF_PANEL_NAME: current.get(CONF_PANEL_NAME, DEFAULT_PANEL_NAME),
             CONF_OUTPUT_PATH: current.get(CONF_OUTPUT_PATH, DEFAULT_OUTPUT_PATH),
             CONF_RELOAD_MODE: current.get(CONF_RELOAD_MODE, DEFAULT_RELOAD_MODE),
             CONF_RELOAD_ADDON: current.get(CONF_RELOAD_ADDON, DEFAULT_RELOAD_ADDON),

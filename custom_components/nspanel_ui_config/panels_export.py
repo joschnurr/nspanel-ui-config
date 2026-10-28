@@ -42,11 +42,13 @@ Platzhalter im Kopf der Datei, Geheimnisse schreibt der Editor nirgends hin.
 from __future__ import annotations
 
 import copy
+import os
 import re
 from typing import Any
 
 import yaml
 
+from .backup import DEFAULT_BACKUP_COUNT, create_backup
 from .generator import _ConfigDumper, _MAX_LINE_WIDTH, denormalize_card
 
 # Kartentypen des neuen Backends (config_manager.py:14).
@@ -367,3 +369,197 @@ def dump_panels_yaml(model: dict[str, Any], panel_name: str = "nspanel") -> tupl
             f"# - {w}\n" for w in warnings
         )
     return _HEADER + hinweise + "\n" + body, warnings
+
+
+# --- Rückweg: panels.yaml → Modell ---------------------------------------------------------------
+
+# Panel-Keys, die im Modell (AppDaemon-Form) anders heißen – Umkehrung von GLOBAL_RENAMES.
+_PANEL_RENAMES_BACK: dict[str, str] = {neu: alt for alt, neu in GLOBAL_RENAMES.items()}
+
+# Top-Level-Keys der panels.yaml, die Verbindung und Betrieb betreffen – nicht Teil des Modells.
+CONNECTION_KEYS: frozenset[str] = frozenset(
+    {"home_assistant_address", "home_assistant_token", "mqtt_server", "mqtt_port", "mqtt_username",
+     "mqtt_password", "use_ha_api"}
+)
+
+
+def _strip_prefix(value: Any) -> Any:
+    """``ha:`` am Anfang entfernen – der Editor arbeitet mit nackten Templates (AppDaemon-Form)."""
+    if isinstance(value, str) and value.startswith("ha:") and _is_template(value):
+        return value[3:]
+    if isinstance(value, dict):
+        return {k: _strip_prefix(v) for k, v in value.items()}
+    return value
+
+
+def _entity_back(entity: Any) -> Any:
+    if not isinstance(entity, dict):
+        return entity
+    out = dict(entity)
+    for field in TEMPLATE_PREFIX_FIELDS:
+        if field in out:
+            out[field] = _strip_prefix(out[field])
+    return out
+
+
+def _card_back(card: Any, temp_unit: Any = None) -> Any:
+    if not isinstance(card, dict):
+        return card
+    out: dict[str, Any] = {}
+    for key, value in card.items():
+        if key == "supported_modes":
+            key = "supportedModes"
+        if key == "qrCode":
+            value = _strip_prefix(value)
+        if key in ("statusIcon1", "statusIcon2"):
+            value = _entity_back(value)
+        if key == "entities" and isinstance(value, list):
+            value = [_entity_back(e) for e in value]
+        out[key] = value
+    # temp_unit gilt im neuen Backend je Panel; im Modell hängt es an den Thermostat-Karten.
+    if temp_unit is not None and out.get("type") == "cardThermo" and "temperatureUnit" not in out:
+        out["temperatureUnit"] = temp_unit
+    return out
+
+
+def panels_to_config_block(data: Any, panel_name: str | None = None) -> dict[str, Any]:
+    """Ein Panel aus ``{"nspanels": {...}}`` als config-Block in AppDaemon-Form (für den Importer).
+
+    Umkehrung von ``build_panels_dict``, so weit sie eindeutig ist: Umbenennungen zurück, ``ha:``-Präfix
+    ab, ``defaultCard`` zurück in die Ruheanzeige, ``temp_unit`` an die Thermostat-Karten. Was der Export
+    entfernt hat (navItem, cooldown, Sonnenzeiten), kommt natürlich nicht zurück. Ohne ``panel_name``
+    oder bei unbekanntem Namen gilt das erste Panel.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("nspanels"), dict) or not data["nspanels"]:
+        return {}
+    panels = data["nspanels"]
+    panel = panels.get(panel_name) if panel_name in panels else next(iter(panels.values()))
+    if not isinstance(panel, dict):
+        return {}
+
+    config: dict[str, Any] = {}
+    temp_unit = panel.get("temp_unit")
+    default_card = panel.get("defaultCard")
+    for key, value in panel.items():
+        if key in ("temp_unit", "defaultCard", "screensaver", "cards", "hiddenCards"):
+            continue
+        if key == "dateFormat":
+            # Im neuen Backend ist dateFormat die Babel-Stufe; so hieß sie im AppDaemon-Backend.
+            config["dateFormatBabel"] = value
+            continue
+        if key in ("sleepBrightness", "screenBrightness") and isinstance(value, list):
+            value = [dict(e) for e in value]
+        config[_PANEL_RENAMES_BACK.get(key, key)] = value
+
+    if isinstance(panel.get("screensaver"), dict):
+        ss = _card_back(panel["screensaver"])
+        ss.setdefault("type", "screensaver")
+        if default_card is not None:
+            ss["defaultCard"] = default_card
+        config["screensaver"] = ss
+    config["cards"] = [_card_back(c, temp_unit) for c in panel.get("cards") or []]
+    if panel.get("hiddenCards"):
+        config["hiddenCards"] = [_card_back(c, temp_unit) for c in panel["hiddenCards"]]
+    return config
+
+
+def is_panels_yaml(parsed: Any) -> bool:
+    """Erkennt die Datei des neuen Backends an ihrer Wurzel ``nspanels``."""
+    return isinstance(parsed, dict) and isinstance(parsed.get("nspanels"), dict)
+
+
+# --- Schreiben: panels.yaml direkt bedienen -------------------------------------------------------
+
+def _read_yaml(path: str) -> dict[str, Any] | None:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def merge_panels_yaml(model: dict[str, Any], existing: dict[str, Any] | None, panel_name: str) -> tuple[dict[str, Any], list[str]]:
+    """Unser Panel in eine bestehende panels.yaml einsetzen, ohne den Rest anzutasten.
+
+    Erhalten bleiben alle Top-Level-Keys der bestehenden Datei (Verbindungsdaten, ``use_ha_api``, globale
+    Vorgaben) und alle *anderen* Panels unter ``nspanels``. Nur ``nspanels.<panel_name>`` wird ersetzt.
+    Der Editor kennt die Zugangsdaten nicht und schreibt sie deshalb auch nie – er lässt sie stehen.
+    """
+    neu, warnings = build_panels_dict(model, panel_name)
+    out: dict[str, Any] = {}
+    if existing:
+        for key, value in existing.items():
+            if key != "nspanels":
+                out[key] = value
+    nspanels: dict[str, Any] = {}
+    if existing and isinstance(existing.get("nspanels"), dict):
+        nspanels.update(existing["nspanels"])
+    nspanels[panel_name] = neu["nspanels"][panel_name]
+    out["nspanels"] = nspanels
+    if not existing or not any(k in CONNECTION_KEYS for k in existing):
+        warnings.append(
+            "Die Datei enthält keine Verbindungsdaten (home_assistant_address/-token, mqtt_*) – im neuen "
+            "Backend nachtragen, sonst verbindet es sich nicht."
+        )
+    return out, warnings
+
+
+def dump_merged_panels_yaml(data: dict[str, Any], warnings: list[str]) -> str:
+    body = yaml.dump(data, Dumper=_ConfigDumper, allow_unicode=True, sort_keys=False,
+                     default_flow_style=False, width=_MAX_LINE_WIDTH)
+    kopf = (
+        "# panels.yaml – von der Home-Assistant-Integration 'NSPanel UI Config' geschrieben.\n"
+        "# Verbindungsdaten und fremde Panels werden beim Schreiben übernommen, nicht erzeugt.\n"
+    )
+    hinweise = "".join(f"# - {w}\n" for w in warnings)
+    if hinweise:
+        kopf += "#\n# Beim Umsetzen aufgefallen:\n" + hinweise
+    return kopf + "\n" + body
+
+
+def write_panels_yaml(
+    model: dict[str, Any],
+    output_path: str,
+    panel_name: str = "nspanel",
+    backup_count: int = DEFAULT_BACKUP_COUNT,
+) -> dict[str, Any]:
+    """Modell als unser Panel in die panels.yaml des neuen Backends schreiben (atomar, mit Sicherung).
+
+    Gleiche Verträge wie ``generator.write_config_yaml``: erst sichern, dann ersetzen; unveränderter
+    Inhalt wird nicht geschrieben. Das Backend bemerkt die Änderung über seine Datei-Überwachung und
+    lädt selbst neu – ein Reload-Schritt ist nicht nötig. Rückgabe zusätzlich mit ``warnings``.
+    """
+    if not output_path:
+        raise OSError("Kein Ausgabepfad konfiguriert")
+    existing = _read_yaml(output_path)
+    data, warnings = merge_panels_yaml(model, existing, panel_name)
+    text = dump_merged_panels_yaml(data, warnings)
+
+    try:
+        with open(output_path, encoding="utf-8") as handle:
+            if handle.read() == text:
+                return {"path": output_path, "changed": False, "backup": None, "warnings": warnings}
+    except (OSError, UnicodeDecodeError):
+        pass
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    backup_info = create_backup(output_path, backup_count)
+    tmp_path = f"{output_path}.tmp"
+    # Die Datei trägt das HA-Token: neue Datei nur für den Besitzer lesbar, bestehende Rechte bleiben.
+    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    try:
+        os.chmod(tmp_path, os.stat(output_path).st_mode & 0o777)
+    except OSError:
+        pass
+    os.replace(tmp_path, output_path)
+    return {"path": output_path, "changed": True, "backup": backup_info, "warnings": warnings}
+
+
+def preview_panels_yaml(model: dict[str, Any], output_path: str | None, panel_name: str = "nspanel") -> tuple[str, list[str]]:
+    """Der Text, der beim nächsten Schreiben in der panels.yaml landen würde (liest die bestehende Datei)."""
+    existing = _read_yaml(output_path) if output_path else None
+    data, warnings = merge_panels_yaml(model, existing, panel_name)
+    return dump_merged_panels_yaml(data, warnings), warnings

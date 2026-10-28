@@ -328,6 +328,30 @@ Ein Fehler lässt den Dialog offen stehen, statt den bearbeiteten Text zu verwer
 Rundlauf nichts verliert – auch die ausgelagerte Form ohne App-Wrapper, mit der Kopfzeilen-Warnung
 davor –, hält `tests/test_roundtrip.py` fest.
 
+## Das neue Backend (Add-on / Standalone ab 4.8)
+
+Seit 0.37 kann die Integration das neue Backend **direkt** bedienen. In den Optionen der Integration:
+**Backend** = `standalone`, **Ausgabepfad** = die `panels.yaml` des Backends aus Sicht von Home
+Assistant (beim Add-on `/addon_configs/<slug>/panels.yaml` bzw. der dafür freigegebene Pfad, beim
+Standalone-Container ein gemeinsamer Mount), **Panel-Name** = der Schlüssel unter `nspanels:`.
+
+- **panels.yaml schreiben** (so heißt *YAML erzeugen* dann) ersetzt in der Datei nur
+  `nspanels.<Panel-Name>`. Alles andere – `home_assistant_address`/`-token`, `mqtt_*`, `use_ha_api`,
+  weitere Panels – bleibt stehen. Vorher wird gesichert, Unverändertes nicht geschrieben; eine neue Datei
+  bekommt Rechte 600, weil sie das Token trägt. Einen Reload gibt es nicht: das Backend überwacht die Datei
+  und lädt etwa eine Sekunde nach dem Schreiben selbst neu.
+- **Importieren…** mit leerem Pfad liest dieselbe Datei zurück – also auch, was zwischenzeitlich im
+  Web-Editor des Backends geändert wurde. Dafür muss der Pfad in `allowlist_external_dirs` stehen.
+  Der Import erkennt die Datei an der Wurzel `nspanels:` und übersetzt zurück (Umbenennungen umgekehrt,
+  `ha:`-Präfix ab, Panel-`defaultCard` in die Ruheanzeige, `temp_unit` an die Thermostat-Karten).
+- **YAML ansehen…** zeigt die Datei, wie sie beim nächsten Schreiben aussähe – mit den Verbindungsdaten
+  aus der bestehenden Datei.
+
+So lassen sich beide Editoren nebeneinander benutzen: der des Backends für schnelle Eingriffe, dieser für
+Vorschau, Kapazitätsprüfung, Entity-Picker und Navigationsbaum. Was der eine nicht kennt, lässt der andere
+in Ruhe. Die Grenzen des Übersetzens stehen in der Tabelle des nächsten Abschnitts – was der Export
+entfernt (navItem, Sonnenzeiten …), kommt beim Zurücklesen nicht wieder.
+
 ## Export für das neue Backend (panels.yaml)
 
 nspanel-lovelace-ui 4.8.0 (25.10.2026) erklärt das AppDaemon-Backend für abgekündigt. Nachfolger

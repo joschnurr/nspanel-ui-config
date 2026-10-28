@@ -14,6 +14,16 @@ CONF_RELOAD_TOUCH_PATH: Final = "reload_touch_path"
 CONF_RELOAD_CONTAINER: Final = "reload_container"
 # Wie viele Sicherungen der Ausgabedatei aufgehoben werden (0 schaltet die Sicherung ab).
 CONF_BACKUP_COUNT: Final = "backup_count"
+# Welches Backend die Ausgabedatei liest. "appdaemon" = apps.yaml-Format (nspanel-lovelace-ui bis 4.7 als
+# AppDaemon-App); "standalone" = panels.yaml des Add-ons bzw. Standalone-Containers (ab 4.8) – das liest
+# die Datei bei Änderung selbst neu, ein Reload-Weg entfällt dort.
+CONF_BACKEND: Final = "backend"
+BACKEND_APPDAEMON: Final = "appdaemon"
+BACKEND_STANDALONE: Final = "standalone"
+BACKENDS: Final = [BACKEND_APPDAEMON, BACKEND_STANDALONE]
+# Name des Panels unter ``nspanels:`` in der panels.yaml (nur Backend "standalone").
+CONF_PANEL_NAME: Final = "panel_name"
+DEFAULT_PANEL_NAME: Final = "nspanel"
 
 # Reload-Strategien für das AppDaemon-Backend (siehe docs/architecture.md#reload-trigger und
 # reload.py — dort steht, warum ein geänderter !include allein nichts auslöst).

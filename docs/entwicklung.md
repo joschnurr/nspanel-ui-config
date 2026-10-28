@@ -12,11 +12,11 @@ Alle Endpunkte sind authentifiziert und **nur für Administratoren**.
 | Methode | Pfad | Zweck |
 | --- | --- | --- |
 | `GET` | `/api/nspanel_ui_config/schema` | Feld-/Kartentyp-Schema, aus dem das Panel seine Formulare baut |
-| `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde |
+| `GET` | `/api/nspanel_ui_config/config` | aktuelles Modell + Validierungsbefunde, dazu `backend`, `output_path`, `panel_name` aus den Optionen |
 | `POST` | `/api/nspanel_ui_config/config` | Modell speichern |
-| `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name`, `save`) |
+| `POST` | `/api/nspanel_ui_config/import` | `apps.yaml` **oder** `panels.yaml` (Wurzel `nspanels:`) einlesen (`{"text": …}` oder `{"path": …}`, optional `app_name` = App bzw. Panel-Name, `save`); Backend `standalone` ohne Pfad: die eigene Ausgabedatei |
 | `POST` | `/api/nspanel_ui_config/yaml` | YAML zum übergebenen Stand (`{"model": …}`, ohne Body der gespeicherte) — **nur zum Ansehen**, schreibt nichts |
-| `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen, schreiben und AppDaemon neu laden (`{"reload": false}` überspringt den Reload) |
+| `POST` | `/api/nspanel_ui_config/generate` | YAML erzeugen und schreiben; Backend `appdaemon`: danach Reload (`{"reload": false}` überspringt ihn), Backend `standalone`: nur `nspanels.<panel_name>` in der panels.yaml ersetzen, Rest der Datei bleibt (`reload.mode = watch`), `warnings` dazu |
 | `GET` | `/api/nspanel_ui_config/backups` | vorhandene Sicherungen der Ausgabedatei |
 | `POST` | `/api/nspanel_ui_config/backups/restore` | eine Sicherung zurückspielen (`{"name": …}`) |
 | `POST` | `/api/nspanel_ui_config/export/panels` | `panels.yaml` für das neue Backend (Add-on/Standalone) zum übergebenen Stand (`{"model": …, "panel_name": …}`, beides optional) — liefert `text`, `warnings`, `filename`; schreibt nichts |

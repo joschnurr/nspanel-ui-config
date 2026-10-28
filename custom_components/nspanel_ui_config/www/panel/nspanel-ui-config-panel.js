@@ -1561,6 +1561,10 @@ function generateStatus(result) {
       : `YAML geschrieben nach ${path}`;
   const gesichert = result?.backup?.name ? ` (vorheriger Stand gesichert als ${result.backup.name})` : "";
 
+  const hinweise = (result?.warnings || []).length
+    ? ` – ${result.warnings.length} Hinweis(e) zur Umsetzung stehen im Dateikopf`
+    : "";
+
   if (reload.ok === false) {
     return [
       `${geschrieben}${gesichert}, aber AppDaemon nicht neu geladen: ${reload.detail}`,
@@ -1568,8 +1572,8 @@ function generateStatus(result) {
     ];
   }
   const stillerModus = !reload.mode || reload.mode === "none" || reload.mode === "skipped";
-  if (stillerModus) return [`${geschrieben}${gesichert}`, "ok"];
-  return [`${geschrieben}${gesichert} – ${reload.detail}`, "ok"];
+  if (stillerModus) return [`${geschrieben}${gesichert}${hinweise}`, "ok"];
+  return [`${geschrieben}${gesichert} – ${reload.detail}${hinweise}`, "ok"];
 }
 
 /** Zeitstempel einer Sicherung (aus dem Dateinamen) als lesbare lokale Angabe. */
@@ -1760,6 +1764,12 @@ class NsPanelUiConfigPanel extends PanelBase {
       this._schema = schema;
       this._model = config.model;
       this._findings = config.findings || [];
+      // Welches Backend die Datei liest, entscheidet über Beschriftungen: beim neuen Backend
+      // (panels.yaml) gibt es keinen Reload und der Import holt standardmäßig die eigene Datei zurück.
+      this._backend = config.backend || "appdaemon";
+      this._outputPath = config.output_path || "";
+      this._panelName = config.panel_name || "";
+      this._beschrifteBackend();
       this._setStatus(
         config.stored
           ? "Gespeicherte Konfiguration geladen."
@@ -1815,6 +1825,24 @@ class NsPanelUiConfigPanel extends PanelBase {
     this._$("btn-save").addEventListener("click", () => this._save());
     this._$("btn-generate").addEventListener("click", () => this._generate());
     this._$("btn-close").addEventListener("click", () => this._verlassen());
+  }
+
+  /** Knöpfe nach Backend beschriften – beim neuen Backend heißt die Datei panels.yaml. */
+  _beschrifteBackend() {
+    const standalone = this._backend === "standalone";
+    const gen = this._$("btn-generate");
+    if (gen) {
+      gen.textContent = standalone ? "panels.yaml schreiben" : "YAML erzeugen";
+      gen.title = standalone
+        ? `Schreibt dieses Panel („${this._panelName}“) in ${this._outputPath} – das Backend lädt die Datei selbst neu`
+        : "Schreibt die apps.yaml-Konfiguration und lädt AppDaemon neu";
+    }
+    const exp = this._$("btn-panels");
+    // Im Standalone-Modus schreibt „panels.yaml schreiben“ die Datei direkt; der Export zum
+    // Herunterladen bleibt für die Hand-Migration auf einen anderen Rechner.
+    if (exp) exp.title = standalone
+      ? "panels.yaml zum Herunterladen – zum direkten Schreiben „panels.yaml schreiben“ benutzen"
+      : "Konfiguration für das neue nspanel-lovelace-ui-Backend (Add-on/Standalone ab 4.8) als panels.yaml exportieren";
   }
 
   /**
@@ -4748,10 +4776,14 @@ class NsPanelUiConfigPanel extends PanelBase {
       });
       area.value = antwort.text || "";
       host.querySelector("#yaml-hint").innerHTML =
-        `So sähe die Datei beim nächsten Speichern aus${
+        `So sähe die Datei beim nächsten Schreiben aus${
           antwort.path ? ` (<code>${esc(antwort.path)}</code>)` : ""
+        }${
+          antwort.backend === "standalone"
+            ? " – panels.yaml des neuen Backends; Verbindungsdaten und fremde Panels stammen aus der bestehenden Datei"
+            : ""
         }. <b>Übernehmen</b> liest den Text zurück in den Editor – geschrieben wird er erst mit
-         <b>Speichern</b>.`;
+         <b>${antwort.backend === "standalone" ? "panels.yaml schreiben" : "YAML erzeugen"}</b>.`;
       await pruefen();
     } catch (err) {
       host.querySelector("#yaml-hint").textContent = "";
@@ -4916,13 +4948,21 @@ class NsPanelUiConfigPanel extends PanelBase {
         <div class="dialog body wide">
           <h3>Bestehende Konfiguration importieren</h3>
           <p class="hint">Liest den <code>config:</code>-Block einer AppDaemon-<code>apps.yaml</code>
-            (oder einer bereits ausgelagerten Include-Datei) ein. Der Import ersetzt das aktuell
-            geöffnete Modell, speichert aber noch nichts.</p>
+            (oder einer bereits ausgelagerten Include-Datei) ein – oder eine <code>panels.yaml</code>
+            des neuen Backends (Wurzel <code>nspanels:</code>). Der Import ersetzt das aktuell
+            geöffnete Modell, speichert aber noch nichts.${
+              this._backend === "standalone"
+                ? ` <b>Leerer Pfad = die eigene panels.yaml</b> (<code>${esc(this._outputPath)}</code>, Panel
+                   „${esc(this._panelName)}“) – so holt man Änderungen aus dem Web-Editor des Backends hierher.`
+                : ""
+            }</p>
           <div class="field">
             <label>Pfad auf dem HA-Server</label>
             <div class="desc">Muss in <code>allowlist_external_dirs</code> freigegeben sein.
               Leer lassen, um den beim Einrichten hinterlegten Pfad zu verwenden.</div>
-            <div class="row"><input type="text" id="imp-path" placeholder="/config/appdaemon/apps/apps.yaml"></div>
+            <div class="row"><input type="text" id="imp-path" placeholder="${
+              this._backend === "standalone" ? esc(this._outputPath) : "/config/appdaemon/apps/apps.yaml"
+            }"></div>
           </div>
           <div class="field fuellend">
             <label>…oder YAML direkt einfügen</label>

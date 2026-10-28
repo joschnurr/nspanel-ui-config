@@ -50,6 +50,12 @@ def parse_apps_yaml(text: str, app_name: str | None = None) -> dict[str, Any]:
     ``config``-Block genommen.
     """
     parsed = yaml.safe_load(text) or {}
+    # Datei des neuen Backends (Add-on/Standalone ab 4.8): Wurzel ``nspanels``. ``app_name`` ist dann
+    # der Panel-Name. Der Rückweg steht in panels_export, damit Hin- und Rückweg beieinander liegen.
+    from .panels_export import is_panels_yaml, panels_to_config_block  # lokal: kein Importkreis
+
+    if is_panels_yaml(parsed):
+        return config_block_to_model(panels_to_config_block(parsed, app_name))
     config_block = _find_config_block(parsed, app_name)
     return config_block_to_model(config_block)
 

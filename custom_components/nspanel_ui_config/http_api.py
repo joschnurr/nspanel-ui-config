@@ -28,6 +28,11 @@ from . import live
 from .backup import list_backups, restore_backup
 from .const import (
     API_BACKUP_RESTORE,
+    BACKEND_APPDAEMON,
+    BACKEND_STANDALONE,
+    CONF_BACKEND,
+    CONF_PANEL_NAME,
+    DEFAULT_PANEL_NAME,
     API_BACKUPS,
     API_CONFIG,
     API_GENERATE,
@@ -46,7 +51,7 @@ from .const import (
 )
 from .generator import dump_config_yaml, write_config_yaml
 from .importer import find_apps, parse_apps_yaml
-from .panels_export import dump_panels_yaml
+from .panels_export import dump_panels_yaml, preview_panels_yaml, write_panels_yaml
 from .reload import ReloadError, async_trigger_reload
 from .schema import empty_model, schema_payload, validate_model
 
@@ -65,6 +70,16 @@ def async_register_http_api(hass: HomeAssistant) -> None:
     hass.http.register_view(NsPanelLiveView(hass))
     hass.http.register_view(NsPanelShowView(hass))
     hass.http.register_view(NsPanelPanelsExportView(hass))
+
+
+def _backend(options: dict[str, Any]) -> str:
+    """Eingestelltes Backend; alles außer "standalone" ist das klassische AppDaemon-Format."""
+    return BACKEND_STANDALONE if options.get(CONF_BACKEND) == BACKEND_STANDALONE else BACKEND_APPDAEMON
+
+
+def _panel_name(options: dict[str, Any]) -> str:
+    name = options.get(CONF_PANEL_NAME)
+    return name.strip() if isinstance(name, str) and name.strip() else DEFAULT_PANEL_NAME
 
 
 def _backup_count(options: dict[str, Any]) -> int:
@@ -145,7 +160,15 @@ class NsPanelConfigView(_NsPanelView):
         if not stored:
             model = empty_model()
         return self.json(
-            {"model": model, "stored": stored, "findings": validate_model(model)}
+            {
+                "model": model,
+                "stored": stored,
+                "findings": validate_model(model),
+                # Damit der Editor weiß, welche Datei er bedient und wie er die Knöpfe beschriftet.
+                "backend": _backend(data["options"]),
+                "output_path": data["options"].get(CONF_OUTPUT_PATH),
+                "panel_name": _panel_name(data["options"]),
+            }
         )
 
     async def post(self, request: web.Request) -> web.Response:
@@ -192,6 +215,10 @@ class NsPanelImportView(_NsPanelView):
         text = payload.get("text")
         if not isinstance(text, str):
             path = payload.get("path") or data["options"].get(CONF_IMPORT_YAML_PATH)
+            # Standalone: ohne Pfad die eigene Ausgabedatei – so holt man Änderungen aus dem
+            # Web-Editor des Backends in diesen Editor zurück.
+            if not path and _backend(data["options"]) == BACKEND_STANDALONE:
+                path = data["options"].get(CONF_OUTPUT_PATH)
             if not path:
                 return self.json_message("Weder 'text' noch 'path' angegeben", HTTPStatus.BAD_REQUEST)
             # Der Pfad kommt aus dem Request – daher die HA-Allowlist (allowlist_external_dirs)
@@ -212,7 +239,10 @@ class NsPanelImportView(_NsPanelView):
         try:
             apps = await self.hass.async_add_executor_job(find_apps, text)
             model = await self.hass.async_add_executor_job(
-                parse_apps_yaml, text, payload.get("app_name")
+                parse_apps_yaml,
+                text,
+                payload.get("app_name")
+                or (_panel_name(data["options"]) if _backend(data["options"]) == BACKEND_STANDALONE else None),
             )
         except Exception as err:  # noqa: BLE001 – YAML-Fehler des Nutzers, nicht unserer
             _LOGGER.error("apps.yaml konnte nicht geparst werden: %s", err)
@@ -262,8 +292,15 @@ class NsPanelYamlView(_NsPanelView):
         if not isinstance(model, dict):
             model = data.get("model") or {}
 
+        backend = _backend(data["options"])
+        warnings: list[str] = []
         try:
-            text = await self.hass.async_add_executor_job(dump_config_yaml, model)
+            if backend == BACKEND_STANDALONE:
+                text, warnings = await self.hass.async_add_executor_job(
+                    preview_panels_yaml, model, data["options"].get(CONF_OUTPUT_PATH), _panel_name(data["options"])
+                )
+            else:
+                text = await self.hass.async_add_executor_job(dump_config_yaml, model)
         except Exception as err:  # noqa: BLE001 – kaputtes Modell des Nutzers, nicht unseres
             _LOGGER.error("YAML-Vorschau fehlgeschlagen: %s", err)
             return self.json_message(f"YAML nicht erzeugbar: {err}", HTTPStatus.BAD_REQUEST)
@@ -272,6 +309,8 @@ class NsPanelYamlView(_NsPanelView):
             {
                 "text": text,
                 "path": data["options"].get(CONF_OUTPUT_PATH),
+                "backend": backend,
+                "warnings": warnings,
                 "findings": validate_model(model),
             }
         )
@@ -342,10 +381,16 @@ class NsPanelGenerateView(_NsPanelView):
         # Der Ausgabepfad stammt aus den Entry-Optionen (Admin-gesetzt), nicht aus dem Request.
         output_path = data["options"].get(CONF_OUTPUT_PATH)
         model = data.get("model", {})
+        backend = _backend(data["options"])
         try:
-            result = await self.hass.async_add_executor_job(
-                write_config_yaml, model, output_path, _backup_count(data["options"])
-            )
+            if backend == BACKEND_STANDALONE:
+                result = await self.hass.async_add_executor_job(
+                    write_panels_yaml, model, output_path, _panel_name(data["options"]), _backup_count(data["options"])
+                )
+            else:
+                result = await self.hass.async_add_executor_job(
+                    write_config_yaml, model, output_path, _backup_count(data["options"])
+                )
         except OSError as err:
             # Schließt den Fall ein, dass sich der bisherige Stand nicht sichern ließ — dann wurde
             # bewusst nicht überschrieben.
@@ -355,8 +400,15 @@ class NsPanelGenerateView(_NsPanelView):
 
         # Die Datei steht schon auf der Platte — ein gescheiterter Reload ist deshalb eine Warnung
         # in der Antwort und kein Fehlschlag des Generierens.
-        if payload.get("reload") is False:
-            reload_result: dict[str, Any] = {"mode": "skipped", "ok": True, "detail": "Reload übersprungen"}
+        if backend == BACKEND_STANDALONE:
+            # Das neue Backend überwacht die Datei selbst (config_watch) – nichts anzustoßen.
+            reload_result: dict[str, Any] = {
+                "mode": "watch",
+                "ok": True,
+                "detail": "das Backend lädt die geänderte panels.yaml von selbst neu",
+            }
+        elif payload.get("reload") is False:
+            reload_result = {"mode": "skipped", "ok": True, "detail": "Reload übersprungen"}
         else:
             try:
                 reload_result = await async_trigger_reload(self.hass, dict(data["options"]))
@@ -376,6 +428,8 @@ class NsPanelGenerateView(_NsPanelView):
                 "backup": result["backup"],
                 "findings": validate_model(model),
                 "reload": reload_result,
+                "backend": backend,
+                "warnings": result.get("warnings", []),
             }
         )
 
