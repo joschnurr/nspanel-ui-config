@@ -3,6 +3,18 @@
 Format lose nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Bis 1.0 kann sich alles ändern.
 
+## 0.36.1 – 2026-10-28
+
+### Status-Symbole mit eingebettetem ha: wurden im neuen Backend nicht gerendert
+
+Beim ersten echten Umstieg zeigte die Ruheanzeige in den beiden Status-Symbolen wörtlich
+`{{ states("sensor.…") }} °C` statt der Temperatur. Ursache: das AppDaemon-Backend erlaubte das
+Template-Präfix mitten im Icon-String (`<I>mdi:thermometer</I> ha:{{ … }} °C`), das neue prüft nur
+`startswith("ha:")` (`ha_cards.py:80`) und schickt dann den ganzen String an Home Assistants
+`render_template` – Text und `<I>…</I>` überstehen das, das Präfix entfernt `get_icon_id` danach.
+Der Export aus 0.36.0 ließ ein mittig stehendes `ha:` unangetastet, um es nicht zu verdoppeln;
+jetzt wandert es an den Anfang. Test ergänzt.
+
 ## 0.36.0 – 2026-10-27
 
 ### Export als panels.yaml für das neue Backend

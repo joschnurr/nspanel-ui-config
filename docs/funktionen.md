@@ -370,7 +370,7 @@ Doku (`docs/entities.md`, `docs/config-migration-standalone.md`) abgelesen und i
 | `temperatureUnit` je Karte | `temp_unit` am Panel | gemischte Einheiten werden gemeldet, die erste gewinnt |
 | `cardGrid2` | `cardGrid` | das Backend schaltet ab 7 Einträgen von selbst um |
 | `screensaver.alternativeLayout: true` | `type: screensaver2` | |
-| Templates in `icon`, `color`, `value`, `qrCode` | Präfix `ha:` | ohne Präfix erschiene der Jinja-Text wörtlich |
+| Templates in `icon`, `color`, `value`, `qrCode` | Präfix `ha:` **am Anfang** | ohne Präfix – oder mit einem mitten im String wie bei `<I>mdi:…</I> ha:{{ … }}` – erschiene der Jinja-Text wörtlich |
 | Legacy-Wetter `entity` der Ruheanzeige | `entities`-Liste | Vorhersagetage (`day`/`hour`) dort prüfen |
 | `navItem1`/`navItem2`, `cooldown`, `quiet` | entfallen | gemeldet |
 | `sunrise`/`sunset` im Helligkeitsplan | `07:00`/`19:00` | gemeldet – das Backend erlaubt nur feste Zeiten oder einen Sensor |

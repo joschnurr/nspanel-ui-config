@@ -112,14 +112,22 @@ def _is_template(value: Any) -> bool:
 
 
 def _prefix_template(value: Any) -> Any:
-    """``ha:`` davor, falls der Wert ein Template ist und das Präfix noch fehlt.
+    """``ha:`` ganz nach vorn, falls der Wert ein Template ist.
 
-    Ein Wert wie ``<I>mdi:…</I> ha:{{ … }}`` (Status-Symbol mit Icon und Text) trägt das Präfix
-    schon mitten im String — der bleibt unangetastet, sonst käme ein zweites davor.
+    Das neue Backend prüft ``startswith("ha:")`` (``ha_cards.py:80/85/306``) und schickt dann den
+    *ganzen* String an Home Assistants ``render_template``; Text und ``<I>mdi:…</I>`` bleiben dabei
+    stehen, das Präfix entfernt ``get_icon_id`` hinterher. Ein Präfix mitten im String – wie es das
+    AppDaemon-Backend bei Status-Symbolen ``<I>mdi:…</I> ha:{{ … }} °C`` erlaubte – wird dort nicht
+    gerendert: am Gerät stand wörtlich ``{{ states(…) }}`` (beobachtet 28.10.2026 beim Umstieg).
+    Deshalb wandert ein eingebettetes ``ha:`` an den Anfang statt nur verdoppelt zu werden.
     """
-    if _is_template(value) and "ha:" not in value:
-        return "ha:" + value
-    return value
+    if not _is_template(value):
+        return value
+    if value.startswith("ha:"):
+        return value
+    if "ha:" in value:
+        return "ha:" + value.replace("ha:", "", 1)
+    return "ha:" + value
 
 
 class _Export:

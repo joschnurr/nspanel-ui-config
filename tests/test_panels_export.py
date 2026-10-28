@@ -78,8 +78,9 @@ def test_templates_bekommen_ha_praefix():
     heizung = next(c for c in panel["cards"] if c.get("key") == "heizung")
     oben = next(e for e in heizung["entities"] if e.get("name") == "oben")
     assert oben["color"].startswith("ha:{{")
-    # Statusicon: das Präfix steht schon mitten im Wert – kein zweites davor.
+    # Statusicon: das Präfix stand mitten im Wert (AppDaemon-Form) – es muss nach vorn, nicht doppelt.
     assert ss["statusIcon1"]["icon"].count("ha:") == 1
+    assert ss["statusIcon1"]["icon"].startswith("ha:<I>")
     assert ss["statusIcon1"]["color"].startswith("ha:{{")
 
 
